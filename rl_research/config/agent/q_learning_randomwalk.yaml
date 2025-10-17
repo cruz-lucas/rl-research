@@ -1,0 +1,9 @@
+name: q_learning_ucb
+params:
+  num_states: ${environment.params.num_states}
+  num_actions: ${environment.params.num_actions}
+  learning_rate: 0.5
+  epsilon: 1.0
+  discount: 0.99
+  initial_value: 0.0
+  seed: null

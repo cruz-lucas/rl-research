@@ -1,0 +1,8 @@
+defaults:
+  - agent: q_learning_epsgreedy
+  - environment: riverswim
+  - experiment: riverswim_sixarms
+  - tracking: mlflow
+  - _self_
+
+output_dir: "${hydra:run.dir}"

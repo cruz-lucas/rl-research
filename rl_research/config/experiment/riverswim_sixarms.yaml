@@ -1,0 +1,7 @@
+name: riverswim_sixarms
+n_training_seeds: 30
+total_episodes: 1
+max_steps_per_episode: 5000
+discount: 0.95
+log_every: 1
+enable_q_value_logging: true

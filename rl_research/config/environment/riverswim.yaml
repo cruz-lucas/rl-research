@@ -1,0 +1,5 @@
+name: RiverSwim
+target: null
+params:
+  num_states: 6
+  num_actions: 2

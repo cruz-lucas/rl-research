@@ -1,0 +1,40 @@
+name: mbie_eb
+
+base_params:
+  num_states: ${environment.params.num_states}
+  num_actions: ${environment.params.num_actions}
+  threshold: 0.01
+  epsilon_r_coeff: 0.0
+  epsilon_t_coeff: 0.0
+  exploration_coeff: 0.4
+  r_max: 10_000
+  discount: 0.95
+  m: null
+  use_exploration_bonus: true
+  seed: null
+
+RiverSwim:
+  num_states: ${environment.params.num_states}
+  num_actions: ${environment.params.num_actions}
+  threshold: 0.01
+  epsilon_r_coeff: 0.0
+  epsilon_t_coeff: 0.0
+  exploration_coeff: 0.4
+  r_max: 10_000
+  discount: 0.95
+  m: null
+  use_exploration_bonus: true
+  seed: null
+
+SixArms:
+  num_states: ${environment.params.num_states}
+  num_actions: ${environment.params.num_actions}
+  threshold: 0.01
+  epsilon_r_coeff: 0.0
+  epsilon_t_coeff: 0.0
+  exploration_coeff: 0.8
+  r_max: 6_000
+  discount: 0.95
+  m: null
+  use_exploration_bonus: true
+  seed: null
