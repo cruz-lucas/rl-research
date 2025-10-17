@@ -22,7 +22,7 @@ RiverSwim:
   exploration_coeff: 0.0
   r_max: 10_000
   discount: 0.95
-  m: null
+  m: 16
   use_exploration_bonus: false
   seed: null
 
@@ -35,6 +35,6 @@ SixArms:
   exploration_coeff: 0.0
   r_max: 6_000
   discount: 0.95
-  m: null
+  m: 16
   use_exploration_bonus: false
   seed: null
