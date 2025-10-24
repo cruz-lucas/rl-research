@@ -8,7 +8,7 @@ try:
     import mlflow
 except ImportError as exc:  # pragma: no cover - import guarded for optional dependency
     raise RuntimeError(
-        "MLflow is not installed. Install rl-research with the 'tracking' extra or add mlflow to dependencies."
+        "MLflow is not installed."
     ) from exc
 
 
@@ -61,4 +61,3 @@ class MLFlowTracker(Tracker):
             return
         mlflow.end_run(status=status)
         self._run = None
-

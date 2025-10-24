@@ -16,6 +16,8 @@ dependencies = [
     "gin-config>=0.5.0",
     "classic-pacmdp-envs",
     "minimal-agents",
+    "gymnasium",
+    "goright",
 ]
 
 [project.scripts]
@@ -55,3 +57,5 @@ enableTypeIgnoreComments = true
 [tool.uv.sources]
 classic-pacmdp-envs = { git = "https://github.com/cruz-lucas/classic_pacmdp_envs.git" }
 minimal-agents = { git = "https://github.com/cruz-lucas/minimal_agents.git" }
+gymnasium = { git = "https://github.com/cruz-lucas/Gymnasium.git" }
+goright = { git = "https://github.com/cruz-lucas/goright.git" }

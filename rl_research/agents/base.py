@@ -1,99 +1,148 @@
-"""Base interfaces for JAX-based reinforcement learning agents."""
+"""Functional abstractions for JAX-friendly tabular agents."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
-from typing import Any, Callable, Mapping, MutableMapping, Protocol
+from dataclasses import dataclass
+from typing import Any, Dict, Generic, Optional, Tuple, TypeVar
 
+import jax
 import jax.numpy as jnp
+import jax.random as jrandom
+from flax import struct
 
-from rl_research.core.types import EnvironmentSpec, PRNGKey, Transition
+from rl_research.policies import ActionSelectionPolicy
+
+PRNGKey = jax.Array
+
+
+def _canonical_seed(seed: Optional[int]) -> int:
+    """Converts an optional seed into a 32-bit unsigned integer."""
+    if seed is None:
+        import secrets
+
+        return secrets.randbits(32)
+
+    if not isinstance(seed, int):
+        raise TypeError("Seed must be an integer or None.")
+    return seed & 0xFFFFFFFF
+
+
+@struct.dataclass
+class AgentState:
+    """State container shared across tabular agents."""
+
+    q_values: jax.Array
+    rng: PRNGKey
+
+
+@struct.dataclass
+class AgentParams:
+    """State container shared across tabular agents."""
+
+    num_states: int
+    num_actions: int
+    discount: float
+
+
+AgentStateT = TypeVar("AgentStateT", bound=AgentState)
+AgentParamsT = TypeVar("AgentParamsT", bound=AgentParams)
 
 
 @dataclass(slots=True)
-class AgentState:
-    """Generic container for agent parameters and mutable training state."""
+class UpdateResult:
+    """Standard container for returning diagnostic information from updates."""
 
-    params: Any
-    mutable_state: Any | None = None
-    optimizer_state: Any | None = None
+    td_error: Optional[float] = None
+    info: Dict[str, Any] | None = None
 
-    def replace(self, **updates: Any) -> "AgentState":
-        return replace(self, **updates)
-
-
-class Agent(ABC):
-    """Abstract base class describing the minimum capabilities of an agent."""
-    pass
-    # def __init__(self, config: Mapping[str, Any]) -> None:
-    #     self.config = dict(config)
-
-    # @abstractmethod
-    # def init(self, rng: PRNGKey, spec: EnvironmentSpec) -> AgentState:
-    #     """Initialise learnable parameters and internal state."""
-
-    # @abstractmethod
-    # def select_action(
-    #     self, rng: PRNGKey, agent_state: AgentState, observation: jnp.ndarray
-    # ) -> tuple[jnp.ndarray, AgentState, Mapping[str, Any]]:
-    #     """Select an action for the provided observation."""
-
-    # @abstractmethod
-    # def update(
-    #     self, rng: PRNGKey, agent_state: AgentState, transition: Transition
-    # ) -> tuple[AgentState, Mapping[str, Any]]:
-    #     """Update the agent given a single transition."""
-
-    # def on_episode_end(
-    #     self,
-    #     *,
-    #     agent_state: AgentState,
-    #     episode_return: float,
-    #     episode_length: int,
-    # ) -> Mapping[str, float]:
-    #     """Hook executed when an episode finishes to emit additional metrics."""
-    #     return {}
-
-    # def estimate_action_values(self, observations: jnp.ndarray) -> jnp.ndarray:
-    #     """Compute Q-values for a batch of observations.
-
-    #     Agents that do not operate on Q-values should override this with an informative error.
-    #     """
-    #     raise NotImplementedError(
-    #         f"{self.__class__.__name__} does not implement estimate_action_values."
-    #     )
+    def as_dict(self) -> Dict[str, Any]:
+        """Returns a dictionary representation for convenience."""
+        payload: Dict[str, Any] = {}
+        if self.td_error is not None:
+            payload["td_error"] = self.td_error
+        if self.info:
+            payload.update(self.info)
+        return payload
 
 
-AgentFactory = Callable[[Mapping[str, Any]], Agent]
+class TabularAgent(ABC, Generic[AgentStateT, AgentParamsT]):
+    """Base class for JAX-friendly tabular agents."""
 
+    def __init__(
+        self,
+        params: AgentParamsT,
+        seed: int | None = None,
+        policy: ActionSelectionPolicy | None = None,
+    ) -> None:
+        self.num_states = params.num_states
+        self.num_actions = params.num_actions
+        self.discount = params.discount
 
-class AgentRegistry(MutableMapping[str, AgentFactory]):
-    """Simple registry that maps string identifiers to agent factories."""
+        self._seed = _canonical_seed(seed)
+        self._policy: ActionSelectionPolicy = policy or self._default_policy()
 
-    def __init__(self) -> None:
-        self._builders: dict[str, AgentFactory] = {}
+    @abstractmethod
+    def _default_policy(self) -> ActionSelectionPolicy:
+        """Provides a sensible default policy for the agent."""
 
-    def register(self, name: str, factory: AgentFactory, *, overwrite: bool = False) -> None:
-        if not overwrite and name in self._builders:
-            raise ValueError(f"Agent '{name}' is already registered.")
-        self._builders[name] = factory
+    @abstractmethod
+    def _initial_state(self, key: PRNGKey) -> AgentStateT:
+        """Constructs the initial agent state for the given PRNG key."""
 
-    def __getitem__(self, key: str) -> AgentFactory:
-        return self._builders[key]
+    def init(self, key: PRNGKey | None = None) -> AgentStateT:
+        """Initialises a fresh agent state."""
+        if key is None:
+            key = jrandom.key(self._seed)
+        return self._initial_state(key)
 
-    def __setitem__(self, key: str, value: AgentFactory) -> None:
-        self.register(key, value, overwrite=True)
+    def select_action(
+        self, state: AgentStateT, obs: jax.Array
+    ) -> Tuple[jax.Array, AgentStateT, Dict[str, float]]:
+        """Selects an action using the configured policy."""
+        obs_idx = jnp.asarray(obs, dtype=jnp.int32)
+        q_row = state.q_values[obs_idx]
 
-    def __delitem__(self, key: str) -> None:
-        del self._builders[key]
+        extras = self._policy_extras(state, obs_idx)
+        action, new_rng, info = self._policy.select(state.rng, q_row, extras)
+        state = state.replace(rng=new_rng)
+        return action, state, info
 
-    def __iter__(self):
-        return iter(self._builders)
+    def _policy_extras(
+        self, state: AgentStateT, obs: jax.Array
+    ) -> Dict[str, jnp.ndarray]:
+        """Optional hook for subclasses to provide additional policy context."""
+        del state, obs
+        return {}
 
-    def __len__(self) -> int:
-        return len(self._builders)
+    @abstractmethod
+    def update(
+        self,
+        agent_state: AgentStateT,
+        obs: jax.Array,
+        action: jax.Array,
+        reward: jax.Array,
+        next_obs: jax.Array,
+        terminated: jax.Array | bool = False,
+    ) -> Tuple[AgentStateT, UpdateResult]:
+        """Updates the agent with a transition and returns diagnostic info."""
 
+    @abstractmethod
+    def train(self) -> None:
+        """Configures agent for training."""
+    
+    @abstractmethod
+    def eval(self) -> None:
+        """Configures agent for evaluation."""
+    
+    def set_policy(self, policy: ActionSelectionPolicy) -> None:
+        """Configures the action-selection policy."""
+        self._policy = policy
 
-AGENTS = AgentRegistry()
+    def policy(self) -> ActionSelectionPolicy:
+        """Returns the currently configured policy."""
+        return self._policy
 
+    def q_values(self, state: AgentStateT) -> jax.Array:
+        """Returns the current Q-value table."""
+        return state.q_values

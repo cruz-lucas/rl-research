@@ -45,4 +45,3 @@ class NullTracker:
 
     def end_run(self, status: str) -> None:
         return None
-

@@ -1,232 +1,133 @@
-"""Experiment orchestration utilities."""
+"""Pure JAX training loop."""
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-from typing import Any, Iterable, List, Mapping, Sequence
+from functools import partial
+from typing import NamedTuple, Tuple
 
 import jax
 import jax.numpy as jnp
+import jax.random as jrng
+import jax.tree_util as jtu
+from gymnasium.envs.functional_jax_env import FunctionalJaxEnv
 
-from rl_research.agents.base import Agent, AgentState
-from rl_research.core.stats import EpisodeStatsCollector
-from rl_research.core.types import (
-    ActionSpec,
-    EpisodeLog,
-    EpisodeStats,
-    EnvironmentSpec,
-    ObservationSpec,
-    PRNGKey,
-    Transition,
-)
-from rl_research.envs.base import Environment, StepResult
-from rl_research.tracking.base import NullTracker, Tracker
+from rl_research.agents.base import AgentState, TabularAgent, AgentParams
 
 
-@dataclass(slots=True)
-class ExperimentConfig:
-    """Configuration controlling how an experiment is executed."""
+class EpisodeStep(NamedTuple):
+    """Structure to carry out the outcome of a step."""
 
-    name: str = "experiment"
-    n_training_seeds: int = 30
-    total_episodes: int = 1
-    max_steps_per_episode: int = 256
-    discount: float = 1.0
-    log_every: int = 1
-    enable_q_value_logging: bool = True
+    observation: jax.Array
+    action: jax.Array
+    next_observation: jax.Array
+    reward: jax.Array
+    terminal: jax.Array
 
-class ExperimentRunner:
-    """Coordinates interaction between an agent and environment across episodes."""
 
-    def __init__(
-        self,
-        agent: Agent,
-        environment: Environment,
-        config: ExperimentConfig,
-        *,
-        agent_metadata: Mapping[str, Any] | None = None,
-        environment_metadata: Mapping[str, Any] | None = None,
-        experiment_metadata: Mapping[str, Any] | None = None,
-        tracker: Tracker | None = None,
-        stats_collector: EpisodeStatsCollector | None = None,
-    ) -> None:
-        self.agent = agent
-        self.environment = environment
-        self.config = config
-        self.tracker = tracker or NullTracker()
-        self.stats_collector = stats_collector or EpisodeStatsCollector()
-        self._run_tracking_params = self._prepare_tracking_params(
-            agent_metadata=agent_metadata,
-            environment_metadata=environment_metadata,
-            experiment_metadata=experiment_metadata,
-        )
+class Episode(NamedTuple):
+    """Structure to carry out the outcome of an episode."""
 
-    def run(self) -> list[EpisodeStats]:
-        results: list[EpisodeStats] = []
+    observations: jax.Array
+    actions: jax.Array
+    next_observations: jax.Array
+    rewards: jax.Array
+    terminals: jax.Array
 
-        for seed in range(self.config.n_training_seeds):
-            run_name = f"{self.config.name}_seed{seed}"
-            run_params = {
-                "seed": seed,
-                "episodes": self.config.total_episodes,
-                "max_steps_per_episode": self.config.max_steps_per_episode,
-            }
-            run_params.update(self._run_tracking_params)
 
-            self.tracker.start_run(run_name=run_name, params=run_params)
-            rng = jax.random.PRNGKey(seed)
-            rng, agent_rng = jax.random.split(rng)
-            # agent_state = self.agent.init(agent_rng, self._spec)
-            # agent_state = self.agent.init()
+@partial(jax.jit, static_argnames=("env", "agent", "num_steps"))
+def rollout(
+    env: FunctionalJaxEnv,
+    agent: TabularAgent,
+    agent_state: AgentState,
+    num_steps: int,
+    rng: jax.Array,
+    train: bool = True,
+) -> Tuple[Episode, AgentState]:
+    env_state, obs = env.reset(rng=rng)
 
-            for episode in range(self.config.total_episodes):
-                rng, episode_rng = jax.random.split(rng)
-                episode_seed = int(jax.random.randint(episode_rng, shape=(), minval=0, maxval=2**31 - 1))
-                episode_stats = self._run_single_episode(
-                    rng=episode_rng,
-                    # agent_state=agent_state,
-                    episode_seed=episode_seed,
-                )
-                # agent_state = episode_stats["agent_state"]
-                stats: EpisodeStats = episode_stats["stats"]
-                results.append(stats)
+    def step_fn(carry, _):
+        env_state, obs, agent_state = carry
+        action, agent_state, _ = agent.select_action(agent_state, obs)
+        next_env_state, next_obs, reward, terminal, _, _ = env.step(state=env_state, action=action)
 
-                metrics = dict(stats.metrics)
-                metrics["episode"] = episode
-                metrics["seed"] = seed
-                self.tracker.log_metrics(metrics, step=episode)
-
-                if (episode + 1) % self.config.log_every == 0:
-                    self.tracker.flush()
-
-            self.tracker.end_run(status="FINISHED")
-
-        return results
-
-    def _run_single_episode(
-        self,
-        rng: PRNGKey,
-        # agent_state: AgentState,
-        episode_seed: int,
-    ) -> Mapping[str, EpisodeStats | AgentState]:
-        observation, info = self.environment.reset(seed=episode_seed)
-        transitions: list[Transition] = []
-        total_reward = 0.0
-
-        for step in range(self.config.max_steps_per_episode):
-            # rng, actor_rng, update_rng = jax.random.split(rng, 4)
-            # action, agent_state, policy_info = self.agent.select_action(
-            #     actor_rng, agent_state, observation
-            # )
-            action = self.agent.select_action(observation)
-            # step_result = self.environment.step(action)
-            next_obs, reward, terminal, truncated, info = self.environment.step(action)
-            transitions.append(
-                Transition(
-                    observation=observation,
-                    action=action,
-                    reward=reward,
-                    terminal=terminal,
-                    truncation=truncated,
-                    discount=1.0,
-                    next_observation=next_obs,
-                    # extras={"policy_info": policy_info, "env_info": info},
-                    extras={"env_info": info},
-                )
-            )
-        
-            # agent_state, update_metrics = self.agent.update(update_rng, agent_state, transitions[-1])
-            update_metrics = self.agent.update(
-                obs=observation,
+        def do_update(agent_state: AgentState) -> AgentState:
+            new_state, _ = agent.update(
+                agent_state=agent_state,
+                obs=obs,
                 action=action,
                 reward=reward,
-                next_obs=next_obs
+                next_obs=next_obs,
+                terminated=terminal,
             )
+            return new_state
 
-            total_reward += reward
-            observation = next_obs
-
-            if update_metrics:
-                self.tracker.log_metrics(update_metrics.as_dict(), step=step)
-
-            if terminal or truncated:
-                break
-
-        episode_log = EpisodeLog(
-            transitions=tuple(transitions),
-            total_reward=total_reward,
-            length=len(transitions),
-            seed=episode_seed,
+        agent_state = jax.lax.cond(train, do_update, lambda s: s, agent_state)
+        return (next_env_state, next_obs, agent_state), EpisodeStep(
+            obs, action, next_obs, reward, terminal
         )
 
-        # agent_metrics = self.agent.on_episode_end(
-        #     # agent_state=agent_state,
-        #     episode_return=total_reward,
-        #     episode_length=len(transitions),
-        # )
+    (_, _, final_agent_state), traj = jax.lax.scan(
+        step_fn, (env_state, obs, agent_state), jnp.arange(num_steps, dtype=jnp.int32)
+    )
 
-        stats = self.stats_collector.collect(
-            episode=episode_log,
-            agent=self.agent if self.config.enable_q_value_logging else None,
-        )
-        # if agent_metrics:
-        #     stats.metrics.update(agent_metrics)
+    episode = Episode(
+        observations=traj.observation,
+        actions=traj.action,
+        next_observations=traj.next_observation,
+        rewards=traj.reward,
+        terminals=traj.terminal,
+    )
+    return episode, final_agent_state
 
-        # return {"agent_state": agent_state, "stats": stats}
-        return {"agent_state": None, "stats": stats}
+def run_experiment(
+    env: FunctionalJaxEnv,
+    agent: TabularAgent,
+    agent_params: AgentParams,
+    rng: jax.Array,
+    num_seeds: int,
+    total_train_episodes: int,
+    episode_length: int,
+    eval_every: int,
+    num_eval_episodes: int,
+):
+    """Trains for `rng`, running `num_eval_episodes` eval eps every `eval_every`."""
+    keys = jrng.split(rng, num_seeds)
 
-    def _prepare_tracking_params(
-        self,
-        *,
-        agent_metadata: Mapping[str, Any] | None,
-        environment_metadata: Mapping[str, Any] | None,
-        experiment_metadata: Mapping[str, Any] | None,
-    ) -> dict[str, str]:
-        params: dict[str, str] = {}
+    def single_seed(key):
+        next_rng, agent_key = jrng.split(key, 2)
+        agent_state = agent.init(agent_key)
 
-        params["agent.python_class"] = f"{self.agent.__module__}.{self.agent.__class__.__qualname__}"
-        if agent_metadata:
-            self._flatten_metadata("agent", agent_metadata, params)
+        agent_states: list[AgentState] = []
+        training_episodes: list[Episode] = []
+        eval_episodes: list[Episode] = []
 
-        params["environment.python_class"] = f"{self.environment.__module__}.{self.environment.__class__.__qualname__}"
-        if environment_metadata:
-            self._flatten_metadata("environment", environment_metadata, params)
+        for ep in range(1, total_train_episodes + 1):
+            next_rng, rollout_key = jrng.split(next_rng, 2)
+            agent_state = agent.train(agent_state)
+            train_ep, agent_state = rollout(
+                env, agent, agent_state, episode_length, rng=rollout_key, train=True
+            )
+            training_episodes.append(train_ep)
 
-        if experiment_metadata:
-            self._flatten_metadata("experiment", experiment_metadata, params)
+            if eval_every > 0 and ep % eval_every == 0 and num_eval_episodes > 0:
+                agent_state = agent.eval(agent_state)
+                for _ in range(num_eval_episodes):
+                    next_rng, rollout_key = jrng.split(next_rng, 2)
+                    eval_ep, _ = rollout(
+                        env, agent, agent_state, episode_length, rng=rollout_key, train=False
+                    )
+                    eval_episodes.append(eval_ep)
 
-        return params
+        def _stack_episodes(items):
+            return Episode(*jtu.tree_map(lambda *xs: jnp.stack(xs), *items))
 
-    @staticmethod
-    def _flatten_metadata(prefix: str, value: Any, output: dict[str, str]) -> None:
-        from collections.abc import Mapping as ABCMapping, Sequence as ABCSequence
+        train_stack = _stack_episodes(training_episodes) if training_episodes else None
+        eval_stack = _stack_episodes(eval_episodes) if eval_episodes else None
 
-        if isinstance(value, ABCMapping):
-            for key, nested in value.items():
-                key_str = f"{prefix}.{key}" if prefix else str(key)
-                ExperimentRunner._flatten_metadata(key_str, nested, output)
-            return
+        return train_stack, eval_stack, agent_state
+    return jax.vmap(single_seed)(keys)
 
-        if isinstance(value, ABCSequence) and not isinstance(value, (str, bytes)):
-            for idx, item in enumerate(value):
-                key_str = f"{prefix}[{idx}]"
-                ExperimentRunner._flatten_metadata(key_str, item, output)
-            return
-
-        output[prefix] = ExperimentRunner._stringify_for_param(value)
-
-    @staticmethod
-    def _stringify_for_param(value: Any) -> str:
-        if isinstance(value, str):
-            return value
-        if isinstance(value, bytes):
-            return value.decode("utf-8", errors="replace")
-        if isinstance(value, (int, float, bool)):
-            return str(value)
-        if value is None:
-            return "None"
-        try:
-            return json.dumps(value)
-        except TypeError:
-            return repr(value)
+    # train_stack, eval_stack, agent_state = single_seed(rng)
+    # print(agent_state.q_values)
+    # print(agent_state.sa_counts)
+    # return Episode(*jtu.tree_map(lambda *xs: jnp.stack(xs), *[train_stack])), None, agent_state

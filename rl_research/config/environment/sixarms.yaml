@@ -1,5 +1,0 @@
-name: SixArms
-target: null
-params:
-  num_states: 7
-  num_actions: 6

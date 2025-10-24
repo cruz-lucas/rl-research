@@ -1,17 +1,17 @@
-"""Agent package exposing registration helpers and built-in implementations."""
+"""User-facing entry-points for the agents package."""
 
-from rl_research.agents.base import AGENTS, Agent
-from minimal_agents import QLearningAgent, IntrinsicQLearningAgent, RMaxAgent, MBIEAgent
-from minimal_agents.policies import UCBPolicy, RandomWalkPolicy, EpsilonGreedyPolicy
-
-AGENTS.register("q_learning_epsgreedy", lambda cfg: QLearningAgent(**cfg, policy=EpsilonGreedyPolicy()))
-AGENTS.register("q_learning_ucb", lambda cfg: QLearningAgent(**cfg, policy=UCBPolicy()))
-AGENTS.register("q_learning_randomwalk", lambda cfg: QLearningAgent(**cfg, policy=RandomWalkPolicy()))
-AGENTS.register("q_learning_intrinsic", lambda cfg: IntrinsicQLearningAgent(**cfg, policy=EpsilonGreedyPolicy()))
-AGENTS.register("rmax", lambda cfg: RMaxAgent(**cfg))
-AGENTS.register("mbie", lambda cfg: MBIEAgent(**cfg))
+from rl_research.agents.base import TabularAgent, UpdateResult
+from rl_research.agents.mbie import MBIEAgent, MBIEParams
+from rl_research.agents.rmax import RMaxAgent, RMaxParams
+from rl_research.agents.q_learning import QLearningAgent, QlearningParams
 
 __all__ = [
-    "Agent",
-    "AGENTS",
+    "TabularAgent",
+    "UpdateResult",
+    "RMaxAgent",
+    "RMaxParams",
+    "MBIEAgent",
+    "MBIEParams",
+    "QLearningAgent",
+    "QlearningParams",
 ]
