@@ -2,6 +2,7 @@
 
 from rl_research.agents.base import TabularAgent, UpdateResult
 from rl_research.agents.dt_planner import DTPAgent, DTPParams
+from rl_research.agents.dt_ucb_planner import DTUCBPlanner, DTUCBParams
 from rl_research.agents.expectation_models import (
     goright_expectation_model,
     riverswim_expectation_model,
@@ -16,6 +17,8 @@ __all__ = [
     "UpdateResult",
     "DTPAgent",
     "DTPParams",
+    "DTUCBPlanner",
+    "DTUCBParams",
     "RMaxAgent",
     "RMaxParams",
     "MBIEAgent",
