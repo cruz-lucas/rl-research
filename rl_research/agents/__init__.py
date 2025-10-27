@@ -1,7 +1,7 @@
 """User-facing entry-points for the agents package."""
 
 from rl_research.agents.base import TabularAgent, UpdateResult
-from rl_research.agents.dt_planner import DTPAgent, DTPParams
+from rl_research.agents.dt_lambda_planner import DTLambdaPAgent, DTLambdaPParams
 from rl_research.agents.dt_ucb_planner import DTUCBPlanner, DTUCBParams
 from rl_research.agents.expectation_models import (
     goright_expectation_model,

@@ -13,13 +13,13 @@ from rl_research.agents.base import AgentState, TabularAgent, UpdateResult, Agen
 from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 
 @struct.dataclass
-class DTPState(AgentState):
+class DTLambdaPState(AgentState):
     """Mutable state tracked by the DTP agent."""
     eval: bool = False
 
 
 @struct.dataclass
-class DTPParams(AgentParams):
+class DTLambdaPParams(AgentParams):
     """Static configuration for the decision-time planning agent."""
 
     learning_rate: float
@@ -28,12 +28,12 @@ class DTPParams(AgentParams):
     lambda_: float
     dynamics_model: jax.Array
 
-class DTPAgent(TabularAgent[DTPState, DTPParams]):
+class DTLambdaPAgent(TabularAgent[DTLambdaPState, DTLambdaPParams]):
     """Decision-time planner using model rollouts and lambda-returns."""
 
     def __init__(
         self,
-        params: DTPParams,
+        params: DTLambdaPParams,
         seed: int | None = None,
         policy: ActionSelectionPolicy | None = None,
     ) -> None:
@@ -84,12 +84,12 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
     def _default_policy(self) -> ActionSelectionPolicy:
         return GreedyPolicy()
 
-    def _policy_extras(self, state: DTPState, obs: int) -> Dict[str, jnp.ndarray]:
+    def _policy_extras(self, state: DTLambdaPState, obs: int) -> Dict[str, jnp.ndarray]:
         return dict({})
     
     def select_action(
-        self, state: DTPState, obs: jax.Array
-    ) -> Tuple[jax.Array, DTPState, Dict[str, float]]:
+        self, state: DTLambdaPState, obs: jax.Array
+    ) -> Tuple[jax.Array, DTLambdaPState, Dict[str, float]]:
         """Selects an action using the configured policy."""
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
         plan_values = self._plan_targets(state.q_values, obs_idx)
@@ -103,7 +103,7 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
         state = state.replace(rng=new_rng)
         return action, state, info
 
-    def _initial_state(self, key: jax.Array) -> DTPState:
+    def _initial_state(self, key: jax.Array) -> DTLambdaPState:
         q_values = jnp.full(
             (self.num_states, self.num_actions),
             self.initial_value,
@@ -111,7 +111,7 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
         )
         self._td_errors.clear()
 
-        return DTPState(
+        return DTLambdaPState(
             q_values=q_values,
             rng=key,
             eval=False
@@ -119,13 +119,13 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
 
     def update(
         self,
-        agent_state: DTPState,
+        agent_state: DTLambdaPState,
         obs: int,
         action: int,
         reward: float,
         next_obs: int,
         terminated: bool = False,
-    ) -> Tuple[DTPState, UpdateResult]:
+    ) -> Tuple[DTLambdaPState, UpdateResult]:
         
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
         action_idx = jnp.asarray(action, dtype=jnp.int32)
@@ -144,7 +144,7 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
 
         self._td_errors.append(td_error)
         return (
-            DTPState(
+            DTLambdaPState(
                 q_values=q_values,
                 rng=agent_state.rng,
                 eval=agent_state.eval
@@ -156,10 +156,10 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
     def td_errors(self) -> list[float]:
         return self._td_errors
     
-    def train(self, state: DTPState) -> AgentState:
+    def train(self, state: DTLambdaPState) -> AgentState:
         return state.replace(eval=False)
 
-    def eval(self, state: DTPState) -> AgentState:
+    def eval(self, state: DTLambdaPState) -> AgentState:
         return state.replace(eval=True)
 
     @staticmethod
