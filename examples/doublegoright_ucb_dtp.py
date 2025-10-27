@@ -6,8 +6,8 @@ from rl_research.examples import ExperimentConfig, TrackingConfig, run_tabular_m
 
 
 def main():
-    agent_name = "ucb_dtp_qlearning"
-    experiment_name = "double_goright_partially_obs_500_steps"
+    agent_name = "ucb_dtp_setting4"
+    experiment_name = "doublegoright"
     rng = jax.random.PRNGKey(0)
 
     env = GoRightJaxEnv(
@@ -28,11 +28,12 @@ def main():
         num_states=env.env.observation_space.n,
         num_actions=2,
         discount=0.9,
-        learning_rate=0.1,
+        learning_rate=0.05,
         initial_value=0,
-        horizon=5,
-        beta=30.0,
-        dynamics_model=goright_expectation_model(is_partially_obs=True)
+        horizon=3,
+        beta=20.0,
+        dynamics_model=goright_expectation_model(is_partially_obs=True),
+        use_time_bonus=True
     )
     agent = DTUCBPlanner(params=agent_params)
 

@@ -10,7 +10,7 @@ from typing import Iterable, Sequence
 import jax
 from goright.jax.env import EnvParams, GoRightJaxEnv
 
-from rl_research.agents import DTPAgent, DTPParams, goright_expectation_model
+from rl_research.agents import DTUCBPlanner, DTUCBParams, goright_expectation_model
 from rl_research.examples import ExperimentConfig, TrackingConfig, run_tabular_mlflow_example
 
 
@@ -22,7 +22,7 @@ DEFAULT_ENV_PARAMS = EnvParams(
     first_reward=3.0,
     second_checkpoint=20,
     second_reward=6.0,
-    is_partially_obs=True,
+    is_partially_obs=False,
     mapping="default",
 )
 
@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
             "UCB decision-time planner."
         )
     )
-    parser.add_argument("--experiment-name", default="double_goright_lambda_dtp_sweep")
+    parser.add_argument("--experiment-name", default="double_goright_fully_obs_ucb_dtp_sweep")
     parser.add_argument("--agent-name", default="ucb_dtp_planner")
     parser.add_argument("--base-seed", type=int, default=0, help="Seed used to branch RNG streams.")
     parser.add_argument("--num-seeds", type=int, default=10)
@@ -70,11 +70,11 @@ def parse_args() -> argparse.Namespace:
         help="Learning rates to sweep over.",
     )
     parser.add_argument(
-        "--lambds",
+        "--betas",
         type=float,
         nargs="+",
-        default=[0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.8, 1.0],
-        help="UCB lambd bonuses to sweep over.",
+        default=[5, 10.0, 20.0, 40.0, 50, 100],
+        help="UCB beta bonuses to sweep over.",
     )
     parser.add_argument(
         "--horizons",
@@ -82,6 +82,13 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=[1, 2, 3, 4, 5, 6, 7],
         help="Planning horizons to sweep over.",
+    )
+    parser.add_argument(
+        "--time-bonus-options",
+        type=_str_to_bool,
+        nargs="+",
+        default=[False, True],
+        help="Whether to enable time-dependent bonuses (one value per option).",
     )
 
     parser.add_argument(
@@ -119,16 +126,18 @@ def build_sweep_points(args: argparse.Namespace) -> list[SweepPoint]:
     points: list[SweepPoint] = []
     grid: Iterable[tuple[float, float, int, bool]] = itertools.product(
         args.learning_rates,
-        args.lambds,
+        args.betas,
         args.horizons,
+        args.time_bonus_options,
     )
 
-    for idx, (lr, lambd, horizon) in enumerate(grid, start=1):
-        label = _make_label(lr, lambd, horizon)
+    for idx, (lr, beta, horizon, use_time_bonus) in enumerate(grid, start=1):
+        label = _make_label(lr, beta, horizon, use_time_bonus)
         overrides = {
             "learning_rate": lr,
-            "lambda_": lambd,
+            "beta": beta,
             "horizon": horizon,
+            "use_time_bonus": use_time_bonus,
         }
         points.append(
             SweepPoint(
@@ -140,12 +149,13 @@ def build_sweep_points(args: argparse.Namespace) -> list[SweepPoint]:
     return points
 
 
-def _make_label(lr: float, lambd: float, horizon: int) -> str:
+def _make_label(lr: float, beta: float, horizon: int, use_time_bonus: bool) -> str:
     def _fmt(value: float | int) -> str:
         text = f"{value}"
         return text.replace(".", "p").replace("-", "m")
 
-    return f"lr{_fmt(lr)}_lambd{_fmt(lambd)}_hz{_fmt(horizon)}"
+    time_label = "timebonus" if use_time_bonus else "static"
+    return f"lr{_fmt(lr)}_beta{_fmt(beta)}_hz{_fmt(horizon)}_{time_label}"
 
 
 def select_points(points: Sequence[SweepPoint], args: argparse.Namespace) -> list[SweepPoint]:
@@ -206,7 +216,7 @@ def main() -> None:
         "learning_rate": args.learning_rates[0],
         "initial_value": 0.0,
         "horizon": args.horizons[0],
-        "lambda_": args.lambds[0],
+        "beta": args.betas[0],
         "dynamics_model": goright_expectation_model(
             length=DEFAULT_ENV_PARAMS.length,
             first_checkpoint=DEFAULT_ENV_PARAMS.first_checkpoint,
@@ -216,13 +226,14 @@ def main() -> None:
             num_indicators=DEFAULT_ENV_PARAMS.num_indicators,
             is_partially_obs=DEFAULT_ENV_PARAMS.is_partially_obs,
         ),
+        "use_time_bonus": args.time_bonus_options[0],
     }
 
     sweep_rng = jax.random.PRNGKey(args.base_seed)
     for point in selected:
         sweep_rng, run_rng = jax.random.split(sweep_rng)
-        agent_params = DTPParams(**base_agent_kwargs | point.overrides)
-        agent = DTPAgent(params=agent_params)
+        agent_params = DTUCBParams(**base_agent_kwargs | point.overrides)
+        agent = DTUCBPlanner(params=agent_params)
 
         parent_tags = {
             "config_id": point.id,
