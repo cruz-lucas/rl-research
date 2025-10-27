@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 import jax
-from classic_pacmdp_envs import RiverSwimJaxEnv
+from classic_pacmdp_envs import SixArmsJaxEnv
 
-from rl_research.agents import DTUCBPlanner, DTUCBParams, riverswim_expectation_model
+from rl_research.agents import DTUCBPlanner, DTUCBParams, sixarms_expectation_model
 from rl_research.examples import ExperimentConfig, TrackingConfig, run_tabular_mlflow_example
 
 
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
             "UCB decision-time planner."
         )
     )
-    parser.add_argument("--experiment-name", default="riverswim_ucb_dtp_sweep")
+    parser.add_argument("--experiment-name", default="sixarms_ucb_dtp_sweep")
     parser.add_argument("--agent-name", default="ucb_dtp_planner")
     parser.add_argument("--base-seed", type=int, default=0, help="Seed used to branch RNG streams.")
     parser.add_argument("--num-seeds", type=int, default=10)
@@ -105,7 +105,7 @@ def parse_args() -> argparse.Namespace:
 
 def build_environment():
     """Constructs the partially-observed DoubleGoRight environment."""
-    return RiverSwimJaxEnv()
+    return SixArmsJaxEnv()
 
 
 def build_sweep_points(args: argparse.Namespace) -> list[SweepPoint]:
@@ -204,7 +204,7 @@ def main() -> None:
         "initial_value": 0.0,
         "horizon": args.horizons[0],
         "beta": args.betas[0],
-        "dynamics_model": riverswim_expectation_model(
+        "dynamics_model": sixarms_expectation_model(
         ),
         "use_time_bonus": args.time_bonus_options[0],
     }
