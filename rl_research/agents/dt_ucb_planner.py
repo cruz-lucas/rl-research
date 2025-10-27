@@ -17,6 +17,7 @@ from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 class DTUCBState(AgentState):
     """Mutable quantities tracked by the UCB planner."""
 
+    beta: jax.Array
     visit_counts: jax.Array
     timestep: jax.Array
 
@@ -98,7 +99,7 @@ class DTUCBPlanner(TabularAgent[DTUCBState, DTUCBParams]):
         bonuses = self._plan_bonuses(
             state.q_values, state.visit_counts, obs_idx, state.timestep
         )
-        plan_values = state.q_values[obs_idx] + self._beta * bonuses
+        plan_values = state.q_values[obs_idx] + state.beta * bonuses
 
         extras = self._policy_extras(state, obs_idx)
 
@@ -127,6 +128,7 @@ class DTUCBPlanner(TabularAgent[DTUCBState, DTUCBParams]):
             visit_counts=visit_counts,
             timestep=timestep,
             rng=key,
+            beta=self._beta
         )
 
     def update(
@@ -162,6 +164,7 @@ class DTUCBPlanner(TabularAgent[DTUCBState, DTUCBParams]):
                 visit_counts=visit_counts,
                 timestep=timestep,
                 rng=agent_state.rng,
+                beta=agent_state.beta,
             ),
             UpdateResult(td_error=td_error),
         )
@@ -171,10 +174,10 @@ class DTUCBPlanner(TabularAgent[DTUCBState, DTUCBParams]):
         return self._td_errors
 
     def train(self, state: DTUCBState) -> AgentState:
-        return state
+        return state.replace(beta=self._beta)
 
     def eval(self, state: DTUCBState) -> AgentState:
-        return state
+        return state.replace(beta=0.0)
 
     @staticmethod
     def _greedy_action(q_values: jax.Array, state_idx: jax.Array) -> jax.Array:

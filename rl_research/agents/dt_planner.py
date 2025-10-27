@@ -15,7 +15,7 @@ from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 @struct.dataclass
 class DTPState(AgentState):
     """Mutable state tracked by the DTP agent."""
-    pass
+    eval: bool = False
 
 
 @struct.dataclass
@@ -93,10 +93,12 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
         """Selects an action using the configured policy."""
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
         plan_values = self._plan_targets(state.q_values, obs_idx)
+        q_values = state.q_values[obs_idx]
 
         extras = self._policy_extras(state, obs_idx)
 
-        action, new_rng, info = self._policy.select(state.rng, plan_values, extras)
+        action_values = state.eval * q_values + (1-state.eval) * plan_values
+        action, new_rng, info = self._policy.select(state.rng, action_values, extras)
         info = {**info, "plan_values": plan_values, "q_row": state.q_values[obs_idx]}
         state = state.replace(rng=new_rng)
         return action, state, info
@@ -112,6 +114,7 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
         return DTPState(
             q_values=q_values,
             rng=key,
+            eval=False
         )
 
     def update(
@@ -144,6 +147,7 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
             DTPState(
                 q_values=q_values,
                 rng=agent_state.rng,
+                eval=agent_state.eval
             ),
             UpdateResult(td_error=td_error)
         )
@@ -153,10 +157,10 @@ class DTPAgent(TabularAgent[DTPState, DTPParams]):
         return self._td_errors
     
     def train(self, state: DTPState) -> AgentState:
-        return state
-    
+        return state.replace(eval=False)
+
     def eval(self, state: DTPState) -> AgentState:
-        return state
+        return state.replace(eval=True)
 
     @staticmethod
     def _greedy_action(q_values: jax.Array, state_idx: jax.Array) -> jax.Array:
