@@ -8,23 +8,11 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 import jax
-from goright.jax.env import EnvParams, GoRightJaxEnv
+from classic_pacmdp_envs import SixArmsJaxEnv
 
-from rl_research.agents import DTRMaxNStepAgent, DTRMaxNStepParams, goright_expectation_model
+from rl_research.agents import DTRMaxNStepAgent, DTRMaxNStepParams, sixarms_expectation_model
 from rl_research.examples import ExperimentConfig, TrackingConfig, run_tabular_mlflow_example
 
-
-DEFAULT_ENV_PARAMS = EnvParams(
-    length=21,
-    num_indicators=2,
-    num_actions=2,
-    first_checkpoint=10,
-    first_reward=3.0,
-    second_checkpoint=20,
-    second_reward=6.0,
-    is_partially_obs=True,
-    mapping="default",
-)
 
 
 @dataclass(frozen=True)
@@ -52,7 +40,7 @@ def parse_args() -> argparse.Namespace:
             "UCB decision-time planner."
         )
     )
-    parser.add_argument("--experiment-name", default="double_goright_rmax_dtp_sweep")
+    parser.add_argument("--experiment-name", default="sixarms_rmax_dtp_sweep")
     parser.add_argument("--agent-name", default="rmax_dtp_planner")
     parser.add_argument("--base-seed", type=int, default=0, help="Seed used to branch RNG streams.")
     parser.add_argument("--num-seeds", type=int, default=10)
@@ -109,9 +97,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_environment() -> GoRightJaxEnv:
+def build_environment() -> SixArmsJaxEnv:
     """Constructs the partially-observed DoubleGoRight environment."""
-    return GoRightJaxEnv(DEFAULT_ENV_PARAMS)
+    return SixArmsJaxEnv()
 
 
 def build_sweep_points(args: argparse.Namespace) -> list[SweepPoint]:
@@ -208,15 +196,7 @@ def main() -> None:
         "horizon": args.horizons[0],
         "m": args.m[0],
         "r_max": 6.0,
-        "dynamics_model": goright_expectation_model(
-            length=DEFAULT_ENV_PARAMS.length,
-            first_checkpoint=DEFAULT_ENV_PARAMS.first_checkpoint,
-            first_reward=DEFAULT_ENV_PARAMS.first_reward,
-            second_checkpoint=DEFAULT_ENV_PARAMS.second_checkpoint,
-            second_reward=DEFAULT_ENV_PARAMS.second_reward,
-            num_indicators=DEFAULT_ENV_PARAMS.num_indicators,
-            is_partially_obs=DEFAULT_ENV_PARAMS.is_partially_obs,
-        ),
+        "dynamics_model": sixarms_expectation_model(),
     }
 
     sweep_rng = jax.random.PRNGKey(args.base_seed)
