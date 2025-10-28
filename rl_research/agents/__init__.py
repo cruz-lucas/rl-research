@@ -2,6 +2,8 @@
 
 from rl_research.agents.base import TabularAgent, UpdateResult
 from rl_research.agents.dt_lambda_planner import DTLambdaPAgent, DTLambdaPParams
+from rl_research.agents.dt_nstep_planner import DTNStepPAgent, DTNStepPParams
+from rl_research.agents.dt_rmax_planner import DTRMaxNStepAgent, DTRMaxNStepParams
 from rl_research.agents.dt_ucb_planner import DTUCBPlanner, DTUCBParams
 from rl_research.agents.expectation_models import (
     goright_expectation_model,
@@ -15,8 +17,12 @@ from rl_research.agents.q_learning import QLearningAgent, QlearningParams
 __all__ = [
     "TabularAgent",
     "UpdateResult",
-    "DTPAgent",
-    "DTPParams",
+    "DTLambdaPAgent",
+    "DTLambdaPParams",
+    "DTNStepPAgent",
+    "DTNStepPParams",
+    "DTRMaxNStepAgent",
+    "DTRMaxNStepParams",
     "DTUCBPlanner",
     "DTUCBParams",
     "RMaxAgent",
