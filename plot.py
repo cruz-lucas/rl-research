@@ -16,6 +16,7 @@ class SeriesStats:
     auc: float
     last_n_mean: float
     full_mean: float
+    total_sum: float
 
 
 def trapezoid_auc(steps: np.ndarray, values: np.ndarray) -> float:
@@ -49,6 +50,7 @@ def series_stats(steps: List[int], values: List[float], last_n: int) -> SeriesSt
         auc=trapezoid_auc(arr_steps, arr_vals),
         last_n_mean=last_n_mean(arr_vals, last_n),
         full_mean=float(np.mean(arr_vals)) if len(arr_vals) else np.nan,
+        total_sum=float(np.sum(arr_vals)) if len(arr_vals) else np.nan,
     )
 
 
@@ -139,8 +141,8 @@ def compute_group_summary(
         train_steps, train_vals = fetch_metric_history(client, rid, train_key) if train_key else ([], [])
         per_seed.append({
             "run_id": rid,
-            "eval": series_stats(eval_steps, eval_vals, last_n) if eval_vals else SeriesStats(np.nan, np.nan, np.nan),
-            "train": series_stats(train_steps, train_vals, last_n) if train_vals else SeriesStats(np.nan, np.nan, np.nan),
+            "eval": series_stats(eval_steps, eval_vals, last_n) if eval_vals else SeriesStats(np.nan, np.nan, np.nan, np.nan),
+            "train": series_stats(train_steps, train_vals, last_n) if train_vals else SeriesStats(np.nan, np.nan, np.nan, np.nan),
         })
 
     # Aggregate across seeds
@@ -148,6 +150,7 @@ def compute_group_summary(
         aucs = [getattr(s[which], "auc") for s in per_seed if not math.isnan(s[which].auc)]
         last_means = [getattr(s[which], "last_n_mean") for s in per_seed if not math.isnan(s[which].last_n_mean)]
         full_means = [getattr(s[which], "full_mean") for s in per_seed if not math.isnan(s[which].full_mean)]
+        total_sums = [getattr(s[which], "total_sum") for s in per_seed if not math.isnan(s[which].total_sum)]
         return {
             f"{which}_auc_mean": float(np.mean(aucs)) if aucs else float("nan"),
             f"{which}_auc_se": standard_error(aucs) if aucs else float("nan"),
@@ -155,6 +158,8 @@ def compute_group_summary(
             f"{which}_last{last_n}_se": standard_error(last_means) if last_means else float("nan"),
             f"{which}_full_mean": float(np.mean(full_means)) if full_means else float("nan"),
             f"{which}_full_se": standard_error(full_means) if full_means else float("nan"),
+            f"{which}_total_sum_mean": float(np.mean(total_sums)) if total_sums else float("nan"),
+            f"{which}_total_sum_se": standard_error(total_sums) if total_sums else float("nan"),
             f"{which}_n_seeds": len(per_seed),
         }
 
@@ -288,8 +293,8 @@ def main():
     display_cols = [
         "parent_name", "parent_run_id",
         last_col, f"eval_last{args.last_n}_se", auc_col, "eval_auc_se",
-        "eval_full_mean", "eval_full_se",
-        "train_full_mean", "train_full_se",
+        "eval_full_mean", "eval_full_se", "eval_total_sum_mean", "eval_total_sum_se",
+        "train_full_mean", "train_full_se", "train_total_sum_mean", "train_total_sum_se",
         "eval_n_seeds", "train_n_seeds",
     ]
     display_cols = [c for c in display_cols if c in df_sorted.columns]
