@@ -195,7 +195,7 @@ def main() -> None:
         "initial_value": 0.0,
         "horizon": args.horizons[0],
         "m": args.m[0],
-        "r_max": 6.0,
+        "r_max": 6_000,
         "dynamics_model": sixarms_expectation_model(),
     }
 
