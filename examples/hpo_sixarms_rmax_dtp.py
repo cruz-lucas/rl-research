@@ -44,11 +44,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--agent-name", default="rmax_dtp_planner")
     parser.add_argument("--base-seed", type=int, default=0, help="Seed used to branch RNG streams.")
     parser.add_argument("--num-seeds", type=int, default=10)
-    parser.add_argument("--total-train-episodes", type=int, default=600)
-    parser.add_argument("--episode-length", type=int, default=500)
-    parser.add_argument("--eval-every", type=int, default=1)
-    parser.add_argument("--num-eval-episodes", type=int, default=1)
-    parser.add_argument("--discount", type=float, default=0.9)
+    parser.add_argument("--total-train-episodes", type=int, default=1)
+    parser.add_argument("--episode-length", type=int, default=5000)
+    parser.add_argument("--eval-every", type=int, default=0)
+    parser.add_argument("--num-eval-episodes", type=int, default=0)
+    parser.add_argument("--discount", type=float, default=0.95)
 
     parser.add_argument(
         "--learning-rates",
