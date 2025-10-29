@@ -2,7 +2,7 @@ import jax
 from classic_pacmdp_envs import RiverSwimJaxEnv
 from classic_pacmdp_envs.riverswim import EnvParams
 
-from rl_research.agents import MBIEAgent, MBIEParams
+from rl_research.agents import DTUCBPlanner, DTUCBParams, riverswim_expectation_model
 from rl_research.experiment import run_experiment, log_experiment, ExperimentParams
 
 
@@ -13,19 +13,19 @@ def main():
 
     env_params = EnvParams()
     env = RiverSwimJaxEnv()
-    agent_params = MBIEParams(
+    
+    agent_params = DTUCBParams(
         num_states=env.env.observation_space.n,
         num_actions=env.env.action_space.n,
-        threshold=0.01,
-        r_max=10_000,
+        initial_value=0.0,
+        learning_rate=0.4,
+        horizon=7,
         discount=0.95,
-        epsilon_r_coeff=0.0,
-        epsilon_t_coeff=0.0,
-        exploration_coeff=0.4,
-        m=None,
-        use_exploration_bonus=True
+        beta=40.0,
+        use_time_bonus=False,
+        dynamics_model=riverswim_expectation_model(),
     )
-    agent = MBIEAgent(params=agent_params)
+    agent = DTUCBPlanner(params=agent_params)
 
     experiment_params = ExperimentParams(
         num_seeds=30,

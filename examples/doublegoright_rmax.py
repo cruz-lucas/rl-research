@@ -2,7 +2,7 @@ import jax
 from goright.jax.env import GoRightJaxEnv, EnvParams
 
 from rl_research.agents import RMaxAgent, RMaxParams
-from rl_research.examples import ExperimentConfig, TrackingConfig, run_tabular_mlflow_example
+from rl_research.experiment import run_experiment, log_experiment, ExperimentParams
 
 
 def main():
@@ -10,23 +10,24 @@ def main():
     experiment_name = "doublegoright"
     rng = jax.random.PRNGKey(0)
 
+    env_params = EnvParams(
+        length=21,
+        num_indicators=2,
+        num_actions=2,
+        first_checkpoint=10,
+        first_reward=3.0,
+        second_checkpoint=20,
+        second_reward=6.0,
+        is_partially_obs=True,
+        mapping="default",
+    )
     env = GoRightJaxEnv(
-        EnvParams(
-            length=21,
-            num_indicators=2,
-            num_actions=2,
-            first_checkpoint=10,
-            first_reward=3.0,
-            second_checkpoint=20,
-            second_reward=6.0,
-            is_partially_obs=True,
-            mapping="default",
-        )
+        env_params
     )
 
     agent_params = RMaxParams(
         num_states=env.env.observation_space.n,
-        num_actions=2,
+        num_actions=env.env.action_space.n,
         discount=0.9,
         threshold=0.01,
         r_max=6,
@@ -34,22 +35,28 @@ def main():
     )
     agent = RMaxAgent(params=agent_params)
 
-    run_tabular_mlflow_example(
+    experiment_params = ExperimentParams(
+        num_seeds=30,
+        total_train_episodes=600,
+        episode_length=500,
+        eval_every=1,
+        num_eval_episodes=1,
+    )
+    results = run_experiment(
         env=env,
         agent=agent,
-        agent_params=agent_params,
         rng=rng,
-        run_config=ExperimentConfig(
-            num_seeds=30,
-            total_train_episodes=600,
-            episode_length=500,
-            eval_every=1,
-            num_eval_episodes=1,
-        ),
-        tracking=TrackingConfig(
-            experiment_name=experiment_name,
-            agent_name=agent_name,
-        ),
+        params=experiment_params
+    )
+
+    log_experiment(
+        experiment_name=experiment_name,
+        parent_run_name=agent_name,
+        agent_name=agent_name,
+        agent_params=agent_params,
+        experiment_params=experiment_params,
+        env_params=env_params,
+        experiment_results=results,
     )
 
 

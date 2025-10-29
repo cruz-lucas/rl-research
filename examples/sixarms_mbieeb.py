@@ -1,17 +1,21 @@
 import jax
 from classic_pacmdp_envs import SixArmsJaxEnv
+from classic_pacmdp_envs.sixarms import EnvParams
 
 from rl_research.agents import MBIEAgent, MBIEParams
-from rl_research.examples import ExperimentConfig, TrackingConfig, run_tabular_mlflow_example
+from rl_research.experiment import run_experiment, log_experiment, ExperimentParams
 
 
 def main():
+    agent_name = "mbie-eb"
+    experiment_name = "sixarms"
     rng = jax.random.PRNGKey(0)
 
+    env_params = EnvParams()
     env = SixArmsJaxEnv()
     agent_params = MBIEParams(
-        num_states=7,
-        num_actions=6,
+        num_states=env.env.observation_space.n,
+        num_actions=env.env.action_space.n,
         threshold=0.01,
         r_max=6_000,
         discount=0.95,
@@ -23,26 +27,29 @@ def main():
     )
     agent = MBIEAgent(params=agent_params)
 
-    run_tabular_mlflow_example(
+    experiment_params = ExperimentParams(
+        num_seeds=30,
+        total_train_episodes=1,
+        episode_length=5000,
+        eval_every=1,
+        num_eval_episodes=1,
+    )
+
+    results = run_experiment(
         env=env,
         agent=agent,
-        agent_params=agent_params,
         rng=rng,
-        run_config=ExperimentConfig(
-            num_seeds=30,
-            total_train_episodes=1,
-            episode_length=5_000,
-            eval_every=0,
-            num_eval_episodes=0,
-        ),
-        tracking=TrackingConfig(
-            experiment_name="sixarms",
-            agent_name="mbieeb",
-            parent_run_name="mbieeb",
-            seed_run_name_template="mbieeb_seed_{seed:03d}",
-            parent_tags={"agent": "MBIE-EB"},
-            seed_tags={"agent": "MBIE-EB"},
-        ),
+        params=experiment_params
+    )
+
+    log_experiment(
+        experiment_name=experiment_name,
+        parent_run_name=agent_name,
+        agent_name=agent_name,
+        agent_params=agent_params,
+        experiment_params=experiment_params,
+        env_params=env_params,
+        experiment_results=results,
     )
 
 

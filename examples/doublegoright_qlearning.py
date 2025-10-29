@@ -27,7 +27,7 @@ def main():
 
     agent_params = QlearningParams(
         num_states=env.env.observation_space.n,
-        num_actions=2,
+        num_actions=env.env.action_space.n,
         discount=0.9,
         initial_epsilon=1.0,
         learning_rate=0.1,
