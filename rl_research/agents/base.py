@@ -128,11 +128,11 @@ class TabularAgent(ABC, Generic[AgentStateT, AgentParamsT]):
         """Updates the agent with a transition and returns diagnostic info."""
 
     @abstractmethod
-    def train(self) -> None:
+    def train(self, state: AgentStateT) -> AgentStateT:
         """Configures agent for training."""
     
     @abstractmethod
-    def eval(self) -> None:
+    def eval(self, state: AgentStateT) -> AgentStateT:
         """Configures agent for evaluation."""
     
     def set_policy(self, policy: ActionSelectionPolicy) -> None:

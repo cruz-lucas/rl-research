@@ -18,6 +18,7 @@ dependencies = [
     "minimal-agents",
     "gymnasium",
     "goright",
+    "plotly>=6.3.1",
 ]
 
 [project.scripts]
