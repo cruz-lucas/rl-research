@@ -1,12 +1,13 @@
 import jax
 from goright.jax.env import GoRightJaxEnv, EnvParams
 
-from rl_research.agents import DTUCBPlanner, DTUCBParams, goright_expectation_model
+from rl_research.agents.dt_rmax_ucbpolicy_planner import DTRMaxNStepAgent, DTRMaxNStepParams
+from rl_research.agents import goright_expectation_model
 from rl_research.experiment import run_experiment, log_experiment, ExperimentParams
 
 
 def main():
-    agent_name = "ucb_dtp"
+    agent_name = "rmax_dt_rollout_ucbpolicy_beta100"
     experiment_name = "doublegoright"
     rng = jax.random.PRNGKey(0)
 
@@ -25,19 +26,20 @@ def main():
         env_params
     )
 
-    # TODO: review best hypers
-    agent_params = DTUCBParams(
+    agent_params = DTRMaxNStepParams(
         num_states=env.env.observation_space.n,
         num_actions=env.env.action_space.n,
         discount=0.9,
-        learning_rate=0.05,
+        learning_rate=0.1,
         initial_value=0,
-        horizon=3,
-        beta=20.0,
-        dynamics_model=goright_expectation_model(is_partially_obs=True),
-        use_time_bonus=True
+        horizon=10,
+        m=30,
+        r_max=6.0,
+        dynamics_model=goright_expectation_model(is_partially_obs=env.env.params.is_partially_obs),
+        use_time_bonus=True,
+        beta=100,
     )
-    agent = DTUCBPlanner(params=agent_params)
+    agent = DTRMaxNStepAgent(params=agent_params)
 
     experiment_params = ExperimentParams(
         num_seeds=30,
