@@ -117,7 +117,7 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
     ) -> Tuple[jax.Array, MCTSAgentState, Dict[str, float]]:
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
 
-        if state.eval:
+        def evaluate():
             q_row = state.q_values[obs_idx]
             extras = self._policy_extras(state, obs_idx)
             action, new_rng, policy_info = self._policy.select(state.rng, q_row, extras)
@@ -128,43 +128,44 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
             }
             return action, state.replace(rng=new_rng), info
 
-        exploration = self._exploration_train
-        (
-            q_values,
-            visit_counts,
-            state_counts,
-            rng,
-            root_values,
-            root_counts,
-        ) = self._run_mcts(
-            state.q_values,
-            state.visit_counts,
-            state.state_counts,
-            obs_idx,
-            state.rng,
-            exploration,
-        )
+        def train():
+            (
+                q_values,
+                visit_counts,
+                state_counts,
+                rng,
+                root_values,
+                root_counts,
+            ) = self._run_mcts(
+                state.q_values,
+                state.visit_counts,
+                state.state_counts,
+                obs_idx,
+                state.rng,
+                self._exploration_train,
+            )
 
-        extras = {
-            "counts": visit_counts[obs_idx].astype(jnp.float32),
-            "total": jnp.sum(visit_counts[obs_idx]) + 1.0,
-        }
-        action, new_rng, policy_info = self._policy.select(rng, root_values, extras)
+            extras = {
+                "counts": visit_counts[obs_idx].astype(jnp.float32),
+                "total": jnp.sum(visit_counts[obs_idx]) + 1.0,
+            }
+            action, new_rng, policy_info = self._policy.select(rng, root_values, extras)
 
-        info = {
-            **policy_info,
-            "plan_values": root_values,
-            "visit_counts": root_counts,
-            "q_row": state.q_values[obs_idx],
-        }
+            info = {
+                **policy_info,
+                # "plan_values": root_values,
+                "visit_counts": root_counts,
+                "q_row": state.q_values[obs_idx],
+            }
 
-        new_state = state.replace(
-            q_values=q_values,
-            visit_counts=visit_counts,
-            state_counts=state_counts,
-            rng=new_rng,
-        )
-        return action, new_state, info
+            new_state = state.replace(
+                q_values=q_values,
+                visit_counts=visit_counts,
+                state_counts=state_counts,
+                rng=new_rng,
+            )
+            return action, new_state, info
+        return jax.lax.cond(state.eval, evaluate, train)
 
     def update(
         self,

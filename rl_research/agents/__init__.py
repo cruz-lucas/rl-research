@@ -5,6 +5,7 @@ from rl_research.agents.dt_lambda_planner import DTLambdaPAgent, DTLambdaPParams
 from rl_research.agents.dt_nstep_planner import DTNStepPAgent, DTNStepPParams
 from rl_research.agents.dt_rmax_planner import DTRMaxNStepAgent, DTRMaxNStepParams
 from rl_research.agents.dt_ucb_planner import DTUCBPlanner, DTUCBParams
+from rl_research.agents.mcts import MCTSAgent, MCTSAgentParams
 from rl_research.agents.expectation_models import (
     goright_expectation_model,
     riverswim_expectation_model,
@@ -25,6 +26,8 @@ __all__ = [
     "DTRMaxNStepParams",
     "DTUCBPlanner",
     "DTUCBParams",
+    "MCTSAgent",
+    "MCTSAgentParams",
     "RMaxAgent",
     "RMaxParams",
     "MBIEAgent",
