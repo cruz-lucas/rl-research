@@ -15,7 +15,7 @@ import jax.random as jrng
 
 from goright.jax.env import GoRightJaxEnv, EnvParams
 
-from rl_research.agents import MCTSAgent, MCTSAgentParams, goright_expectation_model
+from rl_research.agents import RMaxMCTSAgent, RMaxMCTSAgentParams, goright_expectation_model
 from rl_research.experiment import ExperimentParams, log_experiment, run_experiment
 
 
@@ -25,6 +25,7 @@ class SearchConfig:
     num_simulations: int
     max_depth: int
     exploration_constant: float
+    m: int
     initial_value: float
 
 
@@ -46,6 +47,12 @@ def sample_hyperparameters(seed: int) -> tuple[SearchConfig, jax.Array]:
     )
     max_depth = int(jrng.choice(depth_key, depth_choices))
 
+    key, m_key = jrng.split(key)
+    m_choices = jnp.array(
+        [1, 5, 10, 15, 20, 25, 30, 35], dtype=jnp.int32
+    )
+    m = int(jrng.choice(m_key, m_choices))
+
     key, exploration_key = jrng.split(key)
     log_span = jnp.log(jnp.asarray(5.0)) - jnp.log(jnp.asarray(0.25))
     log_sample = jnp.log(jnp.asarray(0.25)) + jrng.uniform(
@@ -61,6 +68,7 @@ def sample_hyperparameters(seed: int) -> tuple[SearchConfig, jax.Array]:
         num_simulations=num_simulations,
         max_depth=max_depth,
         exploration_constant=exploration_constant,
+        m=m,
         initial_value=initial_value,
     )
     return config, experiment_key
@@ -98,7 +106,7 @@ def main(seed: int) -> None:
         is_partially_obs=env_params.is_partially_obs,
     )
 
-    agent_params = MCTSAgentParams(
+    agent_params = RMaxMCTSAgentParams(
         num_states=env.env.observation_space.n,
         num_actions=env.env.action_space.n,
         discount=config.discount,
@@ -106,9 +114,11 @@ def main(seed: int) -> None:
         num_simulations=config.num_simulations,
         max_depth=config.max_depth,
         exploration_constant=config.exploration_constant,
+        r_max=6.0,
+        m=config.m,
         initial_value=config.initial_value,
     )
-    agent = MCTSAgent(params=agent_params, seed=seed)
+    agent = RMaxMCTSAgent(params=agent_params, seed=seed)
 
     experiment_params = ExperimentParams(
         num_seeds=10,

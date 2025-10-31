@@ -1,12 +1,12 @@
 import jax
 from goright.jax.env import GoRightJaxEnv, EnvParams
 
-from rl_research.agents import MCTSAgent, MCTSAgentParams, goright_expectation_model
+from rl_research.agents import RMaxMCTSAgent, RMaxMCTSAgentParams, goright_expectation_model
 from rl_research.experiment import run_experiment, log_experiment, ExperimentParams
 
 
 def main():
-    agent_name = "mcts"
+    agent_name = "mcts_rmax"
     experiment_name = "doublegoright"
     rng = jax.random.PRNGKey(0)
 
@@ -25,7 +25,7 @@ def main():
         env_params
     )
 
-    agent_params = MCTSAgentParams(
+    agent_params = RMaxMCTSAgentParams(
         num_states=env.env.observation_space.n,
         num_actions=env.env.action_space.n,
         discount=0.9,
@@ -33,9 +33,11 @@ def main():
         num_simulations=16,
         max_depth=10,
         exploration_constant=100,
+        m=30,
+        r_max=6,
         dynamics_model=goright_expectation_model(is_partially_obs=env.env.params.is_partially_obs),
     )
-    agent = MCTSAgent(params=agent_params)
+    agent = RMaxMCTSAgent(params=agent_params)
 
     experiment_params = ExperimentParams(
         num_seeds=30,

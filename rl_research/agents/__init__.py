@@ -14,6 +14,11 @@ from rl_research.agents.expectation_models import (
 from rl_research.agents.mbie import MBIEAgent, MBIEParams
 from rl_research.agents.rmax import RMaxAgent, RMaxParams
 from rl_research.agents.q_learning import QLearningAgent, QlearningParams
+from rl_research.agents.rmax_mcts import (
+    RMaxMCTSAgent,
+    RMaxMCTSAgentParams,
+    RMaxMCTSAgentState,
+)
 
 __all__ = [
     "TabularAgent",
@@ -28,6 +33,9 @@ __all__ = [
     "DTUCBParams",
     "MCTSAgent",
     "MCTSAgentParams",
+    "RMaxMCTSAgent",
+    "RMaxMCTSAgentParams",
+    "RMaxMCTSAgentState",
     "RMaxAgent",
     "RMaxParams",
     "MBIEAgent",
