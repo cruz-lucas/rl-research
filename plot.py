@@ -219,7 +219,7 @@ def plot_top_runs(df: pd.DataFrame, top_ids: List[str], client: MlflowClient, me
 def main():
     parser = argparse.ArgumentParser(description="Summarize MLflow runs across seeds by parent config.")
     parser.add_argument("--tracking-uri", type=str, default=None, help="MLflow tracking URI. If omitted, use env/default.")
-    parser.add_argument("--experiment-name", type=str, default="riverswim_rmax_dtp_sweep", help="Experiment name.")
+    parser.add_argument("--experiment-name", type=str, default="sixarms_ucb_dtp_sweep", help="Experiment name.")
     parser.add_argument("--experiment-id", type=str, default=None, help="Experiment ID (overrides name if provided).")
     parser.add_argument("--eval-metric", type=str, default="eval/discounted_return", help="Eval metric key.")
     parser.add_argument("--train-metric", type=str, default="train/discounted_return", help="Train metric key.")
