@@ -186,7 +186,8 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
         visited = sa_counts[obs_idx, action_idx]
         known = visited >= self._m_threshold
 
-        behavior_target = target * known + self._optimistic_value * (1-known)
+        behavior_next_value = jnp.max(agent_state.behavior_q_values[next_obs_idx])
+        behavior_target = (reward_val + self.discount * (1.0 - terminated_mask) * behavior_next_value) * known + self._optimistic_value * (1-known)
         behavior_td_error = behavior_target - agent_state.behavior_q_values[obs_idx, action_idx]
 
         behavior_q_values = agent_state.behavior_q_values.at[obs_idx, action_idx].add(
