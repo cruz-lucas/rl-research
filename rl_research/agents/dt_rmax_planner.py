@@ -130,8 +130,7 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
 
             extras = self._policy_extras(state, obs_idx)
 
-            action_values = q_values + plan_values
-            action, new_rng, info = self._policy.select(next_rng, action_values, extras)
+            action, new_rng, info = self._policy.select(next_rng, plan_values, extras)
             info = {
                 **info,
                 "plan_values": plan_values,
