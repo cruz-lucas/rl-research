@@ -144,10 +144,10 @@ def main(seed: int) -> None:
             f"seed{seed}",
         ]
     )
-    agent_name = f"mcts_search_{run_suffix}"
+    agent_name = f"mcts_rmax_search_{run_suffix}"
 
     log_experiment(
-        experiment_name="doublegoright_mcts_hparam_search",
+        experiment_name="doublegoright_mcts_rmax_hparam_search",
         parent_run_name=agent_name,
         agent_name=agent_name,
         agent_params=agent_params,

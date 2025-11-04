@@ -177,3 +177,5 @@ cython_debug/
 **/mlruns_hpo/
 **/outputs/
 .deprecated/**
+
+**/logs/**
