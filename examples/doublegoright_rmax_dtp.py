@@ -6,7 +6,7 @@ from rl_research.experiment import run_experiment, log_experiment, ExperimentPar
 
 
 def main():
-    agent_name = "rmax_dt_rollout"
+    agent_name = "rmax_dt_rollout_m50_rmaxbehaviorpolicy_blr0.8"
     experiment_name = "doublegoright"
     rng = jax.random.PRNGKey(0)
 
@@ -30,9 +30,10 @@ def main():
         num_actions=env.env.action_space.n,
         discount=0.9,
         learning_rate=0.1,
+        behavior_learning_rate=0.8,
         initial_value=0,
         horizon=10,
-        m=6,
+        m=50,
         r_max=6.0,
         dynamics_model=goright_expectation_model(is_partially_obs=env.env.params.is_partially_obs),
     )

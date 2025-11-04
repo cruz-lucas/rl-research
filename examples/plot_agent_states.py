@@ -50,7 +50,7 @@ def _parse_args() -> argparse.Namespace:
         default="artifacts/agent_states.npz",
         help="Relative artifact path for agent states (default: artifacts/agent_states.npz).",
     )
-    parser.add_argument("--metric", choices=["q_values", "sa_counts"], default="q_values", help="Which agent state tensor to visualise (default: q_values).")
+    parser.add_argument("--metric", choices=["q_values", "sa_counts", "behavior_q_values"], default="q_values", help="Which agent state tensor to visualise (default: q_values).")
     parser.add_argument("--start-episode", type=int, default=0, help="Episode index to show on startup (default: 0).")
     parser.add_argument("--m", type=int, default=None, help="Number of visits to consider state-action known.")
     parser.add_argument("--save-pdf", help="Optional path to export every episode as a PDF slideshow.")
@@ -441,6 +441,12 @@ def main() -> None:
         vmin = -largest
         vmax = largest
         colorbar_label = "Q-value"
+        cmap_name = "RdBu"
+    elif args.metric == "behavior_q_values":
+        largest = np.maximum(np.abs(float(np.max(selected))), np.abs(float(np.min(selected))))
+        vmin = -largest
+        vmax = largest
+        colorbar_label = "Behavior Q-value"
         cmap_name = "RdBu"
     else:
         if args.m is not None:

@@ -17,6 +17,7 @@ from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 class DTRMaxNStepState(AgentState):
     """Mutable state tracked by the R-MAX decision-time planner."""
 
+    behavior_q_values: jax.Array
     sa_counts: jax.Array
     eval: bool = False
 
@@ -26,6 +27,7 @@ class DTRMaxNStepParams(AgentParams):
     """Static configuration for the R-MAX n-step decision-time planning agent."""
 
     learning_rate: float
+    behavior_learning_rate: float
     initial_value: float
     horizon: int
     m: int
@@ -43,6 +45,7 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
         policy: ActionSelectionPolicy | None = None,
     ) -> None:
         self.learning_rate = params.learning_rate
+        self.behavior_learning_rate = params.behavior_learning_rate
         self.initial_value = params.initial_value
 
         self.horizon = int(params.horizon)
@@ -109,20 +112,33 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
     ) -> Tuple[jax.Array, DTRMaxNStepState, Dict[str, float]]:
         """Selects an action using the configured policy."""
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
-        plan_values = self._plan_targets(state.q_values, state.sa_counts, obs_idx)
         q_values = state.q_values[obs_idx]
 
-        extras = self._policy_extras(state, obs_idx)
+        def evaluate():
+            extras = self._policy_extras(state, obs_idx)
+            action, new_rng, info = self._policy.select(state.rng, q_values, extras)
+            info = {
+                **info,
+                "plan_values": jnp.zeros_like(q_values),
+                "q_row": q_values,
+            }
+            return action, state.replace(rng=new_rng), info
 
-        action_values = state.eval * q_values + (1 - state.eval) * plan_values
-        action, new_rng, info = self._policy.select(state.rng, action_values, extras)
-        info = {
-            **info,
-            "plan_values": plan_values,
-            "q_row": state.q_values[obs_idx],
-        }
-        state = state.replace(rng=new_rng)
-        return action, state, info
+        def train():    
+            next_rng, plan_key = jax.random.split(state.rng, 2)
+            plan_values = self._plan_targets(state.behavior_q_values, state.sa_counts, obs_idx, plan_key)
+
+            extras = self._policy_extras(state, obs_idx)
+
+            action_values = q_values + plan_values
+            action, new_rng, info = self._policy.select(next_rng, action_values, extras)
+            info = {
+                **info,
+                "plan_values": plan_values,
+                "q_row": q_values,
+            }
+            return action, state.replace(rng=new_rng), info
+        return jax.lax.cond(state.eval, evaluate, train)
 
     def _initial_state(self, key: jax.Array) -> DTRMaxNStepState:
         q_values = jnp.full(
@@ -134,6 +150,7 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
 
         sa_counts = jnp.zeros_like(q_values, dtype=jnp.int32)
         return DTRMaxNStepState(
+            behavior_q_values=q_values,
             q_values=q_values,
             rng=key,
             sa_counts=sa_counts,
@@ -166,8 +183,20 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
         sa_counts = agent_state.sa_counts.at[obs_idx, action_idx].add(1)
 
         self._td_errors.append(td_error)
+
+        visited = sa_counts[obs_idx, action_idx]
+        known = visited >= self._m_threshold
+
+        behavior_target = target * known + self._optimistic_value * (1-known)
+        behavior_td_error = behavior_target - agent_state.behavior_q_values[obs_idx, action_idx]
+
+        behavior_q_values = agent_state.behavior_q_values.at[obs_idx, action_idx].add(
+            self.behavior_learning_rate * behavior_td_error
+        )
+
         return (
             DTRMaxNStepState(
+                behavior_q_values=behavior_q_values,
                 q_values=q_values,
                 rng=agent_state.rng,
                 sa_counts=sa_counts,
@@ -186,23 +215,19 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
     def eval(self, state: DTRMaxNStepState) -> AgentState:
         return state.replace(eval=True)
 
-    @staticmethod
-    def _greedy_action(q_values: jax.Array, state_idx: jax.Array) -> jax.Array:
-        """Return the greedy action index for `state_idx`."""
-        return jnp.asarray(jnp.argmax(q_values[state_idx]), dtype=jnp.int32)
-
     def _plan_targets(
-        self, q_values: jax.Array, sa_counts: jax.Array, obs_idx: jax.Array
+        self, q_values: jax.Array, sa_counts: jax.Array, obs_idx: jax.Array, rng: jax.Array
     ) -> jax.Array:
         """Compute n-step return targets under the optimistic R-MAX model."""
         actions = jnp.arange(self.num_actions, dtype=jnp.int32)
+        keys = jax.random.split(rng, self.num_actions)
 
-        def rollout_target(action_idx: jax.Array) -> jax.Array:
+        def rollout_target(action_idx: jax.Array, key: jax.Array) -> jax.Array:
             return self._rmax_n_step_return(
-                q_values, sa_counts, obs_idx, action_idx
+                q_values, sa_counts, obs_idx, action_idx, key
             )
 
-        return jax.vmap(rollout_target)(actions)
+        return jax.vmap(rollout_target)(actions, keys)
 
     def _rmax_n_step_return(
         self,
@@ -210,12 +235,13 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
         sa_counts: jax.Array,
         start_state: jax.Array,
         first_action: jax.Array,
+        rng: jax.Array
     ) -> jax.Array:
         """Roll out `first_action` and compute the n-step return with R-MAX optimism."""
 
         def body(step: jax.Array, carry):
             del step
-            state_idx, action_idx, done, acc_return, discount = carry
+            state_idx, action_idx, done, acc_return, discount, key = carry
 
             visited = sa_counts[state_idx, action_idx]
             known = visited >= self._m_threshold
@@ -224,7 +250,9 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
 
             reward = self._model_rewards[state_idx, action_idx]
             next_state = self._model_next_obs[state_idx, action_idx]
-            next_action = self._greedy_action(q_values, next_state)
+            # next_action = self._greedy_action(q_values, next_state)
+            action_values = q_values[next_state]
+            next_action, next_key, info = self._policy.select(key, action_values, dict({}))
 
             acc_known = acc_return + discount * reward
             discount_known = discount * self._discount
@@ -247,6 +275,7 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
                 updated_done,
                 updated_acc,
                 updated_discount,
+                next_key
             )
 
         init_carry = (
@@ -255,8 +284,9 @@ class DTRMaxNStepAgent(TabularAgent[DTRMaxNStepState, DTRMaxNStepParams]):
             jnp.asarray(False),
             jnp.asarray(0.0, dtype=jnp.float32),
             jnp.asarray(1.0, dtype=jnp.float32),
+            rng
         )
-        final_state, _, done, acc_return, discount = lax.fori_loop(
+        final_state, _, done, acc_return, discount, last_key = lax.fori_loop(
             0, self.horizon, body, init_carry
         )
 
