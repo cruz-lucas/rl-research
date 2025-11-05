@@ -1,0 +1,5 @@
+mode: grid
+parameters:
+  agent.params.learning_rate: [0.05, 0.1, 0.2]
+  agent.params.m: [500, 1000, 2000]
+name_template: lr{agent.params.learning_rate}_m{agent.params.m}

@@ -1,0 +1,12 @@
+defaults:
+  - base
+
+name: ucb_dtp
+
+params:
+  discount: 0.9
+  learning_rate: 0.05
+  initial_value: 0.0
+  horizon: 3
+  beta: 20.0
+  use_time_bonus: true

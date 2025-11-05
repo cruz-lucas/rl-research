@@ -1,0 +1,14 @@
+defaults:
+  - base@_here_
+  - _self_
+
+name: rmax_dt_rollout
+
+params:
+  discount: 0.95
+  learning_rate: 0.03
+  behavior_learning_rate: 0.03
+  initial_value: 0.0
+  horizon: 7
+  m: 30
+  r_max: 10000.0

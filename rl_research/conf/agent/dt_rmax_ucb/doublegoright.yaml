@@ -1,0 +1,15 @@
+defaults:
+  - base@_here_
+  - _self_
+
+name: rmax_dt_rollout_ucbpolicy_beta100
+
+params:
+  discount: 0.9
+  learning_rate: 0.1
+  initial_value: 0.0
+  horizon: 10
+  m: 30
+  r_max: 6.0
+  beta: 100.0
+  use_time_bonus: true

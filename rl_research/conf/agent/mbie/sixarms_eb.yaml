@@ -1,0 +1,15 @@
+defaults:
+  - base@_here_
+  - _self_
+
+name: mbie-eb
+
+params:
+  discount: 0.95
+  threshold: 0.01
+  r_max: 6000.0
+  epsilon_r_coeff: 0.0
+  epsilon_t_coeff: 0.0
+  exploration_coeff: 0.8
+  m: null
+  use_exploration_bonus: true

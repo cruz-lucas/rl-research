@@ -1,0 +1,11 @@
+defaults:
+  - base@_here_
+  - _self_
+
+name: rmax
+
+params:
+  discount: 0.9
+  threshold: 0.01
+  r_max: 6.0
+  m: 5

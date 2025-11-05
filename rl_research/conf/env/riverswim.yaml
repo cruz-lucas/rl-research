@@ -1,0 +1,10 @@
+name: riverswim
+
+builder:
+  _target_: classic_pacmdp_envs.RiverSwimJaxEnv
+
+params:
+  _target_: classic_pacmdp_envs.riverswim.EnvParams
+
+expectation_model:
+  _target_: rl_research.agents.expectation_models.riverswim_expectation_model

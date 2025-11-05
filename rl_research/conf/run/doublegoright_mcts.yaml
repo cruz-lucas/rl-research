@@ -1,0 +1,11 @@
+defaults:
+  - override /env: doublegoright
+  - override /agent: mcts/doublegoright
+  - override /experiment: default
+  - override /sweep: none
+  - _self_
+
+rng_seed: 0
+agent_seed: null
+experiment_name: doublegoright
+agent_name: mcts

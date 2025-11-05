@@ -1,0 +1,16 @@
+defaults:
+  - env: doublegoright
+  - agent: q_learning/base
+  - experiment: goright
+  - sweep: none
+  - run: base
+  - _self_
+
+rng_seed: 0
+agent_seed: null
+
+experiment_name: ${env.name}
+agent_name: ${agent.name}
+
+mlflow:
+  enabled: true

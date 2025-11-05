@@ -1,0 +1,20 @@
+name: doublegoright
+
+builder:
+  _target_: goright.jax.env.GoRightJaxEnv
+
+params:
+  _target_: goright.jax.env.EnvParams
+  length: 21
+  num_indicators: 2
+  num_actions: 2
+  first_checkpoint: 10
+  first_reward: 3.0
+  second_checkpoint: 20
+  second_reward: 6.0
+  is_partially_obs: true
+  mapping: default
+
+expectation_model:
+  _target_: rl_research.agents.expectation_models.goright_expectation_model
+  is_partially_obs: true

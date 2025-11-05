@@ -1,0 +1,22 @@
+name: mcts
+
+builder:
+  _target_: rl_research.agents.MCTSAgent
+
+params:
+  _target_: rl_research.agents.MCTSAgentParams
+  num_states: null
+  num_actions: null
+  discount: 0.9
+  dynamics_model: null
+  num_simulations: 16
+  max_depth: 10
+  exploration_constant: 100.0
+  initial_value: 0.0
+
+autofill:
+  num_states: tabular_num_states
+  num_actions: tabular_num_actions
+  dynamics_model: env_expectation
+
+policy: null

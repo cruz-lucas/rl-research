@@ -1,0 +1,14 @@
+defaults:
+  - /agent/dt_rmax_nstep/base@_here_
+  - _self_
+
+name: rmax_dt_rollout_m2000_behaviorpolicylr01
+
+params:
+  discount: 0.9
+  learning_rate: 0.1
+  behavior_learning_rate: 0.1
+  initial_value: 0.0
+  horizon: 10
+  m: 2000
+  r_max: 6.0

@@ -16,8 +16,6 @@ import jax.tree_util as jtu
 from gymnasium.envs.functional_jax_env import FunctionalJaxEnv
 
 from rl_research.agents.base import AgentState, TabularAgent, AgentParams
-# TODO: create a base class in the package to wrap general env params
-from goright.jax.env import EnvParams
 
 
 class EpisodeStep(NamedTuple):
@@ -185,8 +183,9 @@ def log_experiment(
     agent_name: str,
     agent_params: AgentParams,
     experiment_params: ExperimentParams,
-    env_params: EnvParams,
+    env_params: Any,
     experiment_results: SeedResult,
+    extra_params: dict[str, Any] | None = None,
 ):
     train_eps = experiment_results.train_episodes
     agent_states = experiment_results.agent_states
@@ -200,12 +199,28 @@ def log_experiment(
 
     mlflow.set_experiment(experiment_name)
     with mlflow.start_run(run_name=parent_run_name, nested=False):
-        mlflow.log_params({
+        def _to_dict(payload: Any) -> dict[str, Any]:
+            if payload is None:
+                return {}
+            if hasattr(payload, "_asdict"):
+                return payload._asdict()
+            if hasattr(payload, "__dict__"):
+                return {
+                    key: value if isinstance(value, (int, float, str, bool)) else str(value)
+                    for key, value in payload.__dict__.items()
+                }
+            return {}
+
+        base_params: dict[str, Any] = {
             "agent_name": agent_name,
-            **agent_params.__dict__,
-            **env_params.__dict__,
-            **experiment_params._asdict()
-        })
+            **_to_dict(agent_params),
+            **_to_dict(env_params),
+            **experiment_params._asdict(),
+        }
+        if extra_params:
+            base_params.update(extra_params)
+
+        mlflow.log_params(base_params)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
