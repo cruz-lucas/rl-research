@@ -1,6 +1,7 @@
 """Hydra-powered command line interface for composing experiments."""
 
 from __future__ import annotations
+import os
 
 from copy import deepcopy
 from itertools import product
@@ -218,7 +219,21 @@ def _run(cfg: DictConfig) -> None:
         _run_single(cfg)
         return
 
+    in_job_array = "SLURM_ARRAY_TASK_ID" in os.environ
+    if in_job_array:
+        array_task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
+        array_task_count = int(os.environ["SLURM_ARRAY_TASK_COUNT"])
+
+        # TODO: replace print with logging
+        print(f"This job is at index {array_task_id} in a job array of size {array_task_count}. The sweep contains {len(sweep_iter)} configurations.")
+        overrides, suffix = sweep_iter[array_task_id]
+        run_cfg = _apply_overrides(cfg, overrides)
+        _run_single(run_cfg, sweep_suffix=suffix, sweep_overrides=overrides)
+        return
+
     for overrides, suffix in sweep_iter:
+        # TODO: replace print with logging
+        print(f"This job will run all of {len(sweep_iter)} hyperparameter configurations.")
         run_cfg = _apply_overrides(cfg, overrides)
         _run_single(run_cfg, sweep_suffix=suffix, sweep_overrides=overrides)
 
