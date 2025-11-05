@@ -1,4 +1,4 @@
-name: rmax_mcts
+name: rmax_mcts_handcoded
 
 builder:
   _target_: rl_research.agents.rmax_mcts.RMaxMCTSAgent
@@ -14,9 +14,9 @@ params:
   r_max: 6.0
   m: 1
   initial_value: null
-  expectation_model:
+  dynamics_model:
     _target_: rl_research.models.goright_expectation_model
-    is_partially_obs: ${env.params.is_partially_obs}
+    is_partially_obs: false
 
 autofill:
   num_states: tabular_num_states

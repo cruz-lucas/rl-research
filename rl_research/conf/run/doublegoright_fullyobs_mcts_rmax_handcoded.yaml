@@ -1,0 +1,6 @@
+# @package _global_
+defaults:
+  - override /env: doublegoright_fullobs
+  - override /agent: rmax_mcts/base
+  - override /experiment: goright
+  - override /sweep: none
