@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Iterable, Tuple
 
 import numpy as np
+from rl_research.models import StaticTabularModel
 
 
 def riverswim_expectation_model(
@@ -252,7 +253,7 @@ def goright_expectation_model(
             reward = _reward(state, action, next_state)
             model[obs_index, action] = (int(next_obs_index), float(reward))
 
-    return model
+    return StaticTabularModel(model)
 
 
 __all__ = [

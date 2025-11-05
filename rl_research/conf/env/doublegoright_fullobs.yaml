@@ -14,7 +14,3 @@ params:
   second_reward: 6.0
   is_partially_obs: false
   mapping: default
-
-expectation_model:
-  _target_: rl_research.agents.expectation_models.goright_expectation_model
-  is_partially_obs: ${params.is_partially_obs}

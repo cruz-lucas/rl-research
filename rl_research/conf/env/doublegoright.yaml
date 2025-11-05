@@ -15,6 +15,3 @@ params:
   is_partially_obs: true
   mapping: default
 
-expectation_model:
-  _target_: rl_research.agents.expectation_models.goright_expectation_model
-  is_partially_obs: true

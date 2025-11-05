@@ -10,6 +10,7 @@ import jax.random as jrandom
 from flax import struct
 
 from rl_research.agents.base import AgentParams, AgentState, TabularAgent, UpdateResult
+from rl_research.models.tabular import StaticTabularModel, TabularDynamicsModel
 from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 
 
@@ -28,7 +29,7 @@ class RMaxMCTSAgentState(AgentState):
 class RMaxMCTSAgentParams(AgentParams):
     """Static configuration for the R-MAX augmented Monte Carlo Tree Search agent."""
 
-    dynamics_model: jax.Array
+    dynamics_model: TabularDynamicsModel
     num_simulations: int
     max_depth: int
     exploration_constant: float
@@ -46,9 +47,6 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
         seed: int | None = None,
         policy: ActionSelectionPolicy | None = None,
     ) -> None:
-        if params.dynamics_model is None:
-            raise ValueError("`dynamics_model` must be provided for RMaxMCTSAgent.")
-
         simulations = int(params.num_simulations)
         depth = int(params.max_depth)
         if simulations <= 0:
@@ -77,27 +75,19 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
         self._optimistic_value = jnp.asarray(optimistic_value, dtype=jnp.float32)
         self._r_max_value = jnp.asarray(self._r_max_scalar, dtype=jnp.float32)
 
-        dynamics = jnp.asarray(params.dynamics_model)
+        model = params.dynamics_model
+
         if (
-            dynamics.ndim != 3
-            or dynamics.shape[0] != params.num_states
-            or dynamics.shape[1] != params.num_actions
-            or dynamics.shape[2] < 2
+            model.num_states != params.num_states
+            or model.num_actions != params.num_actions
         ):
             raise ValueError(
-                "Expected `dynamics_model` with shape "
-                f"(num_states={params.num_states}, num_actions={params.num_actions}, >=2). "
-                f"Received shape {dynamics.shape}."
+                "Dynamics model dimensions do not match agent configuration: "
+                f"expected ({params.num_states}, {params.num_actions}), "
+                f"received ({model.num_states}, {model.num_actions})."
             )
 
-        next_obs = dynamics[..., 0]
-        rewards = dynamics[..., 1]
-
-        max_state = jnp.asarray(params.num_states - 1, dtype=jnp.int32)
-        min_state = jnp.asarray(0, dtype=jnp.int32)
-        rounded_next_obs = jnp.rint(next_obs).astype(jnp.int32)
-        self._model_next_obs = jnp.clip(rounded_next_obs, min_state, max_state)
-        self._model_rewards = jnp.asarray(rewards, dtype=jnp.float32)
+        self._model = model
 
         self._num_actions = int(params.num_actions)
         self._action_indices = jnp.arange(self._num_actions, dtype=jnp.int32)
@@ -197,10 +187,20 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
         next_obs: jax.Array,
         terminated: jax.Array | bool = False,
     ) -> Tuple[RMaxMCTSAgentState, UpdateResult]:
-        del reward, next_obs, terminated
-
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
         action_idx = jnp.asarray(action, dtype=jnp.int32)
+        reward_val = jnp.asarray(reward, dtype=jnp.float32)
+        next_obs_idx = jnp.asarray(next_obs, dtype=jnp.int32)
+        terminated_flag = jnp.asarray(terminated, dtype=jnp.bool_)
+
+        self._model.update(
+            obs_idx,
+            action_idx,
+            reward_val,
+            next_obs_idx,
+            terminated_flag,
+        )
+
         sa_counts = agent_state.sa_counts.at[obs_idx, action_idx].add(1.0)
         return agent_state.replace(sa_counts=sa_counts), UpdateResult()
 
@@ -343,8 +343,7 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
                     operand=None,
                 )
 
-                reward = self._model_rewards[state_idx, action]
-                next_state = self._model_next_obs[state_idx, action]
+                next_state, reward = self._model.query(state_idx, action)
 
                 states = states.at[depth].set(state_idx)
                 actions = actions.at[depth].set(action)

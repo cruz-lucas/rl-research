@@ -26,7 +26,7 @@ def _resolve_space_cardinality(env: Any, attr: str) -> int:
     raise ValueError(f"Unable to infer `{attr}.n` from environment {type(env)!r}.")
 
 
-def _prepare_environment(env_cfg: DictConfig) -> Tuple[Any, Any, Any]:
+def _prepare_environment(env_cfg: DictConfig) -> Tuple[Any, Any]:
     """Instantiates the environment, its params, and optional expectation model."""
     if env_cfg is None:
         raise ValueError("Environment config must be provided.")
@@ -40,17 +40,12 @@ def _prepare_environment(env_cfg: DictConfig) -> Tuple[Any, Any, Any]:
     else:
         env = instantiate(builder_cfg, env_params)
 
-    expectation_model = None
-    if "expectation_model" in env_cfg and env_cfg.expectation_model is not None:
-        expectation_model = instantiate(env_cfg.expectation_model)
-
-    return env, env_params, expectation_model
+    return env, env_params
 
 
 def _prepare_agent(
     agent_cfg: DictConfig,
     env: Any,
-    expectation_model: Any,
     seed: int | None,
 ) -> Tuple[Any, Any]:
     """Instantiates an agent and its parameter struct from config."""
@@ -72,41 +67,37 @@ def _prepare_agent(
 
     autofill = agent_dict.pop("autofill", {}) or {}
 
-    def set_if_missing(key: str, value: Any) -> None:
-        if key not in params_dict or params_dict[key] is None:
-            params_dict[key] = value
+    def set_if_missing(params: Dict[str, Any], key: str, value: Any) -> Dict[str, Any]:
+        if key not in params or params[key] is None:
+            params[key] = value
+        return params
+
+    dyn_cfg = params_dict.get("dynamics_model")
 
     if autofill.get("num_states") == "tabular_num_states":
-        set_if_missing("num_states", _resolve_space_cardinality(env, "observation_space"))
+        n_states = _resolve_space_cardinality(env, "observation_space")
+        params_dict = set_if_missing(params_dict, "num_states", n_states)
+        dyn_cfg = set_if_missing(dyn_cfg, "num_states", n_states)
 
     if autofill.get("num_actions") == "tabular_num_actions":
-        set_if_missing("num_actions", _resolve_space_cardinality(env, "action_space"))
+        n_actions = _resolve_space_cardinality(env, "action_space")
+        params_dict = set_if_missing(params_dict, "num_actions", n_actions)
+        dyn_cfg = set_if_missing(dyn_cfg, "num_actions", n_actions)
 
-    if autofill.get("dynamics_model") == "env_expectation":
-        if expectation_model is None:
-            raise ValueError(
-                "Agent requested `env_expectation` dynamics_model but the environment "
-                "config did not define `expectation_model`."
-            )
-        params_dict["dynamics_model"] = expectation_model
-    else:
-        dyn_cfg = params_dict.get("dynamics_model")
-        if isinstance(dyn_cfg, MutableMapping) and "_target_" in dyn_cfg:
-            params_dict["dynamics_model"] = instantiate(OmegaConf.create(dyn_cfg))
+    if isinstance(dyn_cfg, MutableMapping) and "_target_" in dyn_cfg:
+        params_dict["dynamics_model"] = instantiate(dyn_cfg)
 
-    params_cfg = OmegaConf.create(params_dict)
-    agent_params = instantiate(params_cfg)
+    agent_params = instantiate(params_dict)
 
-    builder_cfg = OmegaConf.create(builder_dict)
     builder_kwargs: Dict[str, Any] = {"params": agent_params}
     if seed is not None:
         builder_kwargs["seed"] = int(seed)
 
     policy_cfg = agent_dict.pop("policy", None)
     if isinstance(policy_cfg, MutableMapping):
-        builder_kwargs["policy"] = instantiate(OmegaConf.create(policy_cfg))
+        builder_kwargs["policy"] = instantiate(policy_cfg)
 
-    agent = instantiate(builder_cfg, **builder_kwargs)
+    agent = instantiate(builder_dict, **builder_kwargs)
     return agent, agent_params
 
 
@@ -182,9 +173,9 @@ def _run_single(
     sweep_suffix: str | None = None,
     sweep_overrides: Mapping[str, Any] | None = None,
 ) -> None:
-    env, env_params, expectation_model = _prepare_environment(cfg.env)
+    env, env_params = _prepare_environment(cfg.env)
     agent_seed = _select(cfg, "agent_seed")
-    agent, agent_params = _prepare_agent(cfg.agent, env, expectation_model, agent_seed)
+    agent, agent_params = _prepare_agent(cfg.agent, env, agent_seed)
 
     experiment_params = _prepare_experiment_params(cfg.experiment)
     rng_seed = int(_select(cfg, "rng_seed", 0))

@@ -14,11 +14,12 @@ params:
   horizon: 5
   m: 100
   r_max: 1.0
-  dynamics_model: null
+  expectation_model:
+    _target_: rl_research.agents.expectation_models.goright_expectation_model
+    is_partially_obs: ${env.params.is_partially_obs}
 
 autofill:
   num_states: tabular_num_states
   num_actions: tabular_num_actions
-  dynamics_model: env_expectation
 
 policy: null
