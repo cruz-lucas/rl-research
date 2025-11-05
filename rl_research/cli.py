@@ -78,12 +78,14 @@ def _prepare_agent(
     if autofill.get("num_states") == "tabular_num_states":
         n_states = _resolve_space_cardinality(env, "observation_space")
         params_dict = set_if_missing(params_dict, "num_states", n_states)
-        dyn_cfg = set_if_missing(dyn_cfg, "num_states", n_states)
+        if "num_states" in dyn_cfg:
+            dyn_cfg = set_if_missing(dyn_cfg, "num_states", n_states)
 
     if autofill.get("num_actions") == "tabular_num_actions":
         n_actions = _resolve_space_cardinality(env, "action_space")
         params_dict = set_if_missing(params_dict, "num_actions", n_actions)
-        dyn_cfg = set_if_missing(dyn_cfg, "num_actions", n_actions)
+        if "num_actions" in dyn_cfg:
+            dyn_cfg = set_if_missing(dyn_cfg, "num_actions", n_actions)
 
     if isinstance(dyn_cfg, MutableMapping) and "_target_" in dyn_cfg:
         params_dict["dynamics_model"] = instantiate(dyn_cfg)

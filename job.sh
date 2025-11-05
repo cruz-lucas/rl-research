@@ -16,6 +16,6 @@ echo "Memory: $SLURM_MEM_PER_NODE MB"
 
 module load python/3.11 gcc arrow
 
-uv run --offline --active python examples/doublegoright_mcts_hpo.py
+uv run --offline --active python rl_research/cli.py run=doublegoright_fullyobs_mcts_rmax_sweep
 
 echo "Job completed at: $(date)"
