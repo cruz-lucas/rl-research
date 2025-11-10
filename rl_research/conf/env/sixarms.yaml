@@ -5,6 +5,3 @@ builder:
 
 params:
   _target_: classic_pacmdp_envs.sixarms.EnvParams
-
-expectation_model:
-  _target_: rl_research.agents.expectation_models.sixarms_expectation_model

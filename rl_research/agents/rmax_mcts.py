@@ -18,7 +18,6 @@ from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 class RMaxMCTSAgentState(AgentState):
     """Tracks tree statistics together with R-MAX novelty counts."""
 
-    behavior_q_values: jax.Array
     visit_counts: jax.Array
     state_counts: jax.Array
     sa_counts: jax.Array
@@ -114,7 +113,6 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
         state_counts = jnp.zeros((self.num_states,), dtype=jnp.float32)
         sa_counts = jnp.zeros_like(q_values, dtype=jnp.float32)
         return RMaxMCTSAgentState(
-            behavior_q_values=q_values,
             q_values=q_values,
             rng=key,
             visit_counts=visit_counts,
@@ -141,14 +139,14 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
 
         def train():
             (
-                behavior_q_values,
+                q_values,
                 visit_counts,
                 state_counts,
                 rng,
                 root_values,
                 root_counts,
             ) = self._run_mcts(
-                state.behavior_q_values,
+                state.q_values,
                 state.visit_counts,
                 state.state_counts,
                 state.sa_counts,
@@ -165,11 +163,11 @@ class RMaxMCTSAgent(TabularAgent[RMaxMCTSAgentState, RMaxMCTSAgentParams]):
             info = {
                 **policy_info,
                 "visit_counts": root_counts,
-                "q_row": state.behavior_q_values[obs_idx],
+                "q_row": state.q_values[obs_idx],
             }
 
             new_state = state.replace(
-                q_values=behavior_q_values,
+                q_values=q_values,
                 visit_counts=visit_counts,
                 state_counts=state_counts,
                 rng=new_rng,

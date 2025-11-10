@@ -1,4 +1,4 @@
-name: rmax_mcts
+name: rmax_mcts_handcoded_d500_n128_m1_b100
 
 builder:
   _target_: rl_research.agents.rmax_mcts.RMaxMCTSAgent
@@ -7,21 +7,19 @@ params:
   _target_: rl_research.agents.rmax_mcts.RMaxMCTSAgentParams
   num_states: null
   num_actions: null
-  discount: 0.95
-  num_simulations: 64
-  max_depth: 100
+  discount: 0.9
+  num_simulations: 128
+  max_depth: 500
   exploration_constant: 100.0
-  r_max: 10000
-  m: 16
+  r_max: 6.0
+  m: 1
   initial_value: null
   dynamics_model:
-    _target_: rl_research.models.EmpiricalTabularModel
-    num_states: null
-    num_actions: null
+    _target_: rl_research.models.goright_expectation_model
+    is_partially_obs: false
 
 autofill:
   num_states: tabular_num_states
   num_actions: tabular_num_actions
 
 policy: null
-

@@ -1,14 +1,25 @@
-defaults:
-  - /agent/dt_rmax_nstep/base@_here_
-  - _self_
+name: dt_rmax_nstep
 
-name: rmax_dt_rollout_m2000_behaviorpolicylr01
+builder:
+  _target_: rl_research.agents.DTRMaxNStepAgent
 
 params:
+  _target_: rl_research.agents.DTRMaxNStepParams
+  num_states: null
+  num_actions: null
   discount: 0.9
   learning_rate: 0.1
   behavior_learning_rate: 0.1
   initial_value: 0.0
   horizon: 10
-  m: 2000
+  m: 500
   r_max: 6.0
+  expectation_model:
+    _target_: rl_research.agents.expectation_models.goright_expectation_model
+    is_partially_obs: ${env.params.is_partially_obs}
+
+autofill:
+  num_states: tabular_num_states
+  num_actions: tabular_num_actions
+
+policy: null

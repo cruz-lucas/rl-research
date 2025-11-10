@@ -1,4 +1,4 @@
-name: rmax_mcts
+name: rmax_mcts_empirical_d50_n32_m16_b40
 
 builder:
   _target_: rl_research.agents.rmax_mcts.RMaxMCTSAgent
@@ -7,11 +7,11 @@ params:
   _target_: rl_research.agents.rmax_mcts.RMaxMCTSAgentParams
   num_states: null
   num_actions: null
-  discount: 0.95
-  num_simulations: 64
-  max_depth: 100
-  exploration_constant: 100.0
-  r_max: 10000
+  discount: 0.9
+  num_simulations: 32
+  max_depth: 50
+  exploration_constant: 40.0
+  r_max: 6.0
   m: 16
   initial_value: null
   dynamics_model:
