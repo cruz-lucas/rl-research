@@ -1,36 +1,41 @@
-## Overview
+# rl-research
 
-`rl-research` is a lightweight reinforcement-learning playground built around JAX tabular agents. The codebase now centres on declarative configuration: every environment, agent, experiment schedule, and hyperparameter sweep is described in YAML and composed at runtime through Hydra. Key features:
+`rl-research` is a lightweight reinforcement-learning playground for tabular agents built on JAX,
+Hydra, and MLflow. Every result in the repository (and in the accompanying PhD application) can be
+reproduced by composing YAML configs and launching the single CLI entry point `rl-run`.
 
-- Structured configs under `rl_research/conf/` for environments, agents, training loops, pre-defined runs, and sweeps.
-- Single entry-point CLI (`rl-run`) that instantiates experiments, launches training, and logs results to MLflow.
-- Auto-populated tabular dimensions—configs can request `num_states`, `num_actions`, or model dynamics directly from the environment wrapper.
-- Optional grid-search sweeps described entirely in YAML; each combination is executed sequentially with consistent logging metadata.
-- Examples for GoRight, RiverSwim, and SixArms reproduced as `run=` presets so experiments stay reproducible without copy/pasting code.
+## Highlights
+
+- Declarative configuration tree under `rl_research/conf/` with clear separation between environments,
+  agents, experiment schedules, presets, and sweeps.
+- Tabular agent zoo (R-MAX variants, MBIE-EB, Q-learning, RMAX+MCTS) that shares a functional base
+  class so new planners only need to implement their update rule.
+- Sweep-aware CLI with SLURM-array support. Grid and random searches are described entirely in YAML
+  and logged consistently via MLflow.
+- Rich logging story: every run creates a Hydra output directory, MLflow experiment, and zipped `.npz`
+  artifacts for raw trajectories and agent state snapshots.
+- Research-ready documentation in `docs/` so the codebase can be referenced in applications, papers,
+  or collaboration hand-offs.
 
 ## Installation
 
 ```bash
-uv sync  # or pip install -e .
+uv sync            # installs dependencies
+source .venv/bin/activate
 ```
 
-This installs the project together with Hydra, MLflow, JAX, and the companion environment packages referenced in the configs.
+`uv` pins the exact versions of Hydra, JAX, MLflow, and the custom environment packages referenced
+in the configs. Using `pip install -e .[dev]` works as well if you prefer stock virtualenvs.
 
 ## Quickstart
 
-Run the default Decision-Time RMAX planner on the double GoRight task:
+Default run (Decision-Time RMAX on Double GoRight):
 
 ```bash
 uv run rl-run
 ```
 
-The command loads `rl_research/conf/experiment.yaml`, which by default composes:
-
-- `env: doublegoright`
-- `agent: dt_rmax_nstep/doublegoright`
-- `experiment: default`
-
-To reproduce other examples, pick the corresponding preset from `conf/run`:
+Reproduce additional presets (see the [run catalog](docs/run_catalog.md) for the complete list):
 
 ```bash
 uv run rl-run run=doublegoright_mcts
@@ -38,29 +43,28 @@ uv run rl-run run=riverswim_rmax_dtp
 uv run rl-run run=sixarms_mbieeb
 ```
 
-Overrides follow standard Hydra syntax. For instance, reuse the RiverSwim setup but swap in vanilla RMAX:
+Standard Hydra overrides apply to any field:
 
 ```bash
-uv run rl-run run=riverswim_rmax
+# swap the agent while keeping the rest of the preset intact
+uv run rl-run run=riverswim_rmax agent=rmax_mcts/empirical_riverswim
+
+# adjust training schedule on the fly
+uv run rl-run run=sixarms_rmax experiment.total_train_episodes=50
 ```
 
-Fine-grained overrides work on any field, e.g. shorter training:
+## Configuration layout
 
-```bash
-uv run rl-run run=riverswim_rmax experiment.total_train_episodes=10
-```
+- `conf/env/` – environment builders plus optional expectation models for model-based agents.
+- `conf/agent/` – agent templates with `_target_` definitions and optional `autofill` hints for
+  tabular cardinalities (`tabular_num_states`, `tabular_num_actions`) or dynamics models.
+- `conf/experiment/` – reusable training schedules (`default`, `goright`, `riverswim`, `sixarms`).
+- `conf/run/` – curated presets that mirror classic tabular benchmarks; see
+  `docs/run_catalog.md` for a searchable reference.
+- `conf/sweep/` – Cartesian and random search definitions. Attach any sweep to any preset with
+  `rl-run run=<preset> sweep=<sweep_name>`.
 
-## Config Structure
-
-All YAML configs live under `rl_research/conf`:
-
-- `env/` — environment constructors plus optional expectation models for model-based agents.
-- `agent/` — agent templates. Each entry declares the builder target, immutable parameter struct, and optional `autofill` hints (e.g. `tabular_num_states`).
-- `experiment/` — training schedules (`ExperimentParams`).
-- `run/` — convenience compositions that mirror the original Python examples.
-- `sweep/` — grid definitions for hyper-parameter searches.
-
-Example (`conf/agent/dt_rmax_nstep/doublegoright.yaml`):
+Example agent override (`conf/agent/dt_rmax_nstep/doublegoright.yaml`):
 
 ```yaml
 defaults:
@@ -77,43 +81,66 @@ params:
   r_max: 6.0
 ```
 
-The shared `base` file sets the `_target_` references and `autofill` behaviour so environment-specific files only override the interesting pieces.
+Hydra composes the `base` file (which defines `_target_`, builder kwargs, and autofill directives)
+with this environment-specific override at runtime, so each YAML stays tiny and readable.
 
-## Hyperparameter Sweeps
+## Hyperparameter sweeps
 
-Attach a sweep config to any run by overriding `sweep=`. Each sweep lists the keys to vary and an optional `name_template` used for MLflow run naming:
+Attach a sweep to any preset:
 
 ```bash
-uv run rl-run run=doublegoright_rmax_dtp sweep=doublegoright_dt_rmax_grid
+uv run rl-run run=doublegoright_fullyobs_mcts_rmax_empirical sweep=rmax_mcts
 ```
 
-`conf/sweep/doublegoright_dt_rmax_grid.yaml`:
+`conf/sweep/rmax_mcts.yaml` (grid):
 
 ```yaml
 mode: grid
 parameters:
-  agent.params.learning_rate: [0.05, 0.1, 0.2]
   agent.params.m: [500, 1000, 2000]
-name_template: lr{agent.params.learning_rate}_m{agent.params.m}
+  agent.params.max_depth: [5, 10, 20]
+name_template: m{agent.params.m}_depth{agent.params.max_depth}
 ```
 
-Each combination is executed sequentially; MLflow receives both the original parameters and the sweep-specific overrides.
+Random sweeps (`conf/sweep/rmax_mcts_random.yaml`) deterministically sample one configuration per
+SLURM array index or sequentially on a single machine:
 
-## Extending the Library
+```bash
+# local: run all random draws sequentially
+uv run rl-run run=doublegoright_rmax_mcts sweep=rmax_mcts_random
 
-1. **New environment** — create `conf/env/<name>.yaml` with a `builder` target and optional `params`/`expectation_model`.
-2. **New agent configuration** — add `conf/agent/<agent_family>/<variant>.yaml`. Use `autofill` options to inherit tabular dimensions or the environment’s expectation model.
-3. **Training schedule** — drop a file under `conf/experiment/` or override values directly via the CLI.
-4. **Preset run** — compose the pieces in `conf/run/<experiment>.yaml` so collaborators can reproduce results with `rl-run run=<experiment>`.
+# cluster: submit an array job so each task evaluates its own sample
+sbatch --array=0-63 scripts/job.sh sweep=rmax_mcts_random
+```
 
-The CLI automatically propagates environment sizes into agent configs when `autofill` requests `tabular_num_states` or `tabular_num_actions`, so you rarely need to hard-code them.
+The CLI now emits structured logs (see `rl_research/cli.py`) so you always know which array index or
+trial is running, and MLflow run names automatically include the sweep suffix.
 
-## Logging & Outputs
+## Scripts & automation
 
-All experiments use MLflow (enabled by default). Metrics are logged per seed, and sweep overrides are recorded as additional parameters. Disable logging with `mlflow.enabled=false`. Episode traces are saved as `.npz` artifacts for later inspection.
+Operational helpers live in [`scripts/`](scripts/README.md):
 
-Outputs (including Hydra’s working directory) remain under the project `outputs/` folder unless you override `hydra.run.dir`.
+- `job.sh` – SLURM launcher that requests sensible defaults, prints diagnostics, and executes
+  `uv run --offline --active rl-run ...`. Works interactively thanks to guarded environment
+  variables.
+- `fetch_mlruns.sh` – syncs the `mlruns/` directory from a remote machine via SSH, keeping
+  application figures and dashboards in lockstep.
 
-## Legacy Examples
+## Documentation map
 
-The original Python scripts under `examples/` now serve as references only. Every scenario has a matching `run=` config, so you can delete the duplicated boilerplate and rely on YAML composition instead.
+- [`docs/architecture.md`](docs/architecture.md) – explains the end-to-end flow and core modules.
+- [`docs/run_catalog.md`](docs/run_catalog.md) – authoritative list of every `run=` preset.
+- [`scripts/README.md`](scripts/README.md) – operational notes for SLURM + artifact syncing.
+
+Use these references in proposals or thesis appendices to highlight the software engineering story.
+
+## Logging & outputs
+
+MLflow logging is enabled by default (`mlflow.enabled=true`). Each run logs:
+
+- parent parameters (agent/env/experiment config),
+- nested seed metrics (`train/*`, `eval/*` curves), and
+- zipped `.npz` artifacts for raw trajectories and agent states.
+
+Hydra retains a copy of the resolved configuration and stdout under `outputs/<timestamp>/`, which,
+combined with MLflow, gives complete reproducibility for future audits or publications.
