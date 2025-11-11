@@ -8,8 +8,8 @@ params:
   num_states: null
   num_actions: null
   discount: 0.9
-  num_simulations: 128
-  max_depth: 500
+  num_simulations: 64
+  max_depth: 150
   exploration_constant: 100.0
   r_max: 6.0
   m: 1

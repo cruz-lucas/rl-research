@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrng
 import jax.tree_util as jtu
+import numpy as np
 from gymnasium.envs.functional_jax_env import FunctionalJaxEnv
 
 from rl_research.agents.base import AgentState, TabularAgent, AgentParams
@@ -186,6 +187,7 @@ def log_experiment(
     env_params: Any,
     experiment_results: SeedResult,
     extra_params: dict[str, Any] | None = None,
+    log_artifacts: bool = False 
 ):
     train_eps = experiment_results.train_episodes
     agent_states = experiment_results.agent_states
@@ -222,40 +224,94 @@ def log_experiment(
 
         mlflow.log_params(base_params)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_dir = Path(tmp_dir)
-            training_artifacts = tmp_dir / 'training_episodes.npz'
-            eval_artifacts = tmp_dir / 'eval_episodes.npz'
-            agent_artifacts = tmp_dir / 'agent_states.npz'
+        if log_artifacts:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_dir = Path(tmp_dir)
+                training_artifacts = tmp_dir / 'training_episodes.npz'
+                eval_artifacts = tmp_dir / 'eval_episodes.npz'
+                agent_artifacts = tmp_dir / 'agent_states.npz'
 
-            jax.numpy.savez(
-                training_artifacts,
-                **train_eps._asdict()
-            )
+                jax.numpy.savez(
+                    training_artifacts,
+                    **train_eps._asdict()
+                )
 
-            jax.numpy.savez(
-                eval_artifacts,
-                **eval_eps._asdict()
-            )
+                jax.numpy.savez(
+                    eval_artifacts,
+                    **eval_eps._asdict()
+                )
 
-            jax.numpy.savez(
-                agent_artifacts,
-                **agent_states.__dict__
-            )
+                jax.numpy.savez(
+                    agent_artifacts,
+                    **agent_states.__dict__
+                )
+                
+                mlflow.log_artifacts(
+                    str(tmp_dir),
+                    artifact_path="artifacts"
+                )
             
-            mlflow.log_artifacts(
-                str(tmp_dir),
-                artifact_path="artifacts"
-            )
+            for seed in range(num_seeds):
+                with mlflow.start_run(run_name=f"seed_{seed}", nested=True, tags={"parent": parent_run_name}):
+                    for ep_index in range(num_train_episodes):
+                        step = int((ep_index+1)*int(train_eps.length[seed, ep_index]))
+                        mlflow.log_metric(f"train/discounted_return", float(train_eps.discounted_return[seed, ep_index]), step=step)
+                        mlflow.log_metric(f"train/undiscounted_return", float(train_eps.undiscounted_return[seed, ep_index]), step=step)              
 
-        for seed in range(num_seeds):
-            with mlflow.start_run(run_name=f"seed_{seed}", nested=True, tags={"parent": parent_run_name}):
-                for ep_index in range(num_train_episodes):
-                    step = int((ep_index+1)*int(train_eps.length[seed, ep_index]))
-                    mlflow.log_metric(f"train/discounted_return", float(train_eps.discounted_return[seed, ep_index]), step=step)
-                    mlflow.log_metric(f"train/undiscounted_return", float(train_eps.undiscounted_return[seed, ep_index]), step=step)              
+                    for ep_index in range(num_eval_episodes):
+                        step = int((ep_index+1)*int(eval_eps.length[seed, ep_index]))
+                        mlflow.log_metric(f"eval/discounted_return", float(eval_eps.discounted_return[seed, ep_index]), step=step)
+                        mlflow.log_metric(f"eval/undiscounted_return", float(eval_eps.undiscounted_return[seed, ep_index]), step=step)
 
-                for ep_index in range(num_eval_episodes):
-                    step = int((ep_index+1)*int(eval_eps.length[seed, ep_index]))
-                    mlflow.log_metric(f"eval/discounted_return", float(eval_eps.discounted_return[seed, ep_index]), step=step)
-                    mlflow.log_metric(f"eval/undiscounted_return", float(eval_eps.undiscounted_return[seed, ep_index]), step=step)
+        def _rolling_mean(values: np.ndarray, window: int) -> np.ndarray:
+            if values.size == 0:
+                return values
+            cumsum = np.cumsum(values, dtype=np.float64)
+            rolling = np.empty_like(values, dtype=np.float64)
+            for idx in range(values.shape[0]):
+                start = max(0, idx - window + 1)
+                total = cumsum[idx] - (cumsum[start - 1] if start > 0 else 0.0)
+                rolling[idx] = total / (idx - start + 1)
+            return rolling
+
+        def _log_multi_seed_metrics(split: str, episodes: Episode) -> None:
+            discounted = np.asarray(jax.device_get(episodes.discounted_return))
+            if discounted.size == 0:
+                return
+            undiscounted = np.asarray(jax.device_get(episodes.undiscounted_return))
+            lengths = np.asarray(jax.device_get(episodes.length))
+
+            if discounted.ndim == 1:
+                discounted = discounted[None, :]
+            if undiscounted.ndim == 1:
+                undiscounted = undiscounted[None, :]
+            if lengths.ndim == 1:
+                lengths = lengths[None, :]
+
+            per_step_discounted = discounted.mean(axis=0)
+            per_step_undiscounted = undiscounted.mean(axis=0)
+            rolling_discounted = _rolling_mean(per_step_discounted, 100)
+            rolling_undiscounted = _rolling_mean(per_step_undiscounted, 100)
+
+            mean_cum_steps = np.cumsum(lengths, axis=1).mean(axis=0)
+            prev_step = 0
+            for ep_idx in range(per_step_discounted.shape[0]):
+                step = int(mean_cum_steps[ep_idx])
+                if step <= prev_step:
+                    step = prev_step + 1
+                prev_step = step
+                mlflow.log_metric(f"{split}/discounted_return_mean", float(per_step_discounted[ep_idx]), step=step)
+                mlflow.log_metric(f"{split}/undiscounted_return_mean", float(per_step_undiscounted[ep_idx]), step=step)
+                mlflow.log_metric(
+                    f"{split}/discounted_return_mean_last_100",
+                    float(rolling_discounted[ep_idx]),
+                    step=step,
+                )
+                mlflow.log_metric(
+                    f"{split}/undiscounted_return_mean_last_100",
+                    float(rolling_undiscounted[ep_idx]),
+                    step=step,
+                )
+
+        _log_multi_seed_metrics("train", train_eps)
+        _log_multi_seed_metrics("eval", eval_eps)

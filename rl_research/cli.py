@@ -1,12 +1,14 @@
 """Hydra-powered command line interface for composing experiments."""
 
 from __future__ import annotations
-import os
 
+import logging
+import os
+import random
+import re
 from copy import deepcopy
 from itertools import product
-import re
-from typing import Any, Dict, Iterable, Iterator, Mapping, MutableMapping, Tuple
+from typing import Any, Dict, Iterator, Mapping, MutableMapping, Sequence, Tuple
 
 import jax
 from hydra import main as hydra_main
@@ -15,6 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from rl_research.experiment import ExperimentParams, log_experiment, run_experiment
 
+LOGGER = logging.getLogger(__name__)
 
 def _resolve_space_cardinality(env: Any, attr: str) -> int:
     """Traverses nested gym wrappers to recover the tabular cardinality."""
@@ -113,15 +116,40 @@ def _prepare_experiment_params(experiment_cfg: DictConfig) -> ExperimentParams:
     return ExperimentParams(**params_dict)  # type: ignore[arg-type]
 
 
-def _iter_sweep_overrides(
+def _make_sweep_suffix(
+    sweep_cfg: DictConfig,
+    overrides: Mapping[str, Any],
+    trial_index: int | None = None,
+) -> str | None:
+    template = sweep_cfg.get("name_template")
+    context: Dict[str, Any] = dict(overrides)
+    if trial_index is not None:
+        context.setdefault("trial_index", trial_index)
+
+    if template is None:
+        parts: list[str] = []
+        if trial_index is not None:
+            parts.append(f"trial_{trial_index}")
+        parts.extend(f"{key.replace('.', '_')}={value}" for key, value in overrides.items())
+        return "__".join(parts) if parts else None
+
+    pattern = re.compile(r"\{([^}]+)\}")
+
+    def repl(match: re.Match[str]) -> str:
+        key = match.group(1)
+        return str(context.get(key, match.group(0)))
+
+    return pattern.sub(repl, template)
+
+
+def _iter_grid_overrides(
     sweep_cfg: DictConfig | None,
 ) -> Iterator[Tuple[Dict[str, Any], str | None]]:
     if sweep_cfg is None or sweep_cfg.mode in (None, "none"):
         return
 
-    mode = sweep_cfg.mode
-    if mode != "grid":
-        raise ValueError(f"Unsupported sweep mode `{mode}`. Only `grid` is implemented.")
+    if sweep_cfg.mode != "grid":
+        raise ValueError(f"Unsupported sweep mode `{sweep_cfg.mode}`. Expected `grid`.")
 
     parameters = OmegaConf.to_container(sweep_cfg.parameters, resolve=True) or {}
     if not parameters:
@@ -130,23 +158,30 @@ def _iter_sweep_overrides(
     keys = list(parameters.keys())
     value_lists = [parameters[key] for key in keys]
 
-    def make_suffix(overrides: Dict[str, Any]) -> str | None:
-        template = sweep_cfg.get("name_template")
-        if template is None:
-            parts = [f"{key.replace('.', '_')}={value}" for key, value in overrides.items()]
-            return "__".join(parts)
-
-        pattern = re.compile(r"\{([^}]+)\}")
-
-        def repl(match: re.Match[str]) -> str:
-            key = match.group(1)
-            return str(overrides.get(key, match.group(0)))
-
-        return pattern.sub(repl, template)
-
     for values in product(*value_lists):
         overrides = dict(zip(keys, values))
-        yield overrides, make_suffix(overrides)
+        yield overrides, _make_sweep_suffix(sweep_cfg, overrides)
+
+
+def _sample_random_overrides(
+    parameters: Mapping[str, Sequence[Any]],
+    base_seed: int,
+    trial_index: int,
+) -> Dict[str, Any]:
+    rng = random.Random(base_seed + trial_index)
+    overrides: Dict[str, Any] = {}
+    for key, values in parameters.items():
+        if not isinstance(values, Sequence) or isinstance(values, (str, bytes, bytearray)):
+            raise ValueError(
+                f"Random sweep parameter `{key}` must be a sequence of choices, got {type(values)!r}."
+            )
+
+        options = list(values)
+        if not options:
+            raise ValueError(f"Random sweep parameter `{key}` cannot be empty.")
+
+        overrides[key] = rng.choice(options)
+    return overrides
 
 
 def _apply_overrides(base: DictConfig, overrides: Mapping[str, Any]) -> DictConfig:
@@ -207,18 +242,18 @@ def _run_single(
             env_params=env_params,
             experiment_results=results,
             extra_params=extra_params or None,
+            log_artifacts=bool(sweep_suffix is None)
         )
 
-    # TODO: replace print with propper logging
-    print(
-        f"[rl-research] Completed run agent={agent.__class__.__name__} experiment={experiment_name}"
+    LOGGER.info(
+        "Completed run agent=%s experiment=%s",
+        agent.__class__.__name__,
+        experiment_name,
     )
 
 
-def _run(cfg: DictConfig) -> None:
-    sweep_cfg = cfg.sweep if "sweep" in cfg else None
-    sweep_iter = list(_iter_sweep_overrides(sweep_cfg))
-
+def _run_grid_sweep(cfg: DictConfig, sweep_cfg: DictConfig) -> None:
+    sweep_iter = list(_iter_grid_overrides(sweep_cfg))
     if not sweep_iter:
         _run_single(cfg)
         return
@@ -228,23 +263,102 @@ def _run(cfg: DictConfig) -> None:
         array_task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         array_task_count = int(os.environ["SLURM_ARRAY_TASK_COUNT"])
 
-        # TODO: replace print with logging
-        print(f"This job is at index {array_task_id} in a job array of size {array_task_count}. The sweep contains {len(sweep_iter)} configurations.")
+        LOGGER.info(
+            "Job array index %s/%s over %s configurations.",
+            array_task_id,
+            array_task_count,
+            len(sweep_iter),
+        )
         overrides, suffix = sweep_iter[array_task_id]
         run_cfg = _apply_overrides(cfg, overrides)
         _run_single(run_cfg, sweep_suffix=suffix, sweep_overrides=overrides)
         return
 
+    LOGGER.info("Running all %s hyperparameter configurations.", len(sweep_iter))
     for overrides, suffix in sweep_iter:
-        # TODO: replace print with logging
-        print(f"This job will run all of {len(sweep_iter)} hyperparameter configurations.")
         run_cfg = _apply_overrides(cfg, overrides)
         _run_single(run_cfg, sweep_suffix=suffix, sweep_overrides=overrides)
+
+
+def _run_random_sweep(cfg: DictConfig, sweep_cfg: DictConfig) -> None:
+    parameters = OmegaConf.to_container(sweep_cfg.parameters, resolve=True) or {}
+    if not parameters:
+        raise ValueError("Random sweep requires at least one parameter to sample.")
+
+    choice_map: Dict[str, Sequence[Any]] = {}
+    for key, values in parameters.items():
+        if not isinstance(values, Sequence):
+            raise ValueError(
+                f"Random sweep parameter `{key}` must be a sequence of choices, got {type(values)!r}."
+            )
+        sequence_values = list(values)
+        if not sequence_values:
+            raise ValueError(f"Random sweep parameter `{key}` cannot be empty.")
+        choice_map[key] = sequence_values
+
+    base_seed = int(sweep_cfg.get("seed", 0))
+    configured_samples = sweep_cfg.get("num_samples")
+    total_configured = int(configured_samples) if configured_samples is not None else None
+
+    def run_trial(trial_index: int) -> None:
+        overrides = _sample_random_overrides(choice_map, base_seed, trial_index)
+        suffix = _make_sweep_suffix(sweep_cfg, overrides, trial_index=trial_index)
+        run_cfg = _apply_overrides(cfg, overrides)
+        _run_single(run_cfg, sweep_suffix=suffix, sweep_overrides=overrides)
+
+    in_job_array = "SLURM_ARRAY_TASK_ID" in os.environ
+    if in_job_array:
+        array_task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
+        array_task_count = int(os.environ["SLURM_ARRAY_TASK_COUNT"])
+        if total_configured is not None and array_task_count != total_configured:
+            LOGGER.warning(
+                "Job array size %s overrides sweep.num_samples=%s.",
+                array_task_count,
+                total_configured,
+            )
+        if total_configured is not None and array_task_id >= total_configured:
+            raise ValueError(
+                f"Array index {array_task_id} exceeds configured number of random samples {total_configured}."
+            )
+
+        LOGGER.info(
+            "Job array index %s/%s – sampling a random configuration.",
+            array_task_id,
+            array_task_count,
+        )
+        run_trial(array_task_id)
+        return
+
+    if total_configured is None:
+        raise ValueError(
+            "Random sweep must set `sweep.num_samples` when not running inside a SLURM array job."
+        )
+
+    LOGGER.info("Sampling %s random hyperparameter configurations.", total_configured)
+    for idx in range(total_configured):
+        run_trial(idx)
+
+
+def _run(cfg: DictConfig) -> None:
+    sweep_cfg = cfg.sweep if "sweep" in cfg else None
+    if sweep_cfg is None or sweep_cfg.mode in (None, "none"):
+        _run_single(cfg)
+        return
+
+    mode = sweep_cfg.mode
+    if mode == "grid":
+        _run_grid_sweep(cfg, sweep_cfg)
+    elif mode == "random":
+        _run_random_sweep(cfg, sweep_cfg)
+    else:
+        raise ValueError(f"Unsupported sweep mode `{mode}`. Expected `grid`, `random`, or `none`.")
 
 
 @hydra_main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     """Entry-point for the `rl-run` console script."""
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     _run(cfg)
 
 
