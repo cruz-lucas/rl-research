@@ -1,5 +1,7 @@
 # rl-research
 
+This repo is a ongoing research repository made public now only to be linked in PhD application, sorry about the mess.
+
 `rl-research` is a lightweight reinforcement-learning playground for tabular agents built on JAX,
 Hydra, and MLflow. Every result in the repository (and in the accompanying PhD application) can be
 reproduced by composing YAML configs and launching the single CLI entry point `rl-run`.
