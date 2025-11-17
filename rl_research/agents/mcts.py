@@ -10,6 +10,7 @@ import jax.random as jrandom
 from flax import struct
 
 from rl_research.agents.base import AgentParams, AgentState, TabularAgent, UpdateResult
+from rl_research.models.tabular import StaticTabularModel, TabularDynamicsModel
 from rl_research.policies import ActionSelectionPolicy, GreedyPolicy
 
 
@@ -26,7 +27,7 @@ class MCTSAgentState(AgentState):
 class MCTSAgentParams(AgentParams):
     """Static configuration for the Monte Carlo Tree Search agent."""
 
-    dynamics_model: jax.Array
+    dynamics_model: TabularDynamicsModel
     num_simulations: int
     max_depth: int
     exploration_constant: float
@@ -52,27 +53,19 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
         if depth <= 0:
             raise ValueError("`max_depth` must be a positive integer.")
 
-        dynamics = jnp.asarray(params.dynamics_model)
+        model = params.dynamics_model
+
         if (
-            dynamics.ndim != 3
-            or dynamics.shape[0] != params.num_states
-            or dynamics.shape[1] != params.num_actions
-            or dynamics.shape[2] < 2
+            model.num_states != params.num_states
+            or model.num_actions != params.num_actions
         ):
             raise ValueError(
-                "Expected `dynamics_model` with shape "
-                f"(num_states={params.num_states}, num_actions={params.num_actions}, >=2). "
-                f"Received shape {dynamics.shape}."
+                "Dynamics model dimensions do not match agent configuration: "
+                f"expected ({params.num_states}, {params.num_actions}), "
+                f"received ({model.num_states}, {model.num_actions})."
             )
 
-        next_obs = dynamics[..., 0]
-        rewards = dynamics[..., 1]
-
-        max_state = jnp.asarray(params.num_states - 1, dtype=jnp.int32)
-        min_state = jnp.asarray(0, dtype=jnp.int32)
-        rounded_next_obs = jnp.rint(next_obs).astype(jnp.int32)
-        self._model_next_obs = jnp.clip(rounded_next_obs, min_state, max_state)
-        self._model_rewards = jnp.asarray(rewards, dtype=jnp.float32)
+        self._model = model
 
         self._num_simulations = simulations
         self._max_depth = depth
@@ -96,7 +89,9 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
         total = jnp.sum(counts_row) + 1.0
         return {"counts": counts_row.astype(jnp.float32), "total": total}
 
-    def _initial_state(self, key: jax.Array) -> MCTSAgentState:
+    def _reset_buffers(self) -> Tuple[jax.Array, jax.Array, jax.Array]:
+        """Allocates fresh planning buffers so tree searches do not persist."""
+
         q_values = jnp.full(
             (self.num_states, self.num_actions),
             self._initial_value,
@@ -104,6 +99,10 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
         )
         visit_counts = jnp.zeros_like(q_values, dtype=jnp.float32)
         state_counts = jnp.zeros((self.num_states,), dtype=jnp.float32)
+        return q_values, visit_counts, state_counts
+
+    def _initial_state(self, key: jax.Array) -> MCTSAgentState:
+        q_values, visit_counts, state_counts = self._reset_buffers()
         return MCTSAgentState(
             q_values=q_values,
             rng=key,
@@ -117,55 +116,45 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
     ) -> Tuple[jax.Array, MCTSAgentState, Dict[str, float]]:
         obs_idx = jnp.asarray(obs, dtype=jnp.int32)
 
-        def evaluate():
-            q_row = state.q_values[obs_idx]
-            extras = self._policy_extras(state, obs_idx)
-            action, new_rng, policy_info = self._policy.select(state.rng, q_row, extras)
-            info = {
-                **policy_info,
-                "q_row": q_row,
-                "visit_counts": state.visit_counts[obs_idx],
-            }
-            return action, state.replace(rng=new_rng), info
+        exploration = jnp.where(state.eval, 0.0, self._exploration_train)
+        q_values, visit_counts, state_counts = self._reset_buffers()
+        (
+            q_values,
+            visit_counts,
+            state_counts,
+            rng,
+            root_values,
+            root_counts,
+        ) = self._run_mcts(
+            q_values,
+            visit_counts,
+            state_counts,
+            obs_idx,
+            state.rng,
+            exploration,
+        )
 
-        def train():
-            (
-                q_values,
-                visit_counts,
-                state_counts,
-                rng,
-                root_values,
-                root_counts,
-            ) = self._run_mcts(
-                state.q_values,
-                state.visit_counts,
-                state.state_counts,
-                obs_idx,
-                state.rng,
-                self._exploration_train,
-            )
+        extras = {
+            "counts": visit_counts[obs_idx].astype(jnp.float32),
+            "total": jnp.sum(visit_counts[obs_idx]) + 1.0,
+        }
+        action, new_rng, policy_info = self._policy.select(rng, root_values, extras)
 
-            extras = {
-                "counts": visit_counts[obs_idx].astype(jnp.float32),
-                "total": jnp.sum(visit_counts[obs_idx]) + 1.0,
-            }
-            action, new_rng, policy_info = self._policy.select(rng, root_values, extras)
+        info = {
+            **policy_info,
+            # "plan_values": root_values,
+            "visit_counts": root_counts,
+            "q_row": root_values,
+        }
 
-            info = {
-                **policy_info,
-                # "plan_values": root_values,
-                "visit_counts": root_counts,
-                "q_row": state.q_values[obs_idx],
-            }
-
-            new_state = state.replace(
-                q_values=q_values,
-                visit_counts=visit_counts,
-                state_counts=state_counts,
-                rng=new_rng,
-            )
-            return action, new_state, info
-        return jax.lax.cond(state.eval, evaluate, train)
+        reset_q, reset_sa_counts, reset_state_counts = self._reset_buffers()
+        new_state = state.replace(
+            q_values=reset_q,
+            visit_counts=reset_sa_counts,
+            state_counts=reset_state_counts,
+            rng=new_rng,
+        )
+        return action, new_state, info
 
     def update(
         self,
@@ -176,7 +165,20 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
         next_obs: jax.Array,
         terminated: jax.Array | bool = False,
     ) -> Tuple[MCTSAgentState, UpdateResult]:
-        del obs, action, reward, next_obs, terminated
+        obs_idx = jnp.asarray(obs, dtype=jnp.int32)
+        action_idx = jnp.asarray(action, dtype=jnp.int32)
+        reward_val = jnp.asarray(reward, dtype=jnp.float32)
+        next_obs_idx = jnp.asarray(next_obs, dtype=jnp.int32)
+        terminated_flag = jnp.asarray(terminated, dtype=jnp.bool_)
+
+        self._model.update(
+            obs_idx,
+            action_idx,
+            reward_val,
+            next_obs_idx,
+            terminated_flag,
+        )
+        
         return agent_state, UpdateResult()
 
     def train(self, state: MCTSAgentState) -> MCTSAgentState:
@@ -224,7 +226,7 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
         rng: jax.Array,
         exploration: jax.Array,
     ) -> Tuple[jax.Array, jax.Array, jax.Array]:
-        """Runs a single selection-expansion-backup pass."""
+        """Runs a single selection-expansion-backup pass with UCB and rollouts."""
 
         path_states = jnp.zeros((self._max_depth,), dtype=jnp.int32)
         path_actions = jnp.zeros((self._max_depth,), dtype=jnp.int32)
@@ -237,59 +239,32 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
             def do_step(args):
                 state_idx, depth, states, actions, rewards, key = args
                 key, select_key = jrandom.split(key)
-                random_key, untried_key, tie_key = jrandom.split(select_key, 3)
 
                 counts_row = sa_counts[state_idx]
                 q_row = q_values[state_idx]
                 state_visits = state_counts[state_idx]
 
-                def sample_random() -> jax.Array:
-                    return jrandom.randint(
-                        random_key,
-                        shape=(),
-                        minval=0,
-                        maxval=self._num_actions,
-                        dtype=jnp.int32,
-                    )
-
-                def sample_untried(mask: jax.Array) -> jax.Array:
-                    probs = mask.astype(jnp.float32)
-                    probs = probs / jnp.sum(probs)
-                    return jrandom.choice(untried_key, self._action_indices, p=probs)
-
-                def sample_ucb() -> jax.Array:
-                    log_term = jnp.log(state_visits + 1.0)
-                    bonuses = jnp.sqrt(log_term / (counts_row + 1.0))
-                    scores = q_row + exploration * bonuses
-                    best = jnp.max(scores)
-                    mask = jnp.where(scores == best, 1.0, 0.0)
-                    probs = mask / jnp.sum(mask)
-                    return jrandom.choice(tie_key, self._action_indices, p=probs)
-
-                zero_mask = counts_row == 0.0
-
-                action = jax.lax.cond(
-                    state_visits < 1.0,
-                    lambda _: sample_random(),
-                    lambda _: jax.lax.cond(
-                        jnp.any(zero_mask),
-                        lambda _: sample_untried(zero_mask),
-                        lambda _: sample_ucb(),
-                        operand=None,
-                    ),
-                    operand=None,
+                log_term = jnp.log(state_visits + 1.0)
+                bonuses = jnp.where(
+                    counts_row > 0.0,
+                    jnp.sqrt(log_term / counts_row),
+                    jnp.inf,
                 )
+                scores = q_row + exploration * bonuses
+                best = jnp.max(scores)
+                mask = jnp.where(scores == best, 1.0, 0.0)
+                probs = mask / jnp.sum(mask)
+                action = jrandom.choice(select_key, self._action_indices, p=probs)
 
-                reward = self._model_rewards[state_idx, action]
-                next_state = self._model_next_obs[state_idx, action]
+                next_state, reward = self._model.query(state_idx, action)
 
                 states = states.at[depth].set(state_idx)
                 actions = actions.at[depth].set(action)
                 rewards = rewards.at[depth].set(reward)
 
                 counts_action = sa_counts[state_idx, action]
-                expanded = jnp.logical_or(state_visits < 1.0, counts_action == 0.0)
                 new_depth = depth + 1
+                expanded = counts_action == 0.0
                 depth_cap = new_depth >= self._max_depth
                 new_done = jnp.logical_or(expanded, depth_cap)
 
@@ -324,8 +299,9 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
             0, self._max_depth, selection_body, init_carry
         )
 
-        state_counts = state_counts.at[state_idx].add(1.0)
-        value = jnp.asarray(0.0, dtype=jnp.float32)
+        rollout_steps = self._max_depth - depth
+        rollout_value, _ = self._rollout_random(state_idx, rollout_steps, rng)
+        value = rollout_value
 
         def backup_body(step, carry):
             q_vals, counts, state_visits, val = carry
@@ -360,6 +336,48 @@ class MCTSAgent(TabularAgent[MCTSAgentState, MCTSAgentParams]):
         )
         del value
         return q_values, sa_counts, state_counts
+
+    def _rollout_random(
+        self, start_state: jax.Array, steps: jax.Array, rng: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
+        """Evaluates a newly expanded leaf with a random policy."""
+
+        def body(i, carry):
+            state, total, discount, key = carry
+
+            def do_roll(args):
+                state, total, discount, key = args
+                key, act_key = jrandom.split(key)
+                action = jrandom.randint(
+                    act_key,
+                    shape=(),
+                    minval=0,
+                    maxval=self._num_actions,
+                    dtype=jnp.int32,
+                )
+                next_state, reward = self._model.query(state, action)
+                total = total + discount * reward
+                discount = discount * self._discount
+                return next_state, total, discount, key
+
+            return jax.lax.cond(
+                i < steps,
+                do_roll,
+                lambda args: args,
+                (state, total, discount, key),
+            )
+
+        init = (
+            start_state,
+            jnp.asarray(0.0, dtype=jnp.float32),
+            jnp.asarray(1.0, dtype=jnp.float32),
+            rng,
+        )
+        final_state, total, _, rng = jax.lax.fori_loop(
+            0, self._max_depth, body, init
+        )
+        del final_state
+        return total, rng
 
 
 __all__ = ["MCTSAgent", "MCTSAgentParams", "MCTSAgentState"]
