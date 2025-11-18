@@ -1,6 +1,8 @@
 mode: grid
 parameters:
-  agent.params.num_simulations: [8, 16, 32]
-  agent.params.max_depth: [6, 10]
-  agent.params.exploration_constant: [50.0, 100.0]
-name_template: sims{agent.params.num_simulations}_depth{agent.params.max_depth}_c{agent.params.exploration_constant}
+  agent.params.num_simulations: [1, 5, 8, 16, 32, 64, 128]
+  agent.params.max_depth: [1, 2, 3, 4, 5, 6, 10, 15, 20]
+  agent.params.rollout_length: [1, 2, 3, 4, 5, 6, 10, 15]
+  agent.params.ucb_bonus: [0, 5, 10, 20, 30, 40, 50.0, 100.0]
+  agent.params.tree_policy_bonus: [0, 5, 10, 20, 30, 40, 50.0, 100.0]
+name_template: sims{agent.params.num_simulations}_depth{agent.params.max_depth}_l{agent.params.rollout_length}_c{agent.params.ucb_bonus}_b{agent.params.tree_policy_bonus}
