@@ -224,7 +224,7 @@ def log_experiment(
 
         mlflow.log_params(base_params)
 
-        if log_artifacts:
+        if False:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tmp_dir = Path(tmp_dir)
                 training_artifacts = tmp_dir / 'training_episodes.npz'

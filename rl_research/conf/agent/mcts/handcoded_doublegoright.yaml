@@ -1,4 +1,4 @@
-name: mcts_handcoded_d50_n64_b100
+name: mcts_handcoded_d30_n30_b100_c100
 
 builder:
   _target_: rl_research.agents.mcts.MCTSAgent
@@ -8,10 +8,11 @@ params:
   num_states: null
   num_actions: null
   discount: 0.9
-  num_simulations: 64
-  max_depth: 50
-  exploration_constant: 100.0
-  initial_value: 0
+  num_simulations: 100
+  max_depth: 30
+  rollout_length: 10
+  ucb_bonus: 100
+  tree_policy_bonus: 100
   dynamics_model:
     _target_: rl_research.models.goright_expectation_model
     is_partially_obs: false

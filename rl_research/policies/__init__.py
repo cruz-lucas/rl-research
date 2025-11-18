@@ -114,7 +114,7 @@ class UCBPolicy(ActionSelectionPolicy):
         counts = jnp.asarray(extras["counts"], dtype=jnp.float32) + self.epsilon
         total = jnp.maximum(jnp.asarray(extras["total"], dtype=jnp.float32), 1.0)
 
-        bonuses = self.confidence * jnp.sqrt(jnp.log(total + 1.0) / counts)
+        bonuses = self.confidence * jnp.sqrt(jnp.log(total) / counts)
         scores = values + bonuses
         key, choice_key = jrandom.split(key)
         action = _sample_best_action(choice_key, scores)
