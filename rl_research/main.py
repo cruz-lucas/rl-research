@@ -144,9 +144,15 @@ def main():
     parser = argparse.ArgumentParser(description="Run RL experiment")
     parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (will use SLURM_ARRAY_TASK_ID if not provided)")
+    parser.add_argument(
+        "--binding",
+        action="append",
+        default=[],
+        help="Optional gin binding overrides (can be passed multiple times). Example: --binding OptimisticQLearningAgent.step_size=0.05",
+    )
     args = parser.parse_args()
     
-    gin.parse_config_file(args.config)
+    gin.parse_config_files_and_bindings([args.config], args.binding)
     
     if args.seed is None:
         seed = int(os.getenv("SLURM_ARRAY_TASK_ID", "0"))
