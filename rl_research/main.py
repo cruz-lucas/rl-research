@@ -1,12 +1,10 @@
 import os
-import yaml
-import jax
 import jax.numpy as jnp
+import jax
+import numpy as np
 import mlflow
 import argparse
-from pathlib import Path
-from typing import Dict, Any, Type
-import numpy as np
+from typing import Type
 
 import gin
 from rl_research.experiment import run_loop, BufferState, History
@@ -134,6 +132,7 @@ def run_single_seed(seed: int, buffer_size: int = 1, env_cls: Type[BaseJaxEnv] =
             
         )
         
+        history = jax.tree.map(np.array, history)
         log_history_to_mlflow(history)
         # save_agent(final_agent_state, config, seed)
 

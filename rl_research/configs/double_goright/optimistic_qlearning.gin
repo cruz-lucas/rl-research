@@ -1,0 +1,28 @@
+setup_mlflow.experiment_name = "double_goright_fullyobs"
+setup_mlflow.experiment_group = "optimistic_qlearning"
+
+run_single_seed.agent_cls = @OptimisticQLearningAgent
+run_single_seed.env_cls = @GoRight
+run_single_seed.buffer_size = 10000
+
+OptimisticQLearningAgent.r_max = 6.0
+OptimisticQLearningAgent.discount = 0.9
+OptimisticQLearningAgent.step_size = 0.1
+OptimisticQLearningAgent.known_threshold = 100
+OptimisticQLearningAgent.convergence_threshold = 1e-2
+
+EnvParams.length = 21
+EnvParams.num_indicators = 2
+EnvParams.num_actions = 2
+EnvParams.first_checkpoint = 10
+EnvParams.first_reward = 3.0
+EnvParams.second_checkpoint = 20
+EnvParams.second_reward = 6.0
+EnvParams.is_partially_obs = True
+EnvParams.mapping = 'default'
+
+run_loop.train_episodes = 600
+run_loop.max_episode_steps = 500
+run_loop.batch_size = 500
+run_loop.evaluate_every = 1
+run_loop.eval_episodes = 1

@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "refact"
+setup_mlflow.experiment_name = "double_goright_fullyobs"
 setup_mlflow.experiment_group = "qlearning_randomwalk"
 
 run_single_seed.agent_cls = @QLearningAgent
@@ -7,19 +7,19 @@ run_single_seed.buffer_size = 1
 
 QLearningAgent.discount = 0.9
 QLearningAgent.initial_epsilon = 1.0
-QLearningAgent.step_size = 0.05
+QLearningAgent.step_size = 0.9
 QLearningAgent.initial_q_value = 0.0
 QLearningAgent.ucb_c = 40.0
 QLearningAgent.policy = "random"
 
-EnvParams.length = 11
+EnvParams.length = 21
 EnvParams.num_indicators = 2
 EnvParams.num_actions = 2
 EnvParams.first_checkpoint = 10
 EnvParams.first_reward = 3.0
 EnvParams.second_checkpoint = 20
 EnvParams.second_reward = 6.0
-EnvParams.is_partially_obs = True
+EnvParams.is_partially_obs = False
 EnvParams.mapping = 'default'
 
 run_loop.train_episodes = 600

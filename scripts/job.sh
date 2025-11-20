@@ -22,4 +22,4 @@ echo "Memory: ${SLURM_MEM_PER_NODE:-?} MB"
 
 export MLFLOW_TRACKING_URI=~/mlruns
 
-uv run python run_experiment.py --config configs/qlearning_gridworld.yaml
+uv run python run_experiment.py --config "./rl_research/configs/qlearning_doublegoright.gin"
