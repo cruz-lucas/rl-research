@@ -1,9 +1,0 @@
-mode: random
-seed: 0
-num_samples: 256  # used for local launches; arrays can override with their size
-parameters:
-  agent.params.num_simulations: [2, 8, 16, 64, 256]
-  agent.params.max_depth: [1, 5, 10, 15, 30, 50, 100]
-  agent.params.exploration_constant: [0.0, 10.0, 30.0, 50.0, 100.0]
-  agent.params.m: [1, 5, 10, 15, 20]
-name_template: trial{trial_index}_sims{agent.params.num_simulations}_depth{agent.params.max_depth}

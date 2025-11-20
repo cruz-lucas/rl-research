@@ -1,6 +1,0 @@
-# @package _global_
-defaults:
-  - override /env: riverswim
-  - override /agent: rmax_mcts/empirical
-  - override /experiment: riverswim
-  - override /sweep: rmax_mcts

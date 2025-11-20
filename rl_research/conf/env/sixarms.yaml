@@ -1,7 +1,0 @@
-name: sixarms
-
-builder:
-  _target_: classic_pacmdp_envs.SixArmsJaxEnv
-
-params:
-  _target_: classic_pacmdp_envs.sixarms.EnvParams

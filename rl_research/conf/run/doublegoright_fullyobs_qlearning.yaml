@@ -1,6 +1,0 @@
-# @package _global_
-defaults:
-  - override /env: doublegoright_fullobs
-  - override /agent: q_learning/doublegoright_fullyobs_randomwalk
-  - override /experiment: goright
-  - override /sweep: none

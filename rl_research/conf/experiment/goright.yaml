@@ -1,5 +1,0 @@
-num_seeds: 30
-total_train_episodes: 600
-episode_length: 500
-eval_every: 1
-num_eval_episodes: 1

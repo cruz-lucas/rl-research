@@ -1,6 +1,0 @@
-mode: grid
-parameters:
-  agent.params.num_simulations: [8, 16, 32]
-  agent.params.max_depth: [6, 10]
-  agent.params.exploration_constant: [50.0, 100.0]
-name_template: sims{agent.params.num_simulations}_depth{agent.params.max_depth}_c{agent.params.exploration_constant}

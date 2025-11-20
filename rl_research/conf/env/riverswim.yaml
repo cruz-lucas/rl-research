@@ -1,7 +1,0 @@
-name: riverswim
-
-builder:
-  _target_: classic_pacmdp_envs.RiverSwimJaxEnv
-
-params:
-  _target_: classic_pacmdp_envs.riverswim.EnvParams

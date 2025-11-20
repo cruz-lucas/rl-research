@@ -1,15 +1,8 @@
-"""Top-level package for the rl-research framework."""
-
-from importlib import metadata
-
-
-def __getattr__(name: str) -> str:
-    if name == "__version__":
-        try:
-            return metadata.version("rl-research")
-        except metadata.PackageNotFoundError:  # pragma: no cover - during local development
-            return "0.0.0"
-    raise AttributeError(f"module {__name__} has no attribute {name}")
-
+from importlib.metadata import version
 
 __all__ = ["__version__"]
+
+try:
+    __version__ = version("rl-research")
+except Exception:
+    __version__ = "0.0.0"
