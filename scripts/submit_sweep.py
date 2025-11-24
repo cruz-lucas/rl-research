@@ -25,6 +25,11 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
     },
+    "MCTSAgent": {
+        "num_simulations": {"type": "int", "min": 1, "max": 500},
+        "rollout_depth": {"type": "int", "min": 1, "max": 50},
+        "ucb_c": {"type": "uniform", "min": 0, "max": 100},
+    },
     "params": {
         "run_single_seed.buffer_size": {"type": "int", "min": 50_000, "max": 300_000},
         "run_loop.batch_size": {"type": "int", "min": 5, "max": 50_000},

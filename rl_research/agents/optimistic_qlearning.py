@@ -74,10 +74,12 @@ class OptimisticQLearningAgent:
                 s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
                 
                 is_unknown = visit_counts[s, a] < self.known_threshold
+                is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
                 
                 q_current = q_tab[s, a]
                 q_next_max = jnp.max(q_tab[s_next])
-                target = r + d * self.discount * q_next_max
+
+                target = r + d * self.discount * jnp.where(is_next_unknown, self.optimistic_value, q_next_max)
                 
                 target = jnp.where(is_unknown, self.optimistic_value, target)
                 
