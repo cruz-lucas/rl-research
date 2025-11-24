@@ -197,7 +197,7 @@ class MCTSAgent:
         
         action_values = tree_values[root_state] / jnp.maximum(tree_visits[root_state], 1)
         action = _select_greedy(action_values, key)
-        return jnp.array([action])
+        return action
 
     def update(
         self,
