@@ -25,6 +25,10 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
     },
+    "params": {
+        "run_single_seed.buffer_size": {"type": "int", "min": 50_000, "max": 300_000},
+        "run_loop.batch_size": {"type": "int", "min": 5, "max": 50_000},
+    }
 }
 
 
@@ -69,6 +73,13 @@ def sample_bindings(
         for name, spec in algo_space.items():
             val = _sample_value(spec, rng)
             combo.append(f"{algorithm}.{name}={_format_value(val)}")
+
+        val = _sample_value(DEFAULT_SPACE["params"]["run_single_seed.buffer_size"], rng)
+        combo.append(f"run_single_seed.buffer_size={_format_value(val)}")
+
+        val = _sample_value(DEFAULT_SPACE["params"]["run_loop.batch_size"], rng)
+        combo.append(f"run_loop.batch_size={_format_value(val)}")
+
         bindings.append(combo)
     return bindings
 
@@ -114,13 +125,13 @@ def main() -> None:
     parser.add_argument(
         "--samples",
         type=int,
-        default=10,
+        default=100,
         help="Number of hyperparameter combinations to sample.",
     )
     parser.add_argument(
         "--seeds",
         type=int,
-        default=3,
+        default=10,
         help="Number of seeds per combination (drives --array size).",
     )
     parser.add_argument(

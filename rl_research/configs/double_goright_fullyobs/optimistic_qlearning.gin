@@ -1,9 +1,9 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs"
+setup_mlflow.experiment_name = "double_goright_fullyobs_buffer"
 setup_mlflow.experiment_group = "optimistic_qlearning"
 
 run_single_seed.agent_cls = @OptimisticQLearningAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_size = 10000
+run_single_seed.buffer_size = 300000
 
 OptimisticQLearningAgent.r_max = 6.0
 OptimisticQLearningAgent.discount = 0.9
@@ -23,6 +23,6 @@ EnvParams.mapping = 'default'
 
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
-run_loop.batch_size = 1000
+run_loop.batch_size = 5000
 run_loop.evaluate_every = 1
 run_loop.eval_episodes = 1
