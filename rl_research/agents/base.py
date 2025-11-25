@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from typing import Literal, Protocol
 from flax import struct
 from rl_research.policies import _select_greedy, _select_random, _select_epsilon_greedy, _select_ucb
-from rl_research.experiment import Transition
+from rl_research.buffers import Transition
 from abc import abstractmethod
 
 @struct.dataclass

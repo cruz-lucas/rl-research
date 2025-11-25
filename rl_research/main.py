@@ -1,5 +1,4 @@
 import os
-import jax.numpy as jnp
 import jax
 import numpy as np
 import mlflow
@@ -8,7 +7,8 @@ import tempfile
 from typing import Type
 
 import gin
-from rl_research.experiment import run_loop, BufferState, History
+from rl_research.experiment import run_loop, History
+from rl_research.buffers import ReplayBuffer, BaseBuffer
 from rl_research.agents import *
 from rl_research.environments import *
 
@@ -34,14 +34,20 @@ def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_gro
         "group": experiment_group,
     })
 
-    agent_cls = gin.get_bindings('run_single_seed')['agent_cls']
+    run_bindings = gin.get_bindings('run_single_seed')
+    agent_cls = run_bindings.get('agent_cls', BaseAgent)
     agent_cls_name = agent_cls.__name__
     agent_params = gin.get_bindings(agent_cls_name)
+    buffer_cls = run_bindings.get('buffer_cls', ReplayBuffer)
+    buffer_cls_name = buffer_cls.__name__
+    buffer_params = gin.get_bindings(buffer_cls_name)
     
     mlflow.log_params({
         "seed": seed,
         "agent_class": agent_cls_name,
+        "buffer_class": buffer_cls_name,
         **{f"agent_{k}": v for k, v in agent_params.items()},
+        **{f"buffer_{k}": v for k, v in buffer_params.items()},
     })
 
 
@@ -107,7 +113,7 @@ def log_agent_states_to_mlflow(agent_states):
 
 
 @gin.configurable
-def run_single_seed(seed: int, buffer_size: int = 1, deduplicate_buffer: bool = True, train_on_full_buffer: bool = False, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
+def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
     """Run training for a single seed."""
     try:
         env = env_cls()    
@@ -120,18 +126,9 @@ def run_single_seed(seed: int, buffer_size: int = 1, deduplicate_buffer: bool = 
             num_actions=n_actions,
         )
         agent_state = agent.initial_state()
-    
-        buffer_state = BufferState(
-            observations=jnp.zeros(buffer_size),
-            actions=jnp.zeros(buffer_size),
-            rewards=jnp.zeros(buffer_size),
-            discounts=jnp.zeros(buffer_size),
-            next_observations=jnp.zeros(buffer_size),
-            position=0,
-            size=0,
-            deduplicate=deduplicate_buffer,
-            train_on_full_buffer=train_on_full_buffer
-        )
+
+        buffer = buffer_cls()
+        buffer_state = buffer.initial_state()
         
         history, agent_states = run_loop(
             agent=agent,

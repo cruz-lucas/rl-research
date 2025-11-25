@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 from flax import struct
-from rl_research.experiment import Transition
+from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
 import gin
 

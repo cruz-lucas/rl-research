@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax.random as jrandom
 from flax import struct
 from rl_research.policies import _select_greedy
-from rl_research.experiment import Transition
+from rl_research.buffers import Transition
 import gin
 
 

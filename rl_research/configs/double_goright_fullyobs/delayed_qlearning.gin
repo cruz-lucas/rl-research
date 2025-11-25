@@ -1,18 +1,16 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs_qlearningrandomwalk"
-setup_mlflow.experiment_group = "qlearning_randomwalk"
+setup_mlflow.experiment_name = "double_goright_fullyobs_delayedq"
+setup_mlflow.experiment_group = "delayed_qlearning"
 
-run_single_seed.agent_cls = @QLearningAgent
+run_single_seed.agent_cls = @DelayedQLearningAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 1
 ReplayBuffer.deduplicate = False
 
-QLearningAgent.discount = 0.9
-QLearningAgent.initial_epsilon = 1.0
-QLearningAgent.step_size = 0.9
-QLearningAgent.initial_q_value = 0.0
-QLearningAgent.ucb_c = 40.0
-QLearningAgent.policy = "random"
+DelayedQLearningAgent.r_max = 6.0
+DelayedQLearningAgent.discount = 0.9
+DelayedQLearningAgent.epsilon = 0.05
+DelayedQLearningAgent.update_threshold = 20
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2

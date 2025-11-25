@@ -3,9 +3,9 @@ setup_mlflow.experiment_group = "rmax"
 
 run_single_seed.agent_cls = @RMaxAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_size = 1
-run_single_seed.deduplicate_buffer = False
-run_single_seed.train_on_full_buffer = False
+run_single_seed.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 1
+ReplayBuffer.deduplicate = False
 
 RMaxAgent.r_max = 6.0
 RMaxAgent.discount = 0.9

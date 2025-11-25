@@ -3,7 +3,8 @@ setup_mlflow.experiment_group = "optimistic_qlearning"
 
 run_single_seed.agent_cls = @OptimisticQLearningAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_size = 10000
+run_single_seed.buffer_cls = @DeduplicatingBuffer
+DeduplicatingBuffer.buffer_size = 10000
 
 OptimisticQLearningAgent.r_max = 6.0
 OptimisticQLearningAgent.discount = 0.9

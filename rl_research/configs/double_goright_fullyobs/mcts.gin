@@ -3,7 +3,8 @@ setup_mlflow.experiment_group = "mcts"
 
 run_single_seed.agent_cls = @MCTSAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_size = 1
+run_single_seed.buffer_cls = @DeduplicatingBuffer
+DeduplicatingBuffer.buffer_size = 1
 
 MCTSAgent.discount = 0.9
 MCTSAgent.num_simulations = 50
