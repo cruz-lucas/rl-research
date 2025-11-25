@@ -24,6 +24,7 @@ class BufferState:
     next_observations: jnp.ndarray
     position: int
     size: int
+    deduplicate: bool = False
     
     def is_ready(self, batch_size: int) -> bool:
         return self.size >= batch_size
@@ -32,21 +33,47 @@ class BufferState:
         """Add transition to buffer (circular)."""
         max_size = self.observations.shape[0]
         idx = self.position % max_size
+
+        def _maybe_reduce(arr, value):
+            """Check equality on the first dimension only (handles vector observations)."""
+            eq = jnp.equal(arr, value)
+            return jnp.all(eq, axis=tuple(range(1, eq.ndim))) if eq.ndim > 1 else eq
+
+        def insert(_):
+            observations = self.observations.at[idx].set(transition.observation)
+            actions = self.actions.at[idx].set(transition.action)
+            rewards = self.rewards.at[idx].set(transition.reward)
+            discounts = self.discounts.at[idx].set(transition.discount)
+            next_observations = self.next_observations.at[idx].set(transition.next_observation)
+
+            return self.replace(
+                observations=observations,
+                actions=actions,
+                rewards=rewards,
+                discounts=discounts,
+                next_observations=next_observations,
+                position=self.position + 1,
+                size=jnp.minimum(self.size + 1, max_size)
+            )
+
+        def insert_if_unique(_):
+            valid_mask = jnp.arange(max_size) < self.size
+            duplicate_mask = (
+                _maybe_reduce(self.observations, transition.observation) &
+                _maybe_reduce(self.actions, transition.action) &
+                _maybe_reduce(self.rewards, transition.reward) &
+                _maybe_reduce(self.discounts, transition.discount) &
+                _maybe_reduce(self.next_observations, transition.next_observation) &
+                valid_mask
+            )
+            is_duplicate = jnp.any(duplicate_mask)
+            return jax.lax.cond(is_duplicate, lambda __: self, insert, operand=None)
         
-        observations = self.observations.at[idx].set(transition.observation)
-        actions = self.actions.at[idx].set(transition.action)
-        rewards = self.rewards.at[idx].set(transition.reward)
-        discounts = self.discounts.at[idx].set(transition.discount)
-        next_observations = self.next_observations.at[idx].set(transition.next_observation)
-        
-        return self.replace(
-            observations=observations,
-            actions=actions,
-            rewards=rewards,
-            discounts=discounts,
-            next_observations=next_observations,
-            position=self.position + 1,
-            size=jnp.minimum(self.size + 1, max_size)
+        return jax.lax.cond(
+            jnp.asarray(self.deduplicate),
+            insert_if_unique,
+            insert,
+            operand=None
         )
     
     def sample(self, key: jax.Array, batch_size: int) -> Transition:
@@ -114,6 +141,8 @@ def run_episode(
                 discount=agent.discount,
                 next_observation=next_obs
             )
+
+            # new_buff_st = jax.lax.cond(buff_st.is_ready(batch_size), lambda: buff_st, lambda: buff_st.push(transition))  # test without pushing new samples into buffer
             new_buff_st = buff_st.push(transition)
             
             def train_step(states):
@@ -180,8 +209,8 @@ def run_episode(
     return agent_st, env_st, buff_st, ep_return, ep_disc_return, ep_length, losses
 
 @gin.configurable
-@partial(jax.jit, static_argnames=['agent', 'environment', 'batch_size', 'max_episode_steps',
-                                     'train_episodes', 'evaluate_every', 'eval_episodes'])
+# @partial(jax.jit, static_argnames=['agent', 'environment', 'batch_size', 'max_episode_steps',
+#                                      'train_episodes', 'evaluate_every', 'eval_episodes'])
 def run_loop(
     agent,
     environment,
@@ -193,7 +222,7 @@ def run_loop(
     train_episodes: int,
     evaluate_every: int,
     eval_episodes: int
-) -> History:
+) -> Tuple[History, Any]:
     """
     Main training loop - fully jitted.
     
@@ -210,7 +239,9 @@ def run_loop(
         eval_episodes: Number of evaluation episodes
     
     Returns:
-        History with training and evaluation metrics
+        Tuple of:
+            History with training and evaluation metrics
+            Agent states captured after each training episode
     """
     
     key = jax.random.PRNGKey(seed)
@@ -264,24 +295,26 @@ def run_loop(
         
         new_carry = (agent_st, buff_st, k)
         out = (train_rets, train_disc_rets, train_lens, train_loss, 
-               eval_returns_new, eval_discounted_returns_new, eval_lengths_new)
+               eval_returns_new, eval_discounted_returns_new, eval_lengths_new, agent_st)
         
         return new_carry, out
     
     init_carry = (agent_state, buffer_state, key)
-    (final_agent_state, _, _), (train_rets, train_disc_rets, train_lens, train_losss, 
-        eval_rets, eval_disc_rets, eval_lens) = jax.lax.scan(
+    (final_agent_state, _, _), (train_rets, train_disc_rets, train_lens, train_losses, 
+        eval_rets, eval_disc_rets, eval_lens, agent_states) = jax.lax.scan(
         episode_fn, init_carry, jnp.arange(train_episodes)
     )
 
     # jax.debug.print("{x}", x=final_agent_state.q_table)
     
-    return History(
+    history = History(
         train_returns=train_rets,
         train_discounted_returns=train_disc_rets,
         train_lengths=train_lens,
         eval_returns=eval_rets,
         eval_discounted_returns=eval_disc_rets,
         eval_lengths=eval_lens,
-        train_losses=train_losss
+        train_losses=train_losses
     )
+    
+    return history, agent_states

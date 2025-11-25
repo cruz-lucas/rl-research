@@ -4,6 +4,7 @@ import jax
 import numpy as np
 import mlflow
 import argparse
+import tempfile
 from typing import Type
 
 import gin
@@ -84,22 +85,29 @@ def log_history_to_mlflow(history: History):
     # })
 
 
-# def save_agent(agent_state: Any, config: Dict[str, Any], seed: int):
-#     """Save final agent state."""
-#     if config['logging'].get('save_final_agent', False):
-#         save_path = f"agent_seed_{seed}.npz"
-#         # Convert agent state to numpy and save
-#         state_dict = {
-#             'q_table': np.array(agent_state.q_table),
-#             'visit_counts': np.array(agent_state.visit_counts),
-#             'step': int(agent_state.step),
-#         }
-#         np.savez(save_path, **state_dict)
-#         mlflow.log_artifact(save_path)
-#         os.remove(save_path)  # Clean up local file
+def log_agent_states_to_mlflow(agent_states):
+    """Save per-episode agent state tensors as an MLflow artifact."""
+    agent_states_np = jax.tree_util.tree_map(np.array, agent_states)
+    
+    payload = {}
+    if hasattr(agent_states_np, "q_table"):
+        payload["q_values"] = agent_states_np.q_table
+    if hasattr(agent_states_np, "visit_counts"):
+        payload["sa_counts"] = agent_states_np.visit_counts
+    if hasattr(agent_states_np, "behavior_q_values"):
+        payload["behavior_q_values"] = agent_states_np.behavior_q_values
+    
+    if not payload:
+        return
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        save_path = os.path.join(tmpdir, "agent_states.npz")
+        np.savez(save_path, **payload)
+        mlflow.log_artifact(save_path, artifact_path="artifacts")
+
 
 @gin.configurable
-def run_single_seed(seed: int, buffer_size: int = 1, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
+def run_single_seed(seed: int, buffer_size: int = 1, deduplicate_buffer: bool = True, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
     """Run training for a single seed."""
     try:
         env = env_cls()    
@@ -120,10 +128,11 @@ def run_single_seed(seed: int, buffer_size: int = 1, env_cls: Type[BaseJaxEnv] =
             discounts=jnp.zeros(buffer_size),
             next_observations=jnp.zeros(buffer_size),
             position=0,
-            size=0
+            size=0,
+            deduplicate=deduplicate_buffer
         )
         
-        history = run_loop(
+        history, agent_states = run_loop(
             agent=agent,
             environment=env,
             buffer_state=buffer_state,
@@ -132,8 +141,9 @@ def run_single_seed(seed: int, buffer_size: int = 1, env_cls: Type[BaseJaxEnv] =
             
         )
         
-        history = jax.tree.map(np.array, history)
+        history = jax.tree_util.tree_map(np.array, history)
         log_history_to_mlflow(history)
+        log_agent_states_to_mlflow(agent_states)
         # save_agent(final_agent_state, config, seed)
 
     finally:

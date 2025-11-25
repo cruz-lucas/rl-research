@@ -43,7 +43,7 @@ class OptimisticQLearningAgent:
     def initial_state(self) -> OptimisticQLearningState:
         """Initialize with optimistic Q-values."""
         return OptimisticQLearningState(
-            q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
+            q_table=jnp.full((self.num_states, self.num_actions), 0.0),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
             converged=False
@@ -77,16 +77,14 @@ class OptimisticQLearningAgent:
                 is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
                 
                 q_current = q_tab[s, a]
-                q_next_max = jnp.max(q_tab[s_next])
+                q_next_max = jnp.where(is_next_unknown, self.optimistic_value, jnp.max(q_tab[s_next]))
 
-                target = r + d * self.discount * jnp.where(is_next_unknown, self.optimistic_value, q_next_max)
-                
-                target = jnp.where(is_unknown, self.optimistic_value, target)
+                target = r + d * self.discount * q_next_max
                 
                 td_error = target - q_current
-                new_q = q_current + self.step_size * td_error
+                new_q = jnp.where(is_unknown, self.optimistic_value, q_current + self.step_size * td_error)
                 
-                return s, a, new_q, jnp.abs(td_error)
+                return s, a, new_q, jnp.abs(q_current - new_q)
             
             states, actions, new_qs, errors = jax.vmap(update_single)(jnp.arange(batch_size))
             
