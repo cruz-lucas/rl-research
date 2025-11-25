@@ -5,11 +5,12 @@ run_single_seed.agent_cls = @OptimisticQLearningAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_size = 1512
 run_single_seed.deduplicate_buffer = True
+run_single_seed.train_on_full_buffer = True
 
 OptimisticQLearningAgent.r_max = 6.0
 OptimisticQLearningAgent.discount = 0.9
-OptimisticQLearningAgent.step_size = 0.1
-OptimisticQLearningAgent.known_threshold = 10
+OptimisticQLearningAgent.step_size = 1.0
+OptimisticQLearningAgent.known_threshold = 1
 OptimisticQLearningAgent.convergence_threshold = 1e-4
 
 EnvParams.length = 21

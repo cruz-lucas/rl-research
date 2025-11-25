@@ -43,7 +43,7 @@ class OptimisticQLearningAgent:
     def initial_state(self) -> OptimisticQLearningState:
         """Initialize with optimistic Q-values."""
         return OptimisticQLearningState(
-            q_table=jnp.full((self.num_states, self.num_actions), 0.0),
+            q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
             converged=False
@@ -61,12 +61,13 @@ class OptimisticQLearningAgent:
                 
         return _select_greedy(q_values, key)
     
-    def _update_to_convergence(self, q_table, visit_counts, batch):
+    def _update_to_convergence(self, q_table, visit_counts, batch, batch_mask):
         """Update Q-values using batch until convergence."""
         batch_size = batch.observation.shape[0]
         
         def iteration_step(q_tab, _):
             def update_single(i):
+                valid = batch_mask[i]
                 s = batch.observation[i].astype(jnp.int32).squeeze()
                 a = batch.action[i].astype(jnp.int32).squeeze()
                 r = batch.reward[i]
@@ -82,15 +83,22 @@ class OptimisticQLearningAgent:
                 target = r + d * self.discount * q_next_max
                 
                 td_error = target - q_current
-                new_q = jnp.where(is_unknown, self.optimistic_value, q_current + self.step_size * td_error)
+                updated_q = q_current + self.step_size * td_error
+                new_q = jnp.where(is_unknown, self.optimistic_value, updated_q)
+                new_q = jnp.where(valid, new_q, q_current)
                 
-                return s, a, new_q, jnp.abs(q_current - new_q)
+                return s, a, new_q, jnp.where(valid, jnp.abs(q_current - new_q), 0.0)
             
             states, actions, new_qs, errors = jax.vmap(update_single)(jnp.arange(batch_size))
             
             new_q_tab = q_tab
             for i in range(batch_size):
-                new_q_tab = new_q_tab.at[states[i], actions[i]].set(new_qs[i])
+                new_q_tab = jax.lax.cond(
+                    batch_mask[i],
+                    lambda tab: tab.at[states[i], actions[i]].set(new_qs[i]),
+                    lambda tab: tab,
+                    new_q_tab
+                )
             
             max_change = jnp.max(errors)
             return new_q_tab, max_change
@@ -107,27 +115,33 @@ class OptimisticQLearningAgent:
     def update(
         self,
         state: OptimisticQLearningState,
-        batch: Transition
+        batch: Transition,
+        batch_mask: jnp.ndarray | None = None
     ) -> tuple[OptimisticQLearningState, jax.Array]:
         """Update Q-table with convergence iterations."""
         batch_size = batch.observation.shape[0]
+        if batch_mask is None:
+            batch_mask = jnp.ones((batch_size,), dtype=bool)
+        batch_mask = batch_mask.astype(jnp.bool_)
         
         new_visit_counts = state.visit_counts
         for i in range(batch_size):
             s = batch.observation[i].astype(jnp.int32).squeeze()
             a = batch.action[i].astype(jnp.int32).squeeze()
-            new_visit_counts = new_visit_counts.at[s, a].add(1)
+            increment = jnp.where(batch_mask[i], 1, 0)
+            new_visit_counts = new_visit_counts.at[s, a].add(increment)
         
         new_q_table, loss = self._update_to_convergence(
             state.q_table,
             new_visit_counts,
-            batch
+            batch,
+            batch_mask
         )
         
         new_state = state.replace(
             q_table=new_q_table,
             visit_counts=new_visit_counts,
-            step=state.step + batch_size
+            step=state.step + jnp.sum(batch_mask)
         )
         
         return new_state, loss

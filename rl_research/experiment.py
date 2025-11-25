@@ -25,9 +25,15 @@ class BufferState:
     position: int
     size: int
     deduplicate: bool = False
+    train_on_full_buffer: bool = False
     
     def is_ready(self, batch_size: int) -> bool:
-        return self.size >= batch_size
+        return jax.lax.cond(
+            jnp.asarray(self.train_on_full_buffer),
+            lambda _: self.size > 0,
+            lambda _: self.size >= batch_size,
+            operand=None
+        )
     
     def push(self, transition: Transition) -> 'BufferState':
         """Add transition to buffer (circular)."""
@@ -76,16 +82,36 @@ class BufferState:
             operand=None
         )
     
-    def sample(self, key: jax.Array, batch_size: int) -> Transition:
-        """Sample batch from buffer."""
-        indices = jax.random.randint(key, (batch_size,), 0, self.size)
-        return Transition(
+    def sample(self, key: jax.Array, batch_size: int) -> tuple[Transition, jnp.ndarray]:
+        """Sample batch from buffer. Returns transition and a mask for valid entries."""
+        max_size = self.observations.shape[0]
+
+        def full_buffer(_):
+            idx = jnp.arange(max_size)
+            mask = idx < self.size
+            return idx, mask
+
+        def random_batch(_):
+            safe_size = jnp.maximum(self.size, 1)
+            idx = jax.random.randint(key, (batch_size,), 0, safe_size)
+            mask = jnp.ones((batch_size,), dtype=bool)
+            return idx, mask
+
+        indices, mask = jax.lax.cond(
+            jnp.asarray(self.train_on_full_buffer),
+            full_buffer,
+            random_batch,
+            operand=None
+        )
+
+        transition = Transition(
             observation=self.observations[indices],
             action=self.actions[indices],
             reward=self.rewards[indices],
             discount=self.discounts[indices],
             next_observation=self.next_observations[indices]
         )
+        return transition, mask
 
 
 @struct.dataclass
@@ -147,8 +173,8 @@ def run_episode(
             
             def train_step(states):
                 b_st, a_st = states
-                batch = b_st.sample(k_update, batch_size)
-                new_a_st, loss = agent.update(a_st, batch)
+                batch, batch_mask = b_st.sample(k_update, batch_size)
+                new_a_st, loss = agent.update(a_st, batch, batch_mask)
                 return b_st, new_a_st, loss
             
             def no_train(states):

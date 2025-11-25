@@ -107,7 +107,7 @@ def log_agent_states_to_mlflow(agent_states):
 
 
 @gin.configurable
-def run_single_seed(seed: int, buffer_size: int = 1, deduplicate_buffer: bool = True, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
+def run_single_seed(seed: int, buffer_size: int = 1, deduplicate_buffer: bool = True, train_on_full_buffer: bool = False, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
     """Run training for a single seed."""
     try:
         env = env_cls()    
@@ -129,7 +129,8 @@ def run_single_seed(seed: int, buffer_size: int = 1, deduplicate_buffer: bool = 
             next_observations=jnp.zeros(buffer_size),
             position=0,
             size=0,
-            deduplicate=deduplicate_buffer
+            deduplicate=deduplicate_buffer,
+            train_on_full_buffer=train_on_full_buffer
         )
         
         history, agent_states = run_loop(

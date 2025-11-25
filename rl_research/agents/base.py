@@ -35,7 +35,7 @@ class BaseAgent:
     def update(
         self,
         state: AgentState,
-        batch: Transition
+        batch: Transition,
+        batch_mask: jnp.ndarray | None = None
     ) -> tuple[AgentState, jax.Array]:
         ...
-
