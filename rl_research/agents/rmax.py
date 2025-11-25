@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from flax import struct
 from rl_research.experiment import Transition
 from rl_research.policies import _select_greedy
+import gin
 
 @struct.dataclass
 class RMaxState:
@@ -13,7 +14,7 @@ class RMaxState:
     visit_counts: jnp.ndarray
     step: int
 
-
+@gin.configurable
 class RMaxAgent:
     """R-Max agent with known model."""
     
@@ -109,18 +110,26 @@ class RMaxAgent:
         q_table = state.q_table
         new_is_known = new_visit_counts >= self.known_threshold
         newly_known = jnp.logical_and(jnp.logical_not(prev_is_known), new_is_known)
-        
-        if bool(jnp.any(newly_known)):
+        newly_known_any = jnp.any(newly_known)
+
+        def run_value_iteration(q_init):
             safe_counts = jnp.maximum(new_visit_counts, 1)
             avg_rewards = new_reward_sums / safe_counts
             transition_probs = new_transition_counts / safe_counts[:, :, None]
-            
-            for _ in range(self.vi_iterations):
-                new_q_table = self._value_iteration_step(q_table, new_is_known, avg_rewards, transition_probs)
-                max_change = jnp.max(jnp.abs(new_q_table - q_table))
-                q_table = new_q_table
-                if max_change < self.convergence_threshold:
-                    break
+
+            def body(_, carry):
+                q_prev, converged = carry
+                new_q = self._value_iteration_step(q_prev, new_is_known, avg_rewards, transition_probs)
+                max_change = jnp.max(jnp.abs(new_q - q_prev))
+                converged_now = max_change < self.convergence_threshold
+                converged = jnp.logical_or(converged, converged_now)
+                q_next = jnp.where(converged, q_prev, new_q)
+                return q_next, converged
+
+            q_final, _ = jax.lax.fori_loop(0, self.vi_iterations, body, (q_init, False))
+            return q_final
+
+        q_table = jax.lax.cond(newly_known_any, run_value_iteration, lambda q: q, q_table)
         
         new_state = state.replace(
             q_table=q_table,
