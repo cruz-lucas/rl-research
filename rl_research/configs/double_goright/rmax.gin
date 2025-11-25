@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs_rmax"
+setup_mlflow.experiment_name = "double_goright_rmax"
 setup_mlflow.experiment_group = "rmax"
 
 run_single_seed.agent_cls = @RMaxAgent
@@ -19,7 +19,7 @@ EnvParams.first_checkpoint = 10
 EnvParams.first_reward = 3.0
 EnvParams.second_checkpoint = 20
 EnvParams.second_reward = 6.0
-EnvParams.is_partially_obs = False
+EnvParams.is_partially_obs = True
 EnvParams.mapping = 'default'
 
 run_loop.train_episodes = 600

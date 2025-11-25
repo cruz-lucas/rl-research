@@ -25,15 +25,27 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
     },
+    # "qlearning_epsgreedy": {
+    #     "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
+    #     "initial_epsilon": {"type": "uniform", "min": 0.0, "max": 1.0},
+    # },
+    # "qlearning_ucb": {
+    #     "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
+    #     "ucb_c": {"type": "uniform", "min": 0.0, "max": 100},
+    # },
     "MCTSAgent": {
         "num_simulations": {"type": "int", "min": 1, "max": 500},
         "rollout_depth": {"type": "int", "min": 1, "max": 50},
         "ucb_c": {"type": "uniform", "min": 0, "max": 100},
     },
-    "params": {
-        "run_single_seed.buffer_size": {"type": "int", "min": 50_000, "max": 300_000},
-        "run_loop.batch_size": {"type": "int", "min": 5, "max": 50_000},
-    }
+    "RMaxAgent": {
+        "known_threshold": {"type": "int", "min": 1, "max": 500},
+        "convergence_threshold": {"type": "log_uniform", "min": 1e-5, "max": 1},
+    },
+    # "params": {
+    #     "run_single_seed.buffer_size": {"type": "int", "min": 50_000, "max": 300_000},
+    #     "run_loop.batch_size": {"type": "int", "min": 5, "max": 50_000},
+    # }
 }
 
 
@@ -79,11 +91,11 @@ def sample_bindings(
             val = _sample_value(spec, rng)
             combo.append(f"{algorithm}.{name}={_format_value(val)}")
 
-        val = _sample_value(DEFAULT_SPACE["params"]["run_single_seed.buffer_size"], rng)
-        combo.append(f"run_single_seed.buffer_size={_format_value(val)}")
+        # val = _sample_value(DEFAULT_SPACE["params"]["run_single_seed.buffer_size"], rng)
+        # combo.append(f"run_single_seed.buffer_size={_format_value(val)}")
 
-        val = _sample_value(DEFAULT_SPACE["params"]["run_loop.batch_size"], rng)
-        combo.append(f"run_loop.batch_size={_format_value(val)}")
+        # val = _sample_value(DEFAULT_SPACE["params"]["run_loop.batch_size"], rng)
+        # combo.append(f"run_loop.batch_size={_format_value(val)}")
 
         bindings.append(combo)
     return bindings

@@ -1,9 +1,11 @@
-setup_mlflow.experiment_name = "double_goright"
+setup_mlflow.experiment_name = "double_goright_qlearningrandomwalk"
 setup_mlflow.experiment_group = "qlearning_randomwalk"
 
 run_single_seed.agent_cls = @QLearningAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_size = 1
+run_single_seed.deduplicate_buffer = False
+run_single_seed.train_on_full_buffer = False
 
 QLearningAgent.discount = 0.9
 QLearningAgent.initial_epsilon = 1.0
