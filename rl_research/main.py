@@ -17,9 +17,6 @@ from rl_research.environments import *
 def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_group: str = 'placeholder'):
     """Setup MLflow experiment and run."""
 
-    # mlflow_dir = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
-    # mlflow_dir = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
-    # mlflow.set_tracking_uri(f"file://{mlflow_dir}")
     mlflow.set_tracking_uri("sqlite:///mlruns.db")
     
     experiment = mlflow.get_experiment_by_name(experiment_name)
@@ -60,35 +57,23 @@ def log_history_to_mlflow(history: History):
 
     for episode in range(train_episodes):
         mlflow.log_metrics({
-            # "train/return": float(history.train_returns[episode]),
+            "train/return": float(history.train_returns[episode]),
             "train/discounted_return": float(history.train_discounted_returns[episode]),
-            # "train/length": int(history.train_lengths[episode]),
-            # "train/loss": float(history.train_losses[episode]),
+            "train/loss": float(history.train_losses[episode]),
         }, step=episode * max_episode_steps)
     
     num_evals = train_episodes // evaluate_every
     for episode in range(num_evals):
-        # eval_start = eval_idx * eval_episodes
-        # eval_end = eval_start + eval_episodes
-        
-        # eval_returns = history.eval_returns[eval_start:eval_end]
-        # eval_disc_returns = history.eval_discounted_returns[eval_start:eval_end]
-        # eval_lengths = history.eval_lengths[eval_start:eval_end]
-        
         mlflow.log_metrics({
-            # "eval/mean_return": float(jnp.mean(eval_returns)),
-            # "eval/std_return": float(jnp.std(eval_returns)),
+            "eval/mean_return": float(history.eval_returns[episode]),
             "eval/mean_discounted_return": float(history.eval_discounted_returns[episode]),
-            # "eval/mean_length": float(jnp.mean(eval_lengths)),
         }, step=episode * max_episode_steps)
     
-    # final_train_window = 100
-    # mlflow.log_metrics({
-    #     "final/train_return_mean": float(jnp.mean(history.train_returns[-final_train_window:])),
-    #     "final/train_return_std": float(jnp.std(history.train_returns[-final_train_window:])),
-    #     "final/eval_return_mean": float(jnp.mean(history.eval_returns)),
-    #     "final/eval_return_std": float(jnp.std(history.eval_returns)),
-    # })
+    final_train_window = 100
+    mlflow.log_metrics({
+        "final/train_return_mean": float(np.mean(history.train_returns[-final_train_window:])),
+        "final/eval_return_mean": float(np.mean(history.eval_returns[-final_train_window:])),
+    })
 
 
 def log_agent_states_to_mlflow(agent_states):
@@ -142,7 +127,6 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
         history = jax.tree_util.tree_map(np.array, history)
         log_history_to_mlflow(history)
         log_agent_states_to_mlflow(agent_states)
-        # save_agent(final_agent_state, config, seed)
 
     finally:
         mlflow.end_run()
