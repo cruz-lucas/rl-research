@@ -18,8 +18,8 @@ from typing import Any, Dict, List, Sequence
 # Default space is a starting point; override with --space-file.
 DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "OptimisticQLearningAgent": {
-        "step_size": {"type": "log_uniform", "min": 1e-3, "max": 9e-1},
-        "known_threshold": {"type": "int", "min": 5, "max": 50},
+        "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
+        "known_threshold": {"type": "int", "min": 1, "max": 50},
         "convergence_threshold": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
     },
     "QLearningAgent": {
@@ -41,6 +41,10 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "RMaxAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
         "convergence_threshold": {"type": "log_uniform", "min": 1e-5, "max": 1},
+    },
+    "DelayedQLearningAgent": {
+        "update_threshold": {"type": "int", "min": 1, "max": 500},
+        "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 1},
     },
     # "params": {
     #     "ReplayBuffer.buffer_size": {"type": "int", "min": 50_000, "max": 300_000},
