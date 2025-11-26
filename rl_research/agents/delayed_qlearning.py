@@ -13,6 +13,7 @@ class DelayedQLearningState:
     visit_counts: jnp.ndarray
     pending_counts: jnp.ndarray
     pending_returns: jnp.ndarray
+    learn_flags: jnp.ndarray
     step: int
 
 
@@ -44,6 +45,7 @@ class DelayedQLearningAgent:
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             pending_counts=jnp.zeros((self.num_states, self.num_actions)),
             pending_returns=jnp.zeros((self.num_states, self.num_actions)),
+            learn_flags=jnp.ones((self.num_states, self.num_actions), dtype=bool),
             step=0
         )
     
@@ -74,9 +76,11 @@ class DelayedQLearningAgent:
         visit_counts = state.visit_counts
         pending_counts = state.pending_counts
         pending_returns = state.pending_returns
+        learn_flags = state.learn_flags
 
         total_change = jnp.array(0.0)
         total_updates = jnp.array(0.0)
+        success_any = jnp.array(False)
 
         for i in range(batch_size):
             valid = batch_mask[i]
@@ -89,12 +93,14 @@ class DelayedQLearningAgent:
             target = r + self.discount * q_next_max
 
             visit_counts = visit_counts.at[s, a].add(jnp.where(valid, 1, 0))
-            pending_counts = pending_counts.at[s, a].add(jnp.where(valid, 1, 0))
-            pending_returns = pending_returns.at[s, a].add(jnp.where(valid, target, 0.0))
+
+            can_learn = jnp.logical_and(valid, learn_flags[s, a])
+            pending_counts = pending_counts.at[s, a].add(jnp.where(can_learn, 1, 0))
+            pending_returns = pending_returns.at[s, a].add(jnp.where(can_learn, target, 0.0))
 
             count = pending_counts[s, a]
             total_return = pending_returns[s, a]
-            ready = jnp.logical_and(valid, count >= self.update_threshold)
+            ready = jnp.logical_and(can_learn, count >= self.update_threshold)
 
             def apply_update(_):
                 q_current = q_table[s, a]
@@ -106,15 +112,21 @@ class DelayedQLearningAgent:
                 updated_table = q_table.at[s, a].set(new_q)
                 updated_counts = pending_counts.at[s, a].set(0)
                 updated_returns = pending_returns.at[s, a].set(0.0)
+                updated_flags = jax.lax.cond(
+                    decrease,
+                    lambda f: f,
+                    lambda f: f.at[s, a].set(False),
+                    learn_flags
+                )
 
                 change = jnp.where(decrease, jnp.abs(q_current - new_q), 0.0)
                 update_flag = jnp.where(decrease, 1.0, 0.0)
-                return updated_table, updated_counts, updated_returns, change, update_flag
+                return updated_table, updated_counts, updated_returns, updated_flags, change, update_flag
 
             def skip_update(_):
-                return q_table, pending_counts, pending_returns, 0.0, 0.0
+                return q_table, pending_counts, pending_returns, learn_flags, 0.0, 0.0
 
-            q_table, pending_counts, pending_returns, change, update_flag = jax.lax.cond(
+            q_table, pending_counts, pending_returns, learn_flags, change, update_flag = jax.lax.cond(
                 ready,
                 apply_update,
                 skip_update,
@@ -123,12 +135,21 @@ class DelayedQLearningAgent:
 
             total_change = total_change + change
             total_updates = total_updates + update_flag
+            success_any = jnp.logical_or(success_any, update_flag > 0)
+
+        learn_flags = jax.lax.cond(
+            success_any,
+            lambda f: jnp.ones_like(f, dtype=bool),
+            lambda f: f,
+            learn_flags
+        )
         
         new_state = state.replace(
             q_table=q_table,
             visit_counts=visit_counts,
             pending_counts=pending_counts,
             pending_returns=pending_returns,
+            learn_flags=learn_flags,
             step=state.step + jnp.sum(batch_mask)
         )
 

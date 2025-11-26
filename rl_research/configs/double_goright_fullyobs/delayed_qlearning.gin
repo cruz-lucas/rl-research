@@ -10,7 +10,7 @@ ReplayBuffer.deduplicate = False
 DelayedQLearningAgent.r_max = 6.0
 DelayedQLearningAgent.discount = 0.9
 DelayedQLearningAgent.epsilon = 0.05
-DelayedQLearningAgent.update_threshold = 20
+DelayedQLearningAgent.update_threshold = 1
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2
