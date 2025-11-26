@@ -85,16 +85,23 @@ class BufferState:
     def sample(self, key: jax.Array, batch_size: int) -> tuple[Transition, jnp.ndarray]:
         """Sample batch from buffer. Returns transition and a mask for valid entries."""
         max_size = self.observations.shape[0]
+        target_size = max(max_size, batch_size)
+
+        def _pad(arr, value):
+            pad_width = target_size - arr.shape[0]
+            if pad_width == 0:
+                return arr
+            return jnp.pad(arr, (0, pad_width), constant_values=value)
 
         def full_buffer(_):
-            idx = jnp.arange(max_size)
-            mask = idx < self.size
+            idx = _pad(jnp.arange(max_size), 0)
+            mask = _pad(jnp.arange(max_size) < self.size, False)
             return idx, mask
 
         def random_batch(_):
             safe_size = jnp.maximum(self.size, 1)
-            idx = jax.random.randint(key, (batch_size,), 0, safe_size)
-            mask = jnp.ones((batch_size,), dtype=bool)
+            idx = _pad(jax.random.randint(key, (batch_size,), 0, safe_size), 0)
+            mask = _pad(jnp.ones((batch_size,), dtype=bool), False)
             return idx, mask
 
         indices, mask = jax.lax.cond(
@@ -128,7 +135,7 @@ class ReplayBuffer(BaseBuffer):
     def __init__(
         self,
         buffer_size: int = 1,
-        deduplicate: bool = True,
+        deduplicate: bool = False,
         train_on_full_buffer: bool = False,
     ):
         self.buffer_size = buffer_size
