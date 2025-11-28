@@ -126,7 +126,7 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
         
         history = jax.tree_util.tree_map(np.array, history)
         log_history_to_mlflow(history)
-        log_agent_states_to_mlflow(agent_states)
+        # log_agent_states_to_mlflow(agent_states)
 
     finally:
         mlflow.end_run()
