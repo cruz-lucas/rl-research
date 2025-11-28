@@ -51,8 +51,10 @@ enableTypeIgnoreComments = true
 
 [tool.uv.sources]
 gymnasium = { git = "https://github.com/cruz-lucas/Gymnasium.git" }
+mlflow-export-import = { git = "https://github.com/mlflow/mlflow-export-import/" }
 
 [dependency-groups]
 dev = [
     "ipykernel>=7.1.0",
+    "mlflow-export-import",
 ]
