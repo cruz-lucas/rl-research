@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs_delayedq"
+setup_mlflow.experiment_name = "double_goright_fullyobs"
 setup_mlflow.experiment_group = "delayed_qlearning"
 
 run_single_seed.agent_cls = @DelayedQLearningAgent
@@ -9,7 +9,7 @@ ReplayBuffer.deduplicate = False
 
 DelayedQLearningAgent.r_max = 6.0
 DelayedQLearningAgent.discount = 0.9
-DelayedQLearningAgent.epsilon = 0.05
+DelayedQLearningAgent.epsilon = 0.01
 DelayedQLearningAgent.update_threshold = 1
 
 EnvParams.length = 21

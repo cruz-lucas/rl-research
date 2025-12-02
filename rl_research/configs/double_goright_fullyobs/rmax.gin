@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs_rmax"
+setup_mlflow.experiment_name = "double_goright_fullyobs"
 setup_mlflow.experiment_group = "rmax"
 
 run_single_seed.agent_cls = @RMaxAgent
@@ -10,7 +10,7 @@ ReplayBuffer.deduplicate = False
 RMaxAgent.r_max = 6.0
 RMaxAgent.discount = 0.9
 RMaxAgent.known_threshold = 1
-RMaxAgent.convergence_threshold = 1e-2
+RMaxAgent.convergence_threshold = 9e-5
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2

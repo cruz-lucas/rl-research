@@ -6,10 +6,11 @@ run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 1
 ReplayBuffer.deduplicate = False
+ReplayBuffer.train_on_full_buffer = False
 
 QLearningAgent.discount = 0.9
 QLearningAgent.initial_epsilon = 1.0
-QLearningAgent.step_size = 0.9
+QLearningAgent.step_size = 1.0
 QLearningAgent.initial_q_value = 0.0
 QLearningAgent.ucb_c = 40.0
 QLearningAgent.policy = "random"

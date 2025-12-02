@@ -117,7 +117,7 @@ class QLearningAgent:
         
         states, actions, new_qs, td_errors, visit_incs = jax.vmap(update_single)(jnp.arange(batch_size))
 
-        def apply_q_updates(table, i):
+        def apply_q_updates(i, table):
             return jax.lax.cond(
                 visit_incs[i] > 0,
                 lambda t: t.at[states[i], actions[i]].set(new_qs[i]),

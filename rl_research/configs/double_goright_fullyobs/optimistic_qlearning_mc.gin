@@ -1,19 +1,22 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs_mcbuffer"
-setup_mlflow.experiment_group = "optimistic_qlearning"
+setup_mlflow.experiment_name = "double_goright_fullyobs"
+setup_mlflow.experiment_group = "optimistic_mc_buffer"
 
-run_single_seed.agent_cls = @OptimisticQLearningAgent
+run_single_seed.agent_cls = @OptimisticMonteCarloAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_cls = @MonteCarloBuffer
-MonteCarloBuffer.buffer_size = 1512
-MonteCarloBuffer.train_on_full_buffer = True
-MonteCarloBuffer.episode_length = 500
-MonteCarloBuffer.discount = 0.9
+run_single_seed.buffer_cls = @RMaxMonteCarloBuffer
+RMaxMonteCarloBuffer.buffer_size = 1512
+RMaxMonteCarloBuffer.train_on_full_buffer = False
+RMaxMonteCarloBuffer.episode_length = 500
+RMaxMonteCarloBuffer.discount = 0.9
+RMaxMonteCarloBuffer.r_max = 6.0
+RMaxMonteCarloBuffer.known_threshold = 23
+RMaxMonteCarloBuffer.self_loop_unknown = True
 
-OptimisticQLearningAgent.r_max = 6.0
-OptimisticQLearningAgent.discount = 0.9
-OptimisticQLearningAgent.step_size = 1.0
-OptimisticQLearningAgent.known_threshold = 1
-OptimisticQLearningAgent.convergence_threshold = 1e-4
+OptimisticMonteCarloAgent.r_max = 6.0
+OptimisticMonteCarloAgent.discount = 0.9
+OptimisticMonteCarloAgent.step_size = 0.126
+OptimisticMonteCarloAgent.known_threshold = 23
+OptimisticMonteCarloAgent.convergence_threshold = 2.1e-4
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2

@@ -3,6 +3,7 @@ import jax
 import numpy as np
 import mlflow
 import argparse
+import inspect
 import tempfile
 from typing import Type
 
@@ -75,7 +76,6 @@ def log_history_to_mlflow(history: History):
         "final/eval_return_mean": float(np.mean(history.eval_returns[-final_train_window:])),
     })
 
-
 def log_agent_states_to_mlflow(agent_states):
     """Save per-episode agent state tensors as an MLflow artifact."""
     agent_states_np = jax.tree_util.tree_map(np.array, agent_states)
@@ -112,7 +112,14 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
         )
         agent_state = agent.initial_state()
 
-        buffer = buffer_cls()
+        buffer_init_kwargs = {}
+        buffer_sig = inspect.signature(buffer_cls)
+        if 'num_states' in buffer_sig.parameters:
+            buffer_init_kwargs['num_states'] = n_states
+        if 'num_actions' in buffer_sig.parameters:
+            buffer_init_kwargs['num_actions'] = n_actions
+
+        buffer = buffer_cls(**buffer_init_kwargs)
         buffer_state = buffer.initial_state()
         
         history, agent_states = run_loop(
@@ -126,7 +133,7 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
         
         history = jax.tree_util.tree_map(np.array, history)
         log_history_to_mlflow(history)
-        # log_agent_states_to_mlflow(agent_states)
+        log_agent_states_to_mlflow(agent_states)
 
     finally:
         mlflow.end_run()
@@ -151,7 +158,7 @@ def main():
     else:
         seed = args.seed
 
-    # for seed in range(30):
+    # for seed in range(5):
     setup_mlflow(seed=seed)
     run_single_seed(seed=seed)
 
