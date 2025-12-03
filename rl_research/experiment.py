@@ -38,12 +38,18 @@ def run_episode(
     environment,
     batch_size: int,
     max_episode_steps: int,
-    is_training: bool
-) -> Tuple[Any, Any, BufferState, float, float, int, jnp.ndarray]:
+    update_frequency: int,
+    replay_ratio: int,
+    warmup_steps: int,
+    is_training: bool,
+    global_step: jnp.ndarray,
+) -> Tuple[Any, Any, BufferState, float, float, int, jnp.ndarray, jnp.ndarray]:
     """Run a single episode."""
+    total_updates = max(int(update_frequency * replay_ratio), 0)
+    train_flag = jnp.asarray(is_training)
     
     def step_fn(carry, _):
-        agent_st, env_st, buff_st, k, ep_return, ep_disc_return, discount_factor, ep_length, losses = carry
+        agent_st, env_st, buff_st, k, ep_return, ep_disc_return, discount_factor, ep_length, losses, g_step = carry
         
         k, k_action, k_update = jax.random.split(k, 3)
         
@@ -60,21 +66,34 @@ def run_episode(
                 next_observation=next_obs
             )
 
-            # new_buff_st = jax.lax.cond(buff_st.is_ready(batch_size), lambda: buff_st, lambda: buff_st.push(transition))  # test without pushing new samples into buffer
             new_buff_st = buff_st.push(transition)
             
             def train_step(states):
                 b_st, a_st = states
-                batch, batch_mask = b_st.sample(k_update, batch_size)
-                new_a_st, loss = agent.update(a_st, batch, batch_mask)
-                return b_st, new_a_st, loss
+
+                def single_update(carry, _):
+                    buff_carry, agent_carry, key_carry = carry
+                    key_carry, subkey = jax.random.split(key_carry)
+                    batch = buff_carry.sample(subkey, batch_size)
+                    new_agent, loss_val = agent.update(agent_carry, batch)
+                    return (buff_carry, new_agent, key_carry), loss_val
+
+                (b_final, a_final, _), losses_scan = jax.lax.scan(
+                    single_update, (b_st, a_st, k_update), None, length=total_updates
+                )
+                mean_loss = jnp.mean(losses_scan)
+                return b_final, a_final, mean_loss
             
             def no_train(states):
                 b_st, a_st = states
                 return b_st, a_st, 0.0
             
+            has_updates = (g_step % update_frequency == 0)
+            should_train = jnp.logical_and(new_buff_st.is_ready(batch_size), g_step >= warmup_steps)
+            should_train = jnp.logical_and(should_train, jnp.asarray(has_updates))
+
             new_buff_st, new_agent_st, loss = jax.lax.cond(
-                new_buff_st.is_ready(batch_size),
+                should_train,
                 train_step,
                 no_train,
                 (new_buff_st, agent_st)
@@ -85,7 +104,7 @@ def run_episode(
             return buff_st, agent_st, 0.0
 
         new_buff_st, new_agent_st, loss = jax.lax.cond(
-            is_training,
+            train_flag,
             update_buffer_and_train,
             no_update,
             buff_st,
@@ -97,6 +116,7 @@ def run_episode(
         new_discount_factor = discount_factor * agent.discount
         new_ep_length = ep_length + 1
         new_losses = losses.at[ep_length].set(loss)
+        new_global_step = g_step + 1
         
         new_carry = (
             new_agent_st,
@@ -107,7 +127,8 @@ def run_episode(
             new_ep_disc_return,
             new_discount_factor,
             new_ep_length,
-            new_losses
+            new_losses,
+            new_global_step
         )
         
         return new_carry, terminal
@@ -118,13 +139,24 @@ def run_episode(
     ep_length = 0
     losses = jnp.zeros(max_episode_steps)
     
-    init_carry = (agent_state, env_state, buffer_state, key, ep_return, ep_disc_return, discount_factor, ep_length, losses)
+    init_carry = (
+        agent_state,
+        env_state,
+        buffer_state,
+        key,
+        ep_return,
+        ep_disc_return,
+        discount_factor,
+        ep_length,
+        losses,
+        global_step
+    )
     
     final_carry, dones = jax.lax.scan(step_fn, init_carry, None, length=max_episode_steps)
     
-    agent_st, env_st, buff_st, _, ep_return, ep_disc_return, _, ep_length, losses = final_carry
+    agent_st, env_st, buff_st, _, ep_return, ep_disc_return, _, ep_length, losses, final_global_step = final_carry
     
-    return agent_st, env_st, buff_st, ep_return, ep_disc_return, ep_length, losses
+    return agent_st, env_st, buff_st, ep_return, ep_disc_return, ep_length, losses, final_global_step
 
 @gin.configurable
 # @partial(jax.jit, static_argnames=['agent', 'environment', 'batch_size', 'max_episode_steps',
@@ -139,7 +171,10 @@ def run_loop(
     max_episode_steps: int,
     train_episodes: int,
     evaluate_every: int,
-    eval_episodes: int
+    eval_episodes: int,
+    update_frequency: int = 1,
+    replay_ratio: int = 1,
+    warmup_steps: int = 0,
 ) -> Tuple[History, Any]:
     """
     Main training loop - fully jitted.
@@ -152,9 +187,13 @@ def run_loop(
         agent_state: Initial agent state
         seed: Random seed
         batch_size: Batch size for training
+        max_episode_steps: Number of steps to unroll in each episode
         train_episodes: Total number of training episodes
         evaluate_every: Evaluate every N episodes
         eval_episodes: Number of evaluation episodes
+        update_frequency: Number of env steps in between update rounds
+        replay_ratio: Mini-batches processed per update round
+        warmup_steps: Environment steps to collect before starting updates
     
     Returns:
         Tuple of:
@@ -165,14 +204,14 @@ def run_loop(
     key = jax.random.PRNGKey(seed)
     
     def episode_fn(carry, episode_idx):
-        agent_st, buff_st, k = carry
+        agent_st, buff_st, k, g_step = carry
         
         k, k_reset, k_episode, k_eval = jax.random.split(k, 4)
         
         env_st, _ = environment.reset(k_reset)
-        agent_st, env_st, buff_st, train_rets, train_disc_rets, train_lens, losses = run_episode(
+        agent_st, env_st, buff_st, train_rets, train_disc_rets, train_lens, losses, g_step = run_episode(
             agent_st, env_st, buff_st, k_episode,
-            agent, environment, batch_size, max_episode_steps, is_training=True
+            agent, environment, batch_size, max_episode_steps, update_frequency, replay_ratio, warmup_steps, is_training=True, global_step=g_step
         )
         
         train_loss = jnp.mean(losses)
@@ -183,9 +222,9 @@ def run_loop(
                 k_e, k_e_reset, k_e_episode = jax.random.split(k_e, 3)
                 
                 eval_env_st, _ = environment.reset(k_e_reset)
-                _, _, _, eval_return, eval_disc_return, eval_length, _ = run_episode(
+                _, _, _, eval_return, eval_disc_return, eval_length, _, _ = run_episode(
                     agent_st, eval_env_st, buff_st, k_e_episode,
-                    agent, environment, batch_size, max_episode_steps, is_training=False
+                    agent, environment, batch_size, max_episode_steps, update_frequency, replay_ratio, warmup_steps, is_training=False, global_step=g_step
                 )
                 return k_e, (eval_return, eval_disc_return, eval_length)
             
@@ -211,14 +250,14 @@ def run_loop(
         eval_discounted_returns_new = jnp.mean(eval_disc_rets)
         eval_lengths_new = jnp.mean(eval_lens)
         
-        new_carry = (agent_st, buff_st, k)
+        new_carry = (agent_st, buff_st, k, g_step)
         out = (train_rets, train_disc_rets, train_lens, train_loss, 
                eval_returns_new, eval_discounted_returns_new, eval_lengths_new, agent_st)
         
         return new_carry, out
     
-    init_carry = (agent_state, buffer_state, key)
-    (final_agent_state, _, _), (train_rets, train_disc_rets, train_lens, train_losses, 
+    init_carry = (agent_state, buffer_state, key, jnp.asarray(0, dtype=jnp.int32))
+    (final_agent_state, _, _, _), (train_rets, train_disc_rets, train_lens, train_losses, 
         eval_rets, eval_disc_rets, eval_lens, agent_states) = jax.lax.scan(
         episode_fn, init_carry, jnp.arange(train_episodes)
     )

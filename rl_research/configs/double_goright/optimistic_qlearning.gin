@@ -5,8 +5,6 @@ run_single_seed.agent_cls = @OptimisticQLearningAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 1512
-ReplayBuffer.deduplicate = true
-ReplayBuffer.train_on_full_buffer = false
 
 OptimisticQLearningAgent.r_max = 6.0
 OptimisticQLearningAgent.discount = 0.9
@@ -27,5 +25,8 @@ EnvParams.mapping = 'default'
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
 run_loop.batch_size = 1512
+run_loop.update_frequency = 1
+run_loop.replay_ratio = 1
+run_loop.warmup_steps = 0
 run_loop.evaluate_every = 1
 run_loop.eval_episodes = 1

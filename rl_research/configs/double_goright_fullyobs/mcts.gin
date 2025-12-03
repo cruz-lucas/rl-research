@@ -3,8 +3,8 @@ setup_mlflow.experiment_group = "mcts"
 
 run_single_seed.agent_cls = @MCTSAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_cls = @DeduplicatingBuffer
-DeduplicatingBuffer.buffer_size = 1
+run_single_seed.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 1
 
 MCTSAgent.discount = 0.9
 MCTSAgent.num_simulations = 50
@@ -24,5 +24,8 @@ EnvParams.mapping = 'default'
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
 run_loop.batch_size = 1
+run_loop.update_frequency = 1
+run_loop.replay_ratio = 1
+run_loop.warmup_steps = 0
 run_loop.evaluate_every = 1
 run_loop.eval_episodes = 1

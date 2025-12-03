@@ -8,10 +8,14 @@ Ranking by mean online return averaged across 10 seeds.
 - converge_threshold: 4.2e-5
 - known threshold: 14
 
-### Optimistic Q-learning (or model-free batch Rmax)
+### Optimistic Batch Q-learning
 - step_size:
 - known_threshold:
-- convergence_threshold:
+- batch_size:
+- update_frequency:
+- replay_ratio:
+- warmup_steps:
+- buffer_size:
 
 ## Double GoRight (fully observable variant)
 
@@ -19,8 +23,6 @@ Ranking by mean online return averaged across 10 seeds.
 - converge_threshold: 9.4e-5
 - known threshold: 12
 
-### Optimistic Q-learning (or model-free batch Rmax)
-Trained on the entire buffer deduplicated.
-- step_size: 0.126
-- known_threshold: 23
-- convergence_threshold: 2.1e-4
+### Optimistic Batch Q-learning
+- step_size:
+- known_threshold:

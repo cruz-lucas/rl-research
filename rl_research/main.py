@@ -72,8 +72,8 @@ def log_history_to_mlflow(history: History):
     
     final_train_window = 100
     mlflow.log_metrics({
-        "last_100/train_return_mean": float(np.mean(history.train_returns[-final_train_window:])),
-        "last_100/eval_return_mean": float(np.mean(history.eval_returns[-final_train_window:])),
+        "last_100/train_disc_return_mean": float(np.mean(history.train_discounted_returns[-final_train_window:])),
+        "last_100/eval_disc_return_mean": float(np.mean(history.eval_discounted_returns[-final_train_window:])),
     })
 
 def log_agent_states_to_mlflow(agent_states):
