@@ -25,14 +25,6 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
     },
-    # "qlearning_epsgreedy": {
-    #     "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
-    #     "initial_epsilon": {"type": "uniform", "min": 0.0, "max": 1.0},
-    # },
-    # "qlearning_ucb": {
-    #     "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
-    #     "ucb_c": {"type": "uniform", "min": 0.0, "max": 100},
-    # },
     "MCTSAgent": {
         "num_simulations": {"type": "int", "min": 1, "max": 500},
         "rollout_depth": {"type": "int", "min": 1, "max": 50},
@@ -46,10 +38,13 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "update_threshold": {"type": "int", "min": 1, "max": 500},
         "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 1},
     },
-    # "params": {
-    #     "ReplayBuffer.buffer_size": {"type": "int", "min": 50_000, "max": 300_000},
-    #     "run_loop.batch_size": {"type": "int", "min": 5, "max": 50_000},
-    # }
+    "params": {
+        "ReplayBuffer.buffer_size": {"type": "int", "min": 512, "max": 4096},
+        "run_loop.batch_size": {"type": "int", "min": 1, "max": 512},
+        "run_loop.update_frequency": {"type": "int", "min": 1, "max": 4},
+        "run_loop.replay_ratio": {"type": "int", "min": 1, "max": 8},
+        "run_loop.warmup_steps": {"type": "int", "min": 0, "max": 2000},
+    },
 }
 
 
@@ -88,6 +83,7 @@ def sample_bindings(
     if algorithm not in space:
         raise KeyError(f"{algorithm} not in search space keys {list(space.keys())}")
     algo_space = space[algorithm]
+    param_space = space.get("params", {})
     bindings: List[List[str]] = []
     for _ in range(num_samples):
         combo = []
@@ -95,11 +91,9 @@ def sample_bindings(
             val = _sample_value(spec, rng)
             combo.append(f"{algorithm}.{name}={_format_value(val)}")
 
-        # val = _sample_value(DEFAULT_SPACE["params"]["ReplayBuffer.buffer_size"], rng)
-        # combo.append(f"ReplayBuffer.buffer_size={_format_value(val)}")
-
-        # val = _sample_value(DEFAULT_SPACE["params"]["run_loop.batch_size"], rng)
-        # combo.append(f"run_loop.batch_size={_format_value(val)}")
+        for name, spec in param_space.items():
+            val = _sample_value(spec, rng)
+            combo.append(f"{name}={_format_value(val)}")
 
         bindings.append(combo)
     return bindings
