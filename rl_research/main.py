@@ -39,6 +39,7 @@ def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_gro
     buffer_cls = run_bindings.get('buffer_cls', ReplayBuffer)
     buffer_cls_name = buffer_cls.__name__
     buffer_params = gin.get_bindings(buffer_cls_name)
+    train_params = gin.get_bindings("run_loop")
     
     mlflow.log_params({
         "seed": seed,
@@ -46,6 +47,7 @@ def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_gro
         "buffer_class": buffer_cls_name,
         **{f"agent_{k}": v for k, v in agent_params.items()},
         **{f"buffer_{k}": v for k, v in buffer_params.items()},
+        **{k: v for k, v in train_params.items()},
     })
 
 
@@ -133,7 +135,7 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
         
         history = jax.tree_util.tree_map(np.array, history)
         log_history_to_mlflow(history)
-        log_agent_states_to_mlflow(agent_states)
+        # log_agent_states_to_mlflow(agent_states)
 
     finally:
         mlflow.end_run()
