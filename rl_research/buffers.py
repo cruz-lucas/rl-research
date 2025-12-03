@@ -31,7 +31,7 @@ class BufferState:
     def is_ready(self, batch_size: int) -> bool:
         return self.size >= batch_size
     
-    def push(self, transition: Transition) -> 'BufferState':
+    def push(self, transition: Transition, bootstrap_value: float = 0) -> 'BufferState':
         """Add transition to buffer (circular)."""
         max_size = self.observations.shape[0]
         idx = self.position % max_size
@@ -90,24 +90,24 @@ class MonteCarloBufferState:
     def is_ready(self, batch_size: int) -> bool:
         return self.size >= batch_size
 
-    def _compute_returns(self, rewards: jnp.ndarray) -> jnp.ndarray:
-        """Compute discounted returns for a full episode."""
+    def _compute_returns(self, rewards: jnp.ndarray, bootstrap_value: float) -> jnp.ndarray:
+        """Compute discounted returns for a full episode, bootstrapping the tail."""
         def scan_fn(carry, r):
             new_carry = r + self.discount * carry
             return new_carry, new_carry
 
         _, reversed_returns = jax.lax.scan(
             scan_fn,
-            0.0,
+            bootstrap_value,
             rewards[::-1]
         )
         return reversed_returns[::-1]
 
-    def _write_episode(self) -> 'MonteCarloBufferState':
+    def _write_episode(self, bootstrap_value: float) -> 'MonteCarloBufferState':
         """Materialize the collected episode into the main buffer with MC returns."""
         max_size = self.observations.shape[0]
         episode_length = self.episode_rewards.shape[0]
-        returns = self._compute_returns(self.episode_rewards)
+        returns = self._compute_returns(self.episode_rewards, bootstrap_value)
         discounts = jnp.full_like(returns, self.discount)
 
         def body(i, state):
@@ -143,7 +143,7 @@ class MonteCarloBufferState:
             episode_steps=0
         )
 
-    def push(self, transition: Transition) -> 'MonteCarloBufferState':
+    def push(self, transition: Transition, bootstrap_value: float = 0) -> 'MonteCarloBufferState':
         """Accumulate transitions until an episode is complete, then store MC returns."""
         idx = self.episode_steps
         episode_observations = self.episode_observations.at[idx].set(transition.observation)
@@ -160,7 +160,7 @@ class MonteCarloBufferState:
         )
 
         def finalize(_):
-            return updated_state._write_episode()
+            return updated_state._write_episode(bootstrap_value)
 
         def keep_gathering(_):
             return updated_state

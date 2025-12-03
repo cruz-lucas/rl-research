@@ -1,21 +1,15 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs"
+setup_mlflow.experiment_name = "test_opt_qlearning"
 setup_mlflow.experiment_group = "optimistic_mc_buffer"
 
 run_single_seed.agent_cls = @OptimisticMonteCarloAgent
 run_single_seed.env_cls = @GoRight
-run_single_seed.buffer_cls = @RMaxMonteCarloBuffer
-RMaxMonteCarloBuffer.buffer_size = 1512
-RMaxMonteCarloBuffer.episode_length = 500
-RMaxMonteCarloBuffer.discount = 0.9
-RMaxMonteCarloBuffer.r_max = 6.0
-RMaxMonteCarloBuffer.known_threshold = 23
-RMaxMonteCarloBuffer.self_loop_unknown = True
+run_single_seed.buffer_cls = @MonteCarloBuffer
+MonteCarloBuffer.buffer_size = 512
 
 OptimisticMonteCarloAgent.r_max = 6.0
 OptimisticMonteCarloAgent.discount = 0.9
-OptimisticMonteCarloAgent.step_size = 0.126
-OptimisticMonteCarloAgent.known_threshold = 23
-OptimisticMonteCarloAgent.convergence_threshold = 2.1e-4
+OptimisticMonteCarloAgent.step_size = 0.5
+OptimisticMonteCarloAgent.known_threshold = 10
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2
@@ -29,7 +23,7 @@ EnvParams.mapping = 'default'
 
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
-run_loop.batch_size = 1512
+run_loop.batch_size = 512
 run_loop.update_frequency = 1
 run_loop.replay_ratio = 1
 run_loop.warmup_steps = 0

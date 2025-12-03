@@ -66,7 +66,15 @@ def run_episode(
                 next_observation=next_obs
             )
 
-            new_buff_st = buff_st.push(transition)
+            # TODO: check if not terminal
+            q_table = getattr(agent_st, "q_table", None)
+            if q_table is not None:
+                s_next = transition.next_observation.astype(jnp.int32).squeeze()
+                bootstrap_value = jnp.max(q_table[s_next])
+            else:
+                bootstrap_value = jnp.asarray(0.0)
+
+            new_buff_st = buff_st.push(transition, bootstrap_value=bootstrap_value)
             
             def train_step(states):
                 b_st, a_st = states
