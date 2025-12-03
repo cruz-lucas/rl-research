@@ -12,7 +12,6 @@ class OptimisticQLearningState:
     q_table: jnp.ndarray
     visit_counts: jnp.ndarray
     step: int
-    converged: bool
 
 
 @gin.configurable
@@ -27,7 +26,6 @@ class OptimisticMonteCarloAgent:
         discount: float,
         step_size: float,
         known_threshold: int,
-        convergence_threshold: float
     ):
         self.num_states = num_states
         self.num_actions = num_actions
@@ -36,14 +34,12 @@ class OptimisticMonteCarloAgent:
         self.step_size = step_size
         self.known_threshold = known_threshold
         self.optimistic_value = r_max / (1 - discount)
-        self.convergence_threshold = convergence_threshold
 
     def initial_state(self) -> OptimisticQLearningState:
         """Initialize with optimistic Q-values and zero counts."""
         return OptimisticQLearningState(
             q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
-            converged=False,
             step=0,
         )
 
@@ -62,44 +58,30 @@ class OptimisticMonteCarloAgent:
         self,
         state: OptimisticQLearningState,
         batch: Transition,
-        batch_mask: jnp.ndarray | None = None
     ) -> tuple[OptimisticQLearningState, jax.Array]:
         """Single-step optimistic updates using Monte Carlo returns."""
         batch_size = batch.observation.shape[0]
-        if batch_mask is None:
-            batch_mask = jnp.ones((batch_size,), dtype=bool)
-        batch_mask = batch_mask.astype(jnp.bool_)
         
         def update_single(carry, i):
             q_table, visit_counts = carry
-            valid = batch_mask[i]
 
             s = batch.observation[i].astype(jnp.int32).squeeze()
             a = batch.action[i].astype(jnp.int32).squeeze()
             mc_return = batch.reward[i]
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
 
-            visit_counts = visit_counts.at[s, a].add(jnp.where(valid, 1, 0))
+            visit_counts = visit_counts.at[s, a].add(1)
             is_unknown = visit_counts[s, a] < self.known_threshold
-            is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
+            # is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
 
             q_current = q_table[s, a]
-            target = jnp.where(is_next_unknown, self.optimistic_value, mc_return)
 
-            td_error = target - q_current
+            td_error = mc_return - q_current
             updated_q = q_current + self.step_size * td_error
             new_q = jnp.where(is_unknown, self.optimistic_value, updated_q)
-            new_q = jnp.where(valid, new_q, q_current)
 
-            q_table = jax.lax.cond(
-                valid,
-                lambda tab: tab.at[s, a].set(new_q),
-                lambda tab: tab,
-                q_table
-            )
-
-            loss_val = jnp.where(valid, jnp.abs(td_error), 0.0)
-            return (q_table, visit_counts), loss_val
+            loss_val = jnp.abs(td_error)
+            return (q_table.at[s, a].set(new_q), visit_counts), loss_val
 
         (new_q_table, new_visit_counts), losses = jax.lax.scan(
             update_single,
@@ -107,13 +89,12 @@ class OptimisticMonteCarloAgent:
             jnp.arange(batch_size)
         )
 
-        total_valid = jnp.maximum(jnp.sum(batch_mask), 1)
-        mean_loss = jnp.sum(losses) / total_valid
+        mean_loss = jnp.sum(losses) / batch_size
 
         new_state = state.replace(
             q_table=new_q_table,
             visit_counts=new_visit_counts,
-            step=state.step + jnp.sum(batch_mask)
+            step=state.step + jnp.sum(batch_size)
         )
         
         return new_state, mean_loss
