@@ -20,7 +20,6 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "OptimisticQLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "known_threshold": {"type": "int", "min": 1, "max": 50},
-        "convergence_threshold": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
     },
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
