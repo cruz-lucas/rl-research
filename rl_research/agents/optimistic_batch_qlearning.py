@@ -12,7 +12,6 @@ class OptimisticQLearningState:
     q_table: jnp.ndarray
     visit_counts: jnp.ndarray
     step: int
-    converged: bool
 
 
 @gin.configurable
@@ -42,7 +41,6 @@ class OptimisticQLearningAgent:
             q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
-            converged=False
         )
     
     def select_action(
