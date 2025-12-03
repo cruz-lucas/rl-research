@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=rl_experiment
 #SBATCH --account=aip-machado
-#SBATCH --time=12:00:00
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=16G
+#SBATCH --time=4:00:00
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=8G
 #SBATCH --array=0-0               # Override with --array on sbatch command line
 #SBATCH --output=logs/job_%A_%a.out
 #SBATCH --error=logs/job_%A_%a.err
