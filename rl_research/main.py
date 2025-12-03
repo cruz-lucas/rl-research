@@ -18,7 +18,7 @@ from rl_research.environments import *
 def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_group: str = 'placeholder'):
     """Setup MLflow experiment and run."""
 
-    mlflow.set_tracking_uri("sqlite:///mlruns.db")
+    # mlflow.set_tracking_uri("sqlite:///mlruns.db")
     
     experiment = mlflow.get_experiment_by_name(experiment_name)
     if experiment is None:
@@ -142,6 +142,10 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
 
 
 def main():
+    import time
+    import sqlite3
+    import random
+
     parser = argparse.ArgumentParser(description="Run RL experiment")
     parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (will use SLURM_ARRAY_TASK_ID if not provided)")
@@ -160,8 +164,22 @@ def main():
     else:
         seed = args.seed
 
-    # for seed in range(5):
-    setup_mlflow(seed=seed)
+    mlflow.set_tracking_uri("sqlite:///mlruns.db")
+    max_retries = 30
+    for attempt in range(max_retries):
+        try:
+            setup_mlflow(seed=seed)
+            break
+        except Exception as e:
+            is_locked = "database is locked" in str(e) or isinstance(e, sqlite3.OperationalError)
+            
+            if is_locked and attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 5 + random.uniform(0, 5)
+                print(f"Database locked. Retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                raise e
+    # setup_mlflow(seed=seed)
     run_single_seed(seed=seed)
 
 
