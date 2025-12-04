@@ -134,7 +134,20 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
         )
         
         history = jax.tree_util.tree_map(np.array, history)
-        log_history_to_mlflow(history)
+        max_retries = 100
+        for attempt in range(max_retries):
+            try:
+                log_history_to_mlflow(history)
+                break
+            except Exception as e:
+                is_locked = "database is locked" in str(e) or isinstance(e, sqlite3.OperationalError)
+                
+                if is_locked and attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 5 + random.uniform(0, 5)
+                    print(f"Trying to log metrics. Database locked. Retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    raise e
         # log_agent_states_to_mlflow(agent_states)
 
     finally:
@@ -165,7 +178,7 @@ def main():
         seed = args.seed
 
     mlflow.set_tracking_uri("sqlite:///mlruns.db")
-    max_retries = 30
+    max_retries = 100
     for attempt in range(max_retries):
         try:
             setup_mlflow(seed=seed)
@@ -175,7 +188,7 @@ def main():
             
             if is_locked and attempt < max_retries - 1:
                 wait_time = (attempt + 1) * 5 + random.uniform(0, 5)
-                print(f"Database locked. Retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
+                print(f"Trying to setup MLFlow. Database locked. Retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait_time)
             else:
                 raise e
