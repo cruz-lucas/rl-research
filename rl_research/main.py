@@ -3,9 +3,10 @@ import jax
 import numpy as np
 import mlflow
 import argparse
-import inspect
 import tempfile
 from typing import Type
+from pathlib import Path
+import subprocess
 
 import gin
 from rl_research.experiment import run_loop, History
@@ -17,9 +18,6 @@ from rl_research.environments import *
 @gin.configurable
 def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_group: str = 'placeholder'):
     """Setup MLflow experiment and run."""
-
-    # mlflow.set_tracking_uri("sqlite:///mlruns.db")
-    
     experiment = mlflow.get_experiment_by_name(experiment_name)
     if experiment is None:
         experiment_id = mlflow.create_experiment(experiment_name)
@@ -28,26 +26,8 @@ def setup_mlflow(seed: int, experiment_name: str = 'placeholder', experiment_gro
 
     
     run_name = f"{experiment_group}_seed_{seed}"
-    mlflow.start_run(run_name=run_name, experiment_id=experiment_id, tags={
+    return mlflow.start_run(run_name=run_name, experiment_id=experiment_id, tags={
         "group": experiment_group,
-    })
-
-    run_bindings = gin.get_bindings('run_single_seed')
-    agent_cls = run_bindings.get('agent_cls', BaseAgent)
-    agent_cls_name = agent_cls.__name__
-    agent_params = gin.get_bindings(agent_cls_name)
-    buffer_cls = run_bindings.get('buffer_cls', ReplayBuffer)
-    buffer_cls_name = buffer_cls.__name__
-    buffer_params = gin.get_bindings(buffer_cls_name)
-    train_params = gin.get_bindings("run_loop")
-    
-    mlflow.log_params({
-        "seed": seed,
-        "agent_class": agent_cls_name,
-        "buffer_class": buffer_cls_name,
-        **{f"agent_{k}": v for k, v in agent_params.items()},
-        **{f"buffer_{k}": v for k, v in buffer_params.items()},
-        **{k: v for k, v in train_params.items()},
     })
 
 
@@ -102,63 +82,38 @@ def log_agent_states_to_mlflow(agent_states):
 @gin.configurable
 def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_cls: Type[BaseJaxEnv] = BaseJaxEnv, agent_cls: Type[BaseAgent] = BaseAgent):
     """Run training for a single seed."""
-    try:
-        env = env_cls()    
+    env = env_cls()    
 
-        n_states = env.env.observation_space.n
-        n_actions = env.env.action_space.n
+    n_states = env.env.observation_space.n
+    n_actions = env.env.action_space.n
 
-        agent = agent_cls(
-            num_states=n_states,
-            num_actions=n_actions,
-        )
-        agent_state = agent.initial_state()
+    agent = agent_cls(
+        num_states=n_states,
+        num_actions=n_actions,
+    )
+    agent_state = agent.initial_state()
 
-        buffer_init_kwargs = {}
-        buffer_sig = inspect.signature(buffer_cls)
-        if 'num_states' in buffer_sig.parameters:
-            buffer_init_kwargs['num_states'] = n_states
-        if 'num_actions' in buffer_sig.parameters:
-            buffer_init_kwargs['num_actions'] = n_actions
-
-        buffer = buffer_cls(**buffer_init_kwargs)
-        buffer_state = buffer.initial_state()
+    buffer_init_kwargs = {}
+    buffer = buffer_cls(**buffer_init_kwargs)
+    buffer_state = buffer.initial_state()
+    
+    history, agent_states = run_loop(
+        agent=agent,
+        environment=env,
+        buffer_state=buffer_state,
+        agent_state=agent_state,
+        seed=seed,
         
-        history, agent_states = run_loop(
-            agent=agent,
-            environment=env,
-            buffer_state=buffer_state,
-            agent_state=agent_state,
-            seed=seed,
-            
-        )
-        
-        history = jax.tree_util.tree_map(np.array, history)
-        max_retries = 100
-        for attempt in range(max_retries):
-            try:
-                log_history_to_mlflow(history)
-                break
-            except Exception as e:
-                is_locked = "database is locked" in str(e) or isinstance(e, sqlite3.OperationalError)
-                
-                if is_locked and attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 5 + random.uniform(0, 5)
-                    print(f"Trying to log metrics. Database locked. Retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
-                    time.sleep(wait_time)
-                else:
-                    raise e
-        # log_agent_states_to_mlflow(agent_states)
+    )
+    
+    history = jax.tree_util.tree_map(np.array, history)
 
-    finally:
-        mlflow.end_run()
+    return history, agent_states
+        
+        
 
 
 def main():
-    import time
-    import sqlite3
-    import random
-
     parser = argparse.ArgumentParser(description="Run RL experiment")
     parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
     parser.add_argument("--seed", type=int, default=None, help="Random seed (will use SLURM_ARRAY_TASK_ID if not provided)")
@@ -177,23 +132,42 @@ def main():
     else:
         seed = args.seed
 
-    mlflow.set_tracking_uri("sqlite:///mlruns.db")
-    max_retries = 100
-    for attempt in range(max_retries):
-        try:
-            setup_mlflow(seed=seed)
-            break
-        except Exception as e:
-            is_locked = "database is locked" in str(e) or isinstance(e, sqlite3.OperationalError)
-            
-            if is_locked and attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 5 + random.uniform(0, 5)
-                print(f"Trying to setup MLFlow. Database locked. Retrying in {wait_time:.2f}s... (Attempt {attempt + 1}/{max_retries})")
-                time.sleep(wait_time)
-            else:
-                raise e
-    # setup_mlflow(seed=seed)
-    run_single_seed(seed=seed)
+    local_root = Path(os.environ.get("SLURM_TMPDIR", "./local_runs")) / "mlruns"
+    local_root.mkdir(parents=True, exist_ok=True)
+
+    shared_root = Path("./mlruns")
+    shared_root.mkdir(parents=True, exist_ok=True)
+
+    mlflow.set_tracking_uri(local_root)
+
+    with setup_mlflow(seed=seed) as run:
+
+        run_bindings = gin.get_bindings('run_single_seed')
+        agent_cls = run_bindings.get('agent_cls', BaseAgent)
+        agent_cls_name = agent_cls.__name__
+        agent_params = gin.get_bindings(agent_cls_name)
+        buffer_cls = run_bindings.get('buffer_cls', ReplayBuffer)
+        buffer_cls_name = buffer_cls.__name__
+        buffer_params = gin.get_bindings(buffer_cls_name)
+        train_params = gin.get_bindings("run_loop")
+        
+        mlflow.log_params({
+            "seed": seed,
+            "agent_class": agent_cls_name,
+            "buffer_class": buffer_cls_name,
+            **{f"agent_{k}": v for k, v in agent_params.items()},
+            **{f"buffer_{k}": v for k, v in buffer_params.items()},
+            **{k: v for k, v in train_params.items()},
+        })
+
+        history, agent_states = run_single_seed(seed=seed)
+        log_history_to_mlflow(history)
+        log_agent_states_to_mlflow(agent_states)
+
+    subprocess.run(
+        ["rsync", "-av", str(local_root) + "/", str(shared_root) + "/"],
+        check=True
+    )
 
 
 if __name__ == "__main__":
