@@ -21,6 +21,10 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "known_threshold": {"type": "int", "min": 1, "max": 50},
     },
+    "OptimisticMonteCarloAgent": {
+        "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
+        "known_threshold": {"type": "int", "min": 1, "max": 50},
+    },
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
     },
@@ -35,14 +39,14 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "DelayedQLearningAgent": {
         "update_threshold": {"type": "int", "min": 1, "max": 500},
-        "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 1},
+        "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
     },
     "params": {
         "ReplayBuffer.buffer_size": {"type": "int", "min": 512, "max": 4096},
         "run_loop.batch_size": {"type": "int", "min": 1, "max": 512},
-        "run_loop.update_frequency": {"type": "int", "min": 1, "max": 4},
-        "run_loop.replay_ratio": {"type": "int", "min": 1, "max": 8},
-        "run_loop.warmup_steps": {"type": "int", "min": 0, "max": 2000},
+        "run_loop.update_frequency": {"type": "int", "min": 1, "max": 50},
+        "run_loop.replay_ratio": {"type": "int", "min": 1, "max": 100},
+        "run_loop.warmup_steps": {"type": "int", "min": 0, "max": 2500},
     },
 }
 
@@ -157,7 +161,7 @@ def main() -> None:
     parser.add_argument(
         "--rng-seed",
         type=int,
-        default=0,
+        default=1,
         help="Random seed for reproducible sampling.",
     )
     parser.add_argument(
