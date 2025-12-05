@@ -177,6 +177,8 @@ cython_debug/
 **/outputs/
 .deprecated/**
 
+/mlruns_db_store/*
+
 **/logs/**
 
 *.db
