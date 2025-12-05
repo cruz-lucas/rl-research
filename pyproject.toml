@@ -16,6 +16,7 @@ dependencies = [
     "gymnasium",
     "plotly>=6.3.1",
     "flax>=0.10.4",
+    "nbformat>=4.2.0",
 ]
 
 [project.optional-dependencies]
