@@ -15,6 +15,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
+import gin
+
 # Default space is a starting point; override with --space-file.
 DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "OptimisticQLearningAgent": {
@@ -126,14 +128,35 @@ def submit_combo(
         subprocess.run(cmd, check=True)
 
 
+def infer_algorithm_from_config(config_path: Path) -> str:
+    """Return the agent class name configured in the gin file."""
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    # Import inside the function to avoid heavy imports at module load time.
+    import rl_research.main  # registers gin configurables for run_single_seed and agents
+
+    gin.clear_config()
+    gin.parse_config_files_and_bindings(
+        [str(config_path)],
+        bindings=None,
+        skip_unknown=True,
+    )
+    run_bindings = gin.get_bindings("run_single_seed")
+    agent_cls = run_bindings.get("agent_cls")
+    gin.clear_config()
+
+    if agent_cls is None:
+        raise ValueError(
+            f"run_single_seed.agent_cls not set in config {config_path}"
+        )
+
+    return getattr(agent_cls, "__name__", str(agent_cls))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Submit sbatch arrays for sampled hyperparameter combos."
-    )
-    parser.add_argument(
-        "--algorithm",
-        required=True,
-        help="Agent class name used in gin bindings (e.g., OptimisticQLearningAgent).",
     )
     parser.add_argument(
         "--config",
@@ -161,7 +184,7 @@ def main() -> None:
     parser.add_argument(
         "--rng-seed",
         type=int,
-        default=1,
+        default=0,
         help="Random seed for reproducible sampling.",
     )
     parser.add_argument(
@@ -195,12 +218,21 @@ def main() -> None:
     else:
         space = DEFAULT_SPACE
 
+    algorithm = infer_algorithm_from_config(Path(args.config))
+    if algorithm not in space:
+        raise KeyError(
+            f"Algorithm {algorithm} not in search space keys {list(space.keys())}"
+        )
+
     if args.seeds < 1:
         raise ValueError("--seeds must be >= 1")
 
-    combos = sample_bindings(space, args.algorithm, args.samples, rng)
+    combos = sample_bindings(space, algorithm, args.samples, rng)
 
-    print(f"# Submitting {len(combos)} combos with {args.seeds} seeds each")
+    print(
+        f"# Submitting {len(combos)} combos for {algorithm} with "
+        f"{args.seeds} seeds each"
+    )
     for idx, combo in enumerate(combos):
         submit_combo(
             combo_idx=idx,
