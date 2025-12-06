@@ -230,3 +230,7 @@ class MCTSAgent:
         
         loss = jnp.array(0.0)
         return new_state, loss
+
+    def bootstrap_value(self, state: MCTSState, next_observation: jnp.ndarray) -> float:
+        # defined only to keep API compatibility
+        return 0.0
