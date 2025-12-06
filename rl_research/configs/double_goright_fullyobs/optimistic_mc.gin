@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "test_opt_qlearning"
+setup_mlflow.experiment_name = "double_goright_fullyobs"
 setup_mlflow.experiment_group = "optimistic_mc_buffer"
 
 run_single_seed.agent_cls = @OptimisticMonteCarloAgent
