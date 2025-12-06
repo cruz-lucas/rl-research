@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import argparse
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence
+from typing import Annotated, List, Literal, Sequence
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -12,65 +12,65 @@ from matplotlib.widgets import Slider
 import mlflow
 from mlflow.tracking import MlflowClient
 import numpy as np
+import tyro
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Plot tabular agent Q-values recorded as MLflow artifacts."
-    )
-    parser.add_argument(
-        "--experiment",
-        required=True,
-        help="Name of the MLflow experiment containing the run.",
-    )
-    parser.add_argument(
-        "--parent-run",
-        required=True,
-        help="Display name of the parent (non-nested) run.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=0,
-        help="Seed index to visualise (default: 0).",
-    )
-    parser.add_argument(
-        "--state-shape",
-        type=int,
-        nargs="+",
-        default=[21, 3, 3, 2, 2],
-        help="Reshape for the state index prior to plotting (default: 21 3 2 2).",
-    )
-    parser.add_argument(
-        "--tracking-uri",
-        default="sqlite:///mlruns.db",
-        help="Override the MLflow tracking URI (defaults to local ./mlruns).",
-    )
-    parser.add_argument(
-        "--artifact-path",
-        default="artifacts/agent_states.npz",
-        help="Relative artifact path for agent states (default: artifacts/agent_states.npz).",
-    )
-    parser.add_argument("--metric", choices=["q_values", "sa_counts", "behavior_q_values"], default="q_values", help="Which agent state tensor to visualise (default: q_values).")
-    parser.add_argument("--start-episode", type=int, default=0, help="Episode index to show on startup (default: 0).")
-    parser.add_argument("--m", type=int, default=None, help="Number of visits to consider state-action known.")
-    parser.add_argument("--save-pdf", help="Optional path to export every episode as a PDF slideshow.")
-    parser.add_argument("--no-gui", action="store_true", help="Skip the interactive window (useful when only exporting).")
-    parser.add_argument(
-        "--action-labels",
-        help="Comma-separated action labels (default uses action indices).",
-    )
-    parser.add_argument(
-        "--dimension-labels",
-        help="Comma-separated labels for each state dimension (default Dim 0, Dim 1, ...).",
-    )
-    parser.add_argument(
-        "--max-runs",
-        type=int,
-        default=2000,
-        help="Maximum number of runs to inspect when resolving the parent run.",
-    )
-    return parser.parse_args()
+@dataclass
+class Args:
+    """Plot tabular agent metrics recorded as MLflow artifacts."""
+
+    experiment: Annotated[
+        str, tyro.conf.arg(help="Name of the MLflow experiment containing the run.")
+    ]
+    parent_run: Annotated[
+        str, tyro.conf.arg(help="Display name of the parent (non-nested) run.")
+    ]
+    seed: Annotated[int, tyro.conf.arg(help="Seed index to visualise.")] = 0
+    state_shape: Annotated[
+        tuple[int, ...],
+        tyro.conf.arg(
+            help="Reshape for the state index prior to plotting (e.g., 21 3 2 2)."
+        ),
+    ] = (21, 3, 2, 2)
+    tracking_uri: Annotated[
+        str, tyro.conf.arg(help="Override the MLflow tracking URI.")
+    ] = "sqlite:///mlruns.db"
+    artifact_path: Annotated[
+        str,
+        tyro.conf.arg(help="Relative artifact path for agent states."),
+    ] = "artifacts/agent_states.npz"
+    metric: Annotated[
+        Literal["q_values", "sa_counts", "behavior_q_values"],
+        tyro.conf.arg(help="Which agent state tensor to visualise."),
+    ] = "q_values"
+    start_episode: Annotated[
+        int, tyro.conf.arg(help="Episode index to show on startup.")
+    ] = 0
+    m: Annotated[
+        int | None, tyro.conf.arg(help="Number of visits to consider state-action known.")
+    ] = None
+    save_pdf: Annotated[
+        Path | None, tyro.conf.arg(help="Export every episode as a PDF slideshow.")
+    ] = None
+    no_gui: Annotated[
+        bool, tyro.conf.arg(help="Skip the interactive window (useful when exporting).")
+    ] = False
+    action_labels: Annotated[
+        str | None,
+        tyro.conf.arg(help="Comma-separated action labels (default uses indices)."),
+    ] = None
+    dimension_labels: Annotated[
+        str | None,
+        tyro.conf.arg(
+            help="Comma-separated labels for each state dimension (default Dim 0, ...)."
+        ),
+    ] = None
+    max_runs: Annotated[
+        int,
+        tyro.conf.arg(
+            help="Maximum number of runs to inspect when resolving the parent run."
+        ),
+    ] = 2000
 
 
 def _escape_for_filter(value: str) -> str:
@@ -391,7 +391,7 @@ def _interactive_plot(
 
 
 def main() -> None:
-    args = _parse_args()
+    args = tyro.cli(Args)
 
     state_shape = tuple(args.state_shape)
     if not state_shape:
@@ -460,8 +460,8 @@ def main() -> None:
         vmax = float(np.max(selected))
         cmap_name = "viridis"
 
-    if args.save_pdf:
-        out_path = Path(args.save_pdf)
+    if args.save_pdf is not None:
+        out_path = args.save_pdf
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with PdfPages(out_path) as pdf:
             for episode_idx in range(num_episodes):

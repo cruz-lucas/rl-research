@@ -7,13 +7,15 @@ scripts/job.sh, which forwards them to rl_research.main.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import math
 import random
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Annotated, Dict, List, Sequence
+
+import tyro
 
 import gin
 
@@ -51,6 +53,40 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "run_loop.warmup_steps": {"type": "int", "min": 0, "max": 2500},
     },
 }
+
+
+@dataclass
+class Args:
+    """Arguments for submitting sbatch arrays for sampled hyperparameter combos."""
+
+    config: Annotated[
+        Path, tyro.conf.arg(help="Path to the gin config file passed to rl_research.main.")
+    ]
+    samples: Annotated[
+        int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
+    ] = 100
+    seeds: Annotated[
+        int, tyro.conf.arg(help="Number of seeds per combination (drives --array size).")
+    ] = 10
+    space_file: Annotated[
+        Path | None,
+        tyro.conf.arg(help="Optional JSON file defining the search space. Falls back to defaults."),
+    ] = None
+    rng_seed: Annotated[
+        int, tyro.conf.arg(help="Random seed for reproducible sampling.")
+    ] = 0
+    group_prefix: Annotated[
+        str, tyro.conf.arg(help="Prefix for MLflow experiment_group binding.")
+    ] = "sweep"
+    job_script: Annotated[
+        Path, tyro.conf.arg(help="Path to the sbatch script that calls rl_research.main.")
+    ] = Path("scripts/job.sh")
+    sbatch_opt: Annotated[
+        List[str], tyro.conf.arg(append=True, help="Extra sbatch options (repeatable).")
+    ] = field(default_factory=list)
+    dry_run: Annotated[
+        bool, tyro.conf.arg(help="Print sbatch commands without submitting.")
+    ] = False
 
 
 def _format_value(val: Any) -> str:
@@ -108,9 +144,9 @@ def submit_combo(
     combo_idx: int,
     bindings: Sequence[str],
     seeds: int,
-    config: str,
+    config: Path,
     group_prefix: str,
-    job_script: str,
+    job_script: Path,
     sbatch_opts: Sequence[str],
     dry_run: bool,
 ) -> None:
@@ -118,8 +154,8 @@ def submit_combo(
     array_flag = f"--array=0-{seeds-1}"
     cmd: List[str] = ["sbatch", array_flag]
     cmd.extend(sbatch_opts)
-    cmd.append(job_script)
-    cmd.append(config)
+    cmd.append(str(job_script))
+    cmd.append(str(config))
     cmd.extend(bindings)
     cmd.append(f"setup_mlflow.experiment_group={_format_value(group_name)}")
 
@@ -154,62 +190,7 @@ def infer_algorithm_from_config(config_path: Path) -> str:
     return getattr(agent_cls, "__name__", str(agent_cls))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Submit sbatch arrays for sampled hyperparameter combos."
-    )
-    parser.add_argument(
-        "--config",
-        required=True,
-        help="Path to the gin config file passed to rl_research.main.",
-    )
-    parser.add_argument(
-        "--samples",
-        type=int,
-        default=100,
-        help="Number of hyperparameter combinations to sample.",
-    )
-    parser.add_argument(
-        "--seeds",
-        type=int,
-        default=10,
-        help="Number of seeds per combination (drives --array size).",
-    )
-    parser.add_argument(
-        "--space-file",
-        type=Path,
-        default=None,
-        help="Optional JSON file defining the search space. Falls back to built-in defaults.",
-    )
-    parser.add_argument(
-        "--rng-seed",
-        type=int,
-        default=0,
-        help="Random seed for reproducible sampling.",
-    )
-    parser.add_argument(
-        "--group-prefix",
-        default="sweep",
-        help="Prefix for MLflow experiment_group binding.",
-    )
-    parser.add_argument(
-        "--job-script",
-        default="scripts/job.sh",
-        help="Path to the sbatch script that calls rl_research.main.",
-    )
-    parser.add_argument(
-        "--sbatch-opt",
-        action="append",
-        default=[],
-        help="Extra sbatch options (e.g., --partition=gpu). Can be repeated.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print sbatch commands without submitting.",
-    )
-    args = parser.parse_args()
-
+def main(args: Args) -> None:
     rng = random.Random(args.rng_seed)
 
     if args.space_file:
@@ -218,7 +199,7 @@ def main() -> None:
     else:
         space = DEFAULT_SPACE
 
-    algorithm = infer_algorithm_from_config(Path(args.config))
+    algorithm = infer_algorithm_from_config(args.config)
     if algorithm not in space:
         raise KeyError(
             f"Algorithm {algorithm} not in search space keys {list(space.keys())}"
@@ -247,4 +228,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(tyro.cli(Args))

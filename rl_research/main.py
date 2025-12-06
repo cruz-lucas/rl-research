@@ -2,9 +2,9 @@ import os
 import jax
 import numpy as np
 import mlflow
-import argparse
 import tempfile
-from typing import Type
+from dataclasses import dataclass, field
+from typing import Annotated, Type
 from pathlib import Path
 import subprocess
 
@@ -13,6 +13,7 @@ from rl_research.experiment import run_loop, History
 from rl_research.buffers import ReplayBuffer, BaseBuffer
 from rl_research.agents import *
 from rl_research.environments import *
+import tyro
 
 
 @gin.configurable
@@ -109,23 +110,33 @@ def run_single_seed(seed: int, buffer_cls: Type[BaseBuffer] = ReplayBuffer, env_
     history = jax.tree_util.tree_map(np.array, history)
 
     return history, agent_states
-        
-        
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run RL experiment")
-    parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
-    parser.add_argument("--seed", type=int, default=None, help="Random seed (will use SLURM_ARRAY_TASK_ID if not provided)")
-    parser.add_argument(
-        "--binding",
-        action="append",
-        default=[],
-        help="Optional gin binding overrides (can be passed multiple times). Example: --binding OptimisticQLearningAgent.step_size=0.05",
-    )
-    args = parser.parse_args()
-    
-    gin.parse_config_files_and_bindings([args.config], args.binding)
+@dataclass
+class Args:
+    """Arguments for running an RL experiment."""
+
+    config: Annotated[
+        Path, tyro.conf.arg(help="Path to the gin config file.")
+    ]
+    seed: Annotated[
+        int | None,
+        tyro.conf.arg(help="Random seed (uses SLURM_ARRAY_TASK_ID when omitted)."),
+    ] = None
+    binding: Annotated[
+        list[str],
+        tyro.conf.arg(
+            append=True,
+            help=(
+                "Optional gin binding overrides (repeatable). "
+                "Example: --binding OptimisticQLearningAgent.step_size=0.05"
+            ),
+        ),
+    ] = field(default_factory=list)
+
+
+def main(args: Args) -> None:
+    gin.parse_config_files_and_bindings([str(args.config)], args.binding)
     
     if args.seed is None:
         seed = int(os.getenv("SLURM_ARRAY_TASK_ID", "0"))
@@ -171,4 +182,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(tyro.cli(Args))
