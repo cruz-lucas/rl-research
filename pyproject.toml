@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rl-research"
 version = "0.1.0"
-description = "Hydra-driven tabular reinforcement-learning research sandbox with JAX agents and MLflow logging."
+description = "Tabular reinforcement-learning research sandbox with JAX agents and MLflow logging."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -21,21 +21,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "ruff>=0.2.0",
+pygame = [
+    "pygame>=2.6.1",
 ]
 
-[tool.black]
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["rl_research", "scripts"]
+extend-exclude = ["outputs", "tmp", "mlruns_db_store", "mlruns_sqlite_artifacts"]
 
-[tool.isort]
-atomic = true
-profile = "black"
-src_paths = ["rl_research/"]
-extra_standard_library = ["typing_extensions"]
-indent = 4
-lines_after_imports = 2
-multi_line_output = 3
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+known-first-party = ["rl_research"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [tool.setuptools]
 py-modules = ["rl_research"]
@@ -53,10 +60,10 @@ enableTypeIgnoreComments = true
 
 [tool.uv.sources]
 gymnasium = { git = "https://github.com/cruz-lucas/Gymnasium.git" }
-mlflow-export-import = { git = "https://github.com/mlflow/mlflow-export-import/" }
 
 [dependency-groups]
 dev = [
     "ipykernel>=7.1.0",
-    "mlflow-export-import",
+    "pytest>=9.0.1",
+    "ruff>=0.14.5",
 ]
