@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Annotated, List, Literal, Sequence
 
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-from matplotlib.widgets import Slider
 import mlflow
-from mlflow.tracking import MlflowClient
 import numpy as np
 import tyro
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.widgets import Slider
+from mlflow.tracking import MlflowClient
 
 
 @dataclass
@@ -47,7 +47,8 @@ class Args:
         int, tyro.conf.arg(help="Episode index to show on startup.")
     ] = 0
     m: Annotated[
-        int | None, tyro.conf.arg(help="Number of visits to consider state-action known.")
+        int | None,
+        tyro.conf.arg(help="Number of visits to consider state-action known."),
     ] = None
     save_pdf: Annotated[
         Path | None, tyro.conf.arg(help="Export every episode as a PDF slideshow.")
@@ -99,10 +100,12 @@ def _resolve_parent_run(
         raise RuntimeError(
             f"No runs named '{parent_run_name}' found in experiment id {experiment_id}."
         )
+
     def is_parent(run) -> bool:
         parent_tag = run.data.tags.get("parent")
         mlflow_parent = run.data.tags.get("mlflow.parentRunId")
         return not parent_tag and not mlflow_parent
+
     for run in runs:
         if is_parent(run):
             return run
@@ -148,9 +151,7 @@ def _parse_labels(raw: str | None, expected: int, prefix: str) -> List[str]:
     return labels
 
 
-def _parse_dimension_labels(
-    raw: str | None, state_shape: Sequence[int]
-) -> List[str]:
+def _parse_dimension_labels(raw: str | None, state_shape: Sequence[int]) -> List[str]:
     if raw is None:
         labels: List[str] = []
         for idx in range(len(state_shape)):
@@ -192,9 +193,7 @@ def _other_dimension_combos(
         if all_binary:
             combo_labels.append("".join(str(int(val)) for val in combo))
         else:
-            parts = [
-                f"{other_names[i]}={int(value)}" for i, value in enumerate(combo)
-            ]
+            parts = [f"{other_names[i]}={int(value)}" for i, value in enumerate(combo)]
             combo_labels.append(", ".join(parts))
     return combos, combo_labels
 
@@ -211,7 +210,9 @@ def _length_grid_values(
     state_shape: Sequence[int],
     combos: Sequence[tuple[int, ...]],
 ) -> np.ndarray:
-    reshaped = np.reshape(metric_values, tuple(state_shape) + (metric_values.shape[-1],))
+    reshaped = np.reshape(
+        metric_values, tuple(state_shape) + (metric_values.shape[-1],)
+    )
     length_dim = state_shape[0]
     status_dim = state_shape[1] if len(state_shape) > 1 else 1
     num_actions = metric_values.shape[-1]
@@ -291,7 +292,9 @@ def _create_length_grid_figure(
                 tick_positions = (
                     np.arange(length_dim)
                     if length_dim <= 25
-                    else np.linspace(0, length_dim - 1, num=min(10, length_dim), dtype=int)
+                    else np.linspace(
+                        0, length_dim - 1, num=min(10, length_dim), dtype=int
+                    )
                 )
                 ax.set_xticks(tick_positions)
                 ax.set_xlabel(length_label)
@@ -319,7 +322,7 @@ def _build_static_figure(
     vmax: float,
     suptitle: str,
     colorbar_label: str,
-    cmap_name: str
+    cmap_name: str,
 ) -> plt.Figure:
     grid = _length_grid_values(metric_values, state_shape, combos)
     fig, _, _ = _create_length_grid_figure(
@@ -332,7 +335,7 @@ def _build_static_figure(
         vmax,
         f"{suptitle} — episode {episode_index}",
         colorbar_label,
-        cmap_name=cmap_name
+        cmap_name=cmap_name,
     )
     return fig
 
@@ -350,7 +353,7 @@ def _interactive_plot(
     suptitle: str,
     start_episode: int,
     colorbar_label: str,
-    cmap_name: str
+    cmap_name: str,
 ) -> None:
     num_episodes = metric_series.shape[0]
     grid = _length_grid_values(metric_series[start_episode], state_shape, combos)
@@ -364,7 +367,7 @@ def _interactive_plot(
         vmax,
         f"{suptitle} — episode {start_episode}",
         colorbar_label,
-        cmap_name
+        cmap_name,
     )
     fig.subplots_adjust(bottom=0.24, right=0.86)
 
@@ -436,15 +439,19 @@ def main() -> None:
     length_label = dimension_labels[0]
 
     label = f"{args.experiment} · {args.parent_run} · seed {args.seed}"
-    
+
     if args.metric == "q_values":
-        largest = np.maximum(np.abs(float(np.max(selected))), np.abs(float(np.min(selected))))
+        largest = np.maximum(
+            np.abs(float(np.max(selected))), np.abs(float(np.min(selected)))
+        )
         vmin = -largest
         vmax = largest
         colorbar_label = "Q-value"
         cmap_name = "RdBu"
     elif args.metric == "behavior_q_values":
-        largest = np.maximum(np.abs(float(np.max(selected))), np.abs(float(np.min(selected))))
+        largest = np.maximum(
+            np.abs(float(np.max(selected))), np.abs(float(np.min(selected)))
+        )
         vmin = -largest
         vmax = largest
         colorbar_label = "Behavior Q-value"
@@ -478,7 +485,7 @@ def main() -> None:
                     vmax,
                     label,
                     colorbar_label,
-                    cmap_name=cmap_name
+                    cmap_name=cmap_name,
                 )
                 pdf.savefig(fig)
                 plt.close(fig)
@@ -498,7 +505,7 @@ def main() -> None:
             label,
             start_episode,
             colorbar_label,
-            cmap_name=cmap_name
+            cmap_name=cmap_name,
         )
 
 

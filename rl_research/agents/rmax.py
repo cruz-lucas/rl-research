@@ -1,23 +1,27 @@
+import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
+
 from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
-import gin
+
 
 @struct.dataclass
 class RMaxState:
     """State for R-Max agent."""
+
     q_table: jnp.ndarray
     transition_counts: jnp.ndarray
     reward_sums: jnp.ndarray
     visit_counts: jnp.ndarray
     step: int
 
+
 @gin.configurable
 class RMaxAgent:
     """R-Max agent with known model."""
-    
+
     def __init__(
         self,
         num_states: int,
@@ -34,61 +38,60 @@ class RMaxAgent:
         self.known_threshold = known_threshold
         self.convergence_threshold = convergence_threshold
         self.vi_iterations = int(
-            jnp.ceil(jnp.log(1 / (convergence_threshold * (1 - discount))) / (1 - discount))
+            jnp.ceil(
+                jnp.log(1 / (convergence_threshold * (1 - discount))) / (1 - discount)
+            )
         )
         self.optimistic_value = r_max / (1 - discount)
-    
+
     def initial_state(self) -> RMaxState:
         """Initialize with optimistic Q-values."""
         return RMaxState(
-            q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
-            transition_counts=jnp.zeros((self.num_states, self.num_actions, self.num_states)),
+            q_table=jnp.full(
+                (self.num_states, self.num_actions), self.optimistic_value
+            ),
+            transition_counts=jnp.zeros(
+                (self.num_states, self.num_actions, self.num_states)
+            ),
             reward_sums=jnp.zeros((self.num_states, self.num_actions)),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
-            step=0
+            step=0,
         )
-    
+
     def select_action(
-        self,
-        state: RMaxState,
-        obs: jnp.ndarray,
-        key: jax.Array,
-        is_training: bool
+        self, state: RMaxState, obs: jnp.ndarray, key: jax.Array, is_training: bool
     ) -> jnp.ndarray:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
-                
+
         return _select_greedy(q_values, key)
-    
+
     def _value_iteration_step(self, q_table, is_known, rewards, transitions):
         """Single step of value iteration."""
         v_table = jnp.max(q_table, axis=1)
-        
+
         def compute_q(s, a):
             expected_next_value = jnp.sum(transitions[s, a] * v_table)
             q_val = rewards[s, a] + self.discount * expected_next_value
-            
+
             q_val = jnp.where(is_known[s, a], q_val, self.optimistic_value)
             return q_val
-        
+
         new_q = jax.vmap(
             lambda s: jax.vmap(lambda a: compute_q(s, a))(jnp.arange(self.num_actions))
         )(jnp.arange(self.num_states))
-        
+
         return new_q
-    
+
     def update(
-        self,
-        state: RMaxState,
-        batch: Transition,
-        batch_mask: jnp.ndarray | None = None
+        self, state: RMaxState, batch: Transition, batch_mask: jnp.ndarray | None = None
     ) -> tuple[RMaxState, jax.Array]:
         """Update model and recompute Q-values."""
         batch_size = batch.observation.shape[0]
         if batch_mask is None:
             batch_mask = jnp.ones((batch_size,), dtype=bool)
         batch_mask = batch_mask.astype(jnp.bool_)
-        
+
         new_transition_counts = state.transition_counts
         new_reward_sums = state.reward_sums
         new_visit_counts = state.visit_counts
@@ -101,16 +104,25 @@ class RMaxAgent:
             r = batch.reward[i]
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
-            
-            valid_unknown = jnp.logical_and(batch_mask[i], vis_counts[s, a] < self.known_threshold)
-            inc = jnp.where(jnp.logical_and(valid_unknown, jnp.logical_not(terminal)), 1, 0)
+
+            valid_unknown = jnp.logical_and(
+                batch_mask[i], vis_counts[s, a] < self.known_threshold
+            )
+            inc = jnp.where(
+                jnp.logical_and(valid_unknown, jnp.logical_not(terminal)), 1, 0
+            )
 
             trans_counts = trans_counts.at[s, a, s_next].add(inc)
             rew_sums = rew_sums.at[s, a].add(r * inc)
             vis_counts = vis_counts.at[s, a].add(inc)
             return trans_counts, rew_sums, vis_counts
 
-        new_transition_counts, new_reward_sums, new_visit_counts = jax.lax.fori_loop(0, batch_size, update_body, (new_transition_counts, new_reward_sums, new_visit_counts))
+        new_transition_counts, new_reward_sums, new_visit_counts = jax.lax.fori_loop(
+            0,
+            batch_size,
+            update_body,
+            (new_transition_counts, new_reward_sums, new_visit_counts),
+        )
         q_table = state.q_table
         new_is_known = new_visit_counts >= self.known_threshold
         newly_known = jnp.logical_and(jnp.logical_not(prev_is_known), new_is_known)
@@ -123,7 +135,9 @@ class RMaxAgent:
 
             def body(_, carry):
                 q_prev, converged = carry
-                new_q = self._value_iteration_step(q_prev, new_is_known, avg_rewards, transition_probs)
+                new_q = self._value_iteration_step(
+                    q_prev, new_is_known, avg_rewards, transition_probs
+                )
                 max_change = jnp.max(jnp.abs(new_q - q_prev))
                 converged_now = max_change < self.convergence_threshold
                 converged = jnp.logical_or(converged, converged_now)
@@ -133,19 +147,23 @@ class RMaxAgent:
             q_final, _ = jax.lax.fori_loop(0, self.vi_iterations, body, (q_init, False))
             return q_final
 
-        q_table = jax.lax.cond(newly_known_any, run_value_iteration, lambda q: q, q_table)
-        
+        q_table = jax.lax.cond(
+            newly_known_any, run_value_iteration, lambda q: q, q_table
+        )
+
         new_state = state.replace(
             q_table=q_table,
             transition_counts=new_transition_counts,
             reward_sums=new_reward_sums,
             visit_counts=new_visit_counts,
-            step=state.step + jnp.sum(batch_mask)
+            step=state.step + jnp.sum(batch_mask),
         )
-        
+
         loss = jnp.mean(jnp.abs(q_table - state.q_table))
         return new_state, loss
 
-    def bootstrap_value(self, state: RMaxState, next_observation: jnp.ndarray) -> jax.Array:
+    def bootstrap_value(
+        self, state: RMaxState, next_observation: jnp.ndarray
+    ) -> jax.Array:
         s_next = next_observation.astype(jnp.int32).squeeze()
         return jnp.max(state.q_table[s_next])

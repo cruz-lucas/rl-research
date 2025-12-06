@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-import tempfile
 
+import tyro
 from mlflow.entities import ViewType
 from mlflow.tracking import MlflowClient
-import tyro
 
 
 @dataclass
@@ -68,7 +68,10 @@ def migrate_single_run(
 
 
 def copy_artifacts_between_runs(
-    src_client: MlflowClient, dest_client: MlflowClient, src_run_id: str, dest_run_id: str
+    src_client: MlflowClient,
+    dest_client: MlflowClient,
+    src_run_id: str,
+    dest_run_id: str,
 ) -> None:
     with tempfile.TemporaryDirectory(prefix="mlflow_migrate_") as tmpdir:
         local_artifact_path = src_client.download_artifacts(
@@ -132,9 +135,7 @@ def migrate(args: Args) -> None:
     print(f"Destination artifact root: {dest_artifact_root_uri}")
 
     print("Listing source experiments...")
-    src_experiments = src_client.search_experiments(
-        view_type=ViewType.ACTIVE_ONLY
-    )
+    src_experiments = src_client.search_experiments(view_type=ViewType.ACTIVE_ONLY)
 
     for src_exp in src_experiments:
         print(f"\nExperiment: '{src_exp.name}' (id={src_exp.experiment_id})")

@@ -1,14 +1,16 @@
+import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
-from rl_research.policies import _select_greedy
+
 from rl_research.buffers import Transition
-import gin
+from rl_research.policies import _select_greedy
 
 
 @struct.dataclass
 class OptimisticQLearningState:
     """State for optimistic Q-learning agent."""
+
     q_table: jnp.ndarray
     visit_counts: jnp.ndarray
     step: int
@@ -38,7 +40,9 @@ class OptimisticMonteCarloAgent:
     def initial_state(self) -> OptimisticQLearningState:
         """Initialize with optimistic Q-values and zero counts."""
         return OptimisticQLearningState(
-            q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
+            q_table=jnp.full(
+                (self.num_states, self.num_actions), self.optimistic_value
+            ),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
         )
@@ -61,7 +65,7 @@ class OptimisticMonteCarloAgent:
     ) -> tuple[OptimisticQLearningState, jax.Array]:
         """Single-step optimistic updates using Monte Carlo returns."""
         batch_size = batch.observation.shape[0]
-        
+
         def update_single(carry, i):
             q_table, visit_counts = carry
 
@@ -84,9 +88,7 @@ class OptimisticMonteCarloAgent:
             return (q_table.at[s, a].set(new_q), visit_counts), loss_val
 
         (new_q_table, new_visit_counts), losses = jax.lax.scan(
-            update_single,
-            (state.q_table, state.visit_counts),
-            jnp.arange(batch_size)
+            update_single, (state.q_table, state.visit_counts), jnp.arange(batch_size)
         )
 
         mean_loss = jnp.sum(losses) / batch_size
@@ -94,11 +96,13 @@ class OptimisticMonteCarloAgent:
         new_state = state.replace(
             q_table=new_q_table,
             visit_counts=new_visit_counts,
-            step=state.step + jnp.sum(batch_size)
+            step=state.step + jnp.sum(batch_size),
         )
-        
+
         return new_state, mean_loss
 
-    def bootstrap_value(self, state: OptimisticQLearningState, next_observation: jnp.ndarray) -> jax.Array:
+    def bootstrap_value(
+        self, state: OptimisticQLearningState, next_observation: jnp.ndarray
+    ) -> jax.Array:
         s_next = next_observation.astype(jnp.int32).squeeze()
         return jnp.max(state.q_table[s_next])

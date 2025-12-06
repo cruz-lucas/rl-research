@@ -5,19 +5,20 @@ Sample hyperparameters and submit one sbatch array per combination.
 Each array runs over seeds (0..seeds-1); bindings and config are forwarded to
 scripts/job.sh, which forwards them to rl_research.main.
 """
+
 from __future__ import annotations
 
 import json
 import math
 import random
 import subprocess
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Any, Annotated, Dict, List, Sequence
-
-import tyro
+from pathlib import Path
+from typing import Annotated, Any, Dict, List, Sequence
 
 import gin
+import tyro
+
 
 # Default space is a starting point; override with --space-file.
 DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
@@ -60,17 +61,21 @@ class Args:
     """Arguments for submitting sbatch arrays for sampled hyperparameter combos."""
 
     config: Annotated[
-        Path, tyro.conf.arg(help="Path to the gin config file passed to rl_research.main.")
+        Path,
+        tyro.conf.arg(help="Path to the gin config file passed to rl_research.main."),
     ]
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
     ] = 100
     seeds: Annotated[
-        int, tyro.conf.arg(help="Number of seeds per combination (drives --array size).")
+        int,
+        tyro.conf.arg(help="Number of seeds per combination (drives --array size)."),
     ] = 10
     space_file: Annotated[
         Path | None,
-        tyro.conf.arg(help="Optional JSON file defining the search space. Falls back to defaults."),
+        tyro.conf.arg(
+            help="Optional JSON file defining the search space. Falls back to defaults."
+        ),
     ] = None
     rng_seed: Annotated[
         int, tyro.conf.arg(help="Random seed for reproducible sampling.")
@@ -79,7 +84,8 @@ class Args:
         str, tyro.conf.arg(help="Prefix for MLflow experiment_group binding.")
     ] = "sweep"
     job_script: Annotated[
-        Path, tyro.conf.arg(help="Path to the sbatch script that calls rl_research.main.")
+        Path,
+        tyro.conf.arg(help="Path to the sbatch script that calls rl_research.main."),
     ] = Path("scripts/job.sh")
     sbatch_opt: Annotated[
         List[str], tyro.conf.arg(append=True, help="Extra sbatch options (repeatable).")
@@ -151,7 +157,7 @@ def submit_combo(
     dry_run: bool,
 ) -> None:
     group_name = f"{group_prefix}_c{combo_idx}"
-    array_flag = f"--array=0-{seeds-1}"
+    array_flag = f"--array=0-{seeds - 1}"
     cmd: List[str] = ["sbatch", array_flag]
     cmd.extend(sbatch_opts)
     cmd.append(str(job_script))
@@ -170,7 +176,6 @@ def infer_algorithm_from_config(config_path: Path) -> str:
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     # Import inside the function to avoid heavy imports at module load time.
-    import rl_research.main  # registers gin configurables for run_single_seed and agents
 
     gin.clear_config()
     gin.parse_config_files_and_bindings(
@@ -183,9 +188,7 @@ def infer_algorithm_from_config(config_path: Path) -> str:
     gin.clear_config()
 
     if agent_cls is None:
-        raise ValueError(
-            f"run_single_seed.agent_cls not set in config {config_path}"
-        )
+        raise ValueError(f"run_single_seed.agent_cls not set in config {config_path}")
 
     return getattr(agent_cls, "__name__", str(agent_cls))
 

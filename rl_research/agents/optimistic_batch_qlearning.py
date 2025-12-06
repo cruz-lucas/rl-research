@@ -1,14 +1,16 @@
+import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
-from rl_research.policies import _select_greedy
+
 from rl_research.buffers import Transition
-import gin
+from rl_research.policies import _select_greedy
 
 
 @struct.dataclass
 class OptimisticQLearningState:
     """State for optimistic Q-learning agent."""
+
     q_table: jnp.ndarray
     visit_counts: jnp.ndarray
     step: int
@@ -17,7 +19,7 @@ class OptimisticQLearningState:
 @gin.configurable
 class OptimisticQLearningAgent:
     """Model-free R-Max variant using optimistic initialization."""
-    
+
     def __init__(
         self,
         num_states: int,
@@ -34,27 +36,29 @@ class OptimisticQLearningAgent:
         self.step_size = step_size
         self.known_threshold = known_threshold
         self.optimistic_value = r_max / (1 - discount)
-    
+
     def initial_state(self) -> OptimisticQLearningState:
         """Initialize with optimistic Q-values."""
         return OptimisticQLearningState(
-            q_table=jnp.full((self.num_states, self.num_actions), self.optimistic_value),
+            q_table=jnp.full(
+                (self.num_states, self.num_actions), self.optimistic_value
+            ),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
         )
-    
+
     def select_action(
         self,
         state: OptimisticQLearningState,
         obs: jnp.ndarray,
         key: jax.Array,
-        is_training: bool
+        is_training: bool,
     ) -> jnp.ndarray:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
-                
+
         return _select_greedy(q_values, key)
-    
+
     def update(
         self,
         state: OptimisticQLearningState,
@@ -62,7 +66,7 @@ class OptimisticQLearningAgent:
     ) -> tuple[OptimisticQLearningState, jax.Array]:
         """Single-step optimistic Q-learning updates for each transition."""
         batch_size = batch.observation.shape[0]
-        
+
         def update_single(carry, i):
             q_table, visit_counts = carry
 
@@ -76,15 +80,17 @@ class OptimisticQLearningAgent:
             is_unknown = visit_counts[s, a] < self.known_threshold
             is_next_unknown = jnp.logical_and(
                 jnp.logical_not(terminal),
-                jnp.any(visit_counts[s_next] < self.known_threshold)
+                jnp.any(visit_counts[s_next] < self.known_threshold),
             )
 
             q_current = q_table[s, a]
             q_next_max = jax.lax.cond(
                 terminal,
                 lambda _: 0.0,
-                lambda _: jnp.where(is_next_unknown, self.optimistic_value, jnp.max(q_table[s_next])),
-                operand=None
+                lambda _: jnp.where(
+                    is_next_unknown, self.optimistic_value, jnp.max(q_table[s_next])
+                ),
+                operand=None,
             )
             target = r + self.discount * q_next_max
 
@@ -96,9 +102,7 @@ class OptimisticQLearningAgent:
             return (q_table.at[s, a].set(new_q), visit_counts), loss_val
 
         (new_q_table, new_visit_counts), losses = jax.lax.scan(
-            update_single,
-            (state.q_table, state.visit_counts),
-            jnp.arange(batch_size)
+            update_single, (state.q_table, state.visit_counts), jnp.arange(batch_size)
         )
 
         mean_loss = jnp.sum(losses) / batch_size
@@ -106,11 +110,13 @@ class OptimisticQLearningAgent:
         new_state = state.replace(
             q_table=new_q_table,
             visit_counts=new_visit_counts,
-            step=state.step + jnp.sum(batch_size)
+            step=state.step + jnp.sum(batch_size),
         )
-        
+
         return new_state, mean_loss
 
-    def bootstrap_value(self, state: OptimisticQLearningState, next_observation: jnp.ndarray) -> jax.Array:
+    def bootstrap_value(
+        self, state: OptimisticQLearningState, next_observation: jnp.ndarray
+    ) -> jax.Array:
         s_next = next_observation.astype(jnp.int32).squeeze()
         return jnp.max(state.q_table[s_next])
