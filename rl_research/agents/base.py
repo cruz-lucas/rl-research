@@ -39,3 +39,11 @@ class BaseAgent:
         batch_mask: jnp.ndarray | None = None
     ) -> tuple[AgentState, jax.Array]:
         ...
+
+    @abstractmethod
+    def bootstrap_value(
+        self,
+        state: AgentState,
+        next_observation: jnp.ndarray
+    ) -> jax.Array:
+        ...

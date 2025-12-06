@@ -4,8 +4,6 @@ from flax import struct
 from typing import NamedTuple, Protocol
 import gin
 
-#TODO: include the terminal signal into the buffers
-
 class Transition(NamedTuple):
     """Single transition tuple."""
     observation: jnp.ndarray
@@ -13,7 +11,7 @@ class Transition(NamedTuple):
     reward: jnp.ndarray
     discount: jnp.ndarray
     next_observation: jnp.ndarray
-    # terminal: jnp.ndarray
+    terminal: jnp.ndarray
 
 
 @struct.dataclass
@@ -24,7 +22,7 @@ class BufferState:
     rewards: jnp.ndarray
     discounts: jnp.ndarray
     next_observations: jnp.ndarray
-    # terminals: jnp.ndarray
+    terminals: jnp.ndarray
     position: int
     size: int
     
@@ -41,7 +39,7 @@ class BufferState:
         rewards = self.rewards.at[idx].set(transition.reward)
         discounts = self.discounts.at[idx].set(transition.discount)
         next_observations = self.next_observations.at[idx].set(transition.next_observation)
-        # terminals = self.terminals.at[idx].set(transition.terminal)
+        terminals = self.terminals.at[idx].set(transition.terminal)
 
         return self.replace(
             observations=observations,
@@ -49,7 +47,7 @@ class BufferState:
             rewards=rewards,
             discounts=discounts,
             next_observations=next_observations,
-            # terminals=terminals,
+            terminals=terminals,
             position=self.position + 1,
             size=jnp.minimum(self.size + 1, max_size)
         )
@@ -65,7 +63,7 @@ class BufferState:
             reward=self.rewards[indices],
             discount=self.discounts[indices],
             next_observation=self.next_observations[indices],
-            # terminal=self.terminals[indices]
+            terminal=self.terminals[indices]
         )
         return transition
 
@@ -78,12 +76,14 @@ class MonteCarloBufferState:
     returns: jnp.ndarray
     discounts: jnp.ndarray
     next_observations: jnp.ndarray
+    terminals: jnp.ndarray
     position: int
     size: int
     episode_observations: jnp.ndarray
     episode_actions: jnp.ndarray
     episode_rewards: jnp.ndarray
     episode_next_observations: jnp.ndarray
+    episode_terminals: jnp.ndarray
     episode_steps: int
     discount: float
 
@@ -109,6 +109,7 @@ class MonteCarloBufferState:
         episode_length = self.episode_rewards.shape[0]
         returns = self._compute_returns(self.episode_rewards, bootstrap_value)
         discounts = jnp.full_like(returns, self.discount)
+        episode_terminals = self.episode_terminals
 
         def body(i, state):
             idx = state.position % max_size
@@ -117,6 +118,7 @@ class MonteCarloBufferState:
             mc_returns = state.returns.at[idx].set(returns[i])
             discounts_arr = state.discounts.at[idx].set(discounts[i])
             next_obs = state.next_observations.at[idx].set(self.episode_next_observations[i])
+            terminals_arr = state.terminals.at[idx].set(episode_terminals[i])
 
             return state.replace(
                 observations=observations,
@@ -124,6 +126,7 @@ class MonteCarloBufferState:
                 returns=mc_returns,
                 discounts=discounts_arr,
                 next_observations=next_obs,
+                terminals=terminals_arr,
                 position=state.position + 1,
                 size=jnp.minimum(state.size + 1, max_size)
             )
@@ -134,12 +137,14 @@ class MonteCarloBufferState:
         zeros_like_actions = jnp.zeros_like(self.episode_actions)
         zeros_like_rewards = jnp.zeros_like(self.episode_rewards)
         zeros_like_next_obs = jnp.zeros_like(self.episode_next_observations)
+        zeros_like_terminals = jnp.zeros_like(self.episode_terminals, dtype=bool)
 
         return new_state.replace(
             episode_observations=zeros_like_obs,
             episode_actions=zeros_like_actions,
             episode_rewards=zeros_like_rewards,
             episode_next_observations=zeros_like_next_obs,
+            episode_terminals=zeros_like_terminals,
             episode_steps=0
         )
 
@@ -150,12 +155,14 @@ class MonteCarloBufferState:
         episode_actions = self.episode_actions.at[idx].set(transition.action)
         episode_rewards = self.episode_rewards.at[idx].set(transition.reward)
         episode_next_observations = self.episode_next_observations.at[idx].set(transition.next_observation)
+        episode_terminals = self.episode_terminals.at[idx].set(transition.terminal)
 
         updated_state = self.replace(
             episode_observations=episode_observations,
             episode_actions=episode_actions,
             episode_rewards=episode_rewards,
             episode_next_observations=episode_next_observations,
+            episode_terminals=episode_terminals,
             episode_steps=self.episode_steps + 1
         )
 
@@ -165,7 +172,10 @@ class MonteCarloBufferState:
         def keep_gathering(_):
             return updated_state
 
-        episode_complete = updated_state.episode_steps >= updated_state.episode_rewards.shape[0]
+        episode_complete = jnp.logical_or(
+            updated_state.episode_steps >= updated_state.episode_rewards.shape[0],
+            transition.terminal
+        )
         return jax.lax.cond(episode_complete, finalize, keep_gathering, operand=None)
 
     def sample(self, key: jax.Array, batch_size: int) -> Transition:
@@ -178,7 +188,8 @@ class MonteCarloBufferState:
             action=self.actions[indices],
             reward=self.returns[indices],
             discount=self.discounts[indices],
-            next_observation=self.next_observations[indices]
+            next_observation=self.next_observations[indices],
+            terminal=self.terminals[indices]
         )
         return transition
 
@@ -208,6 +219,7 @@ class ReplayBuffer(BaseBuffer):
             rewards=zeros(),
             discounts=zeros(),
             next_observations=zeros(),
+            terminals=jnp.zeros((self.buffer_size,), dtype=bool),
             position=0,
             size=0,
         )
@@ -230,18 +242,21 @@ class MonteCarloBuffer(BaseBuffer):
     def initial_state(self) -> MonteCarloBufferState:
         zeros = lambda: jnp.zeros((self.buffer_size,))
         episode_zeros = lambda: jnp.zeros((self.episode_length,))
+        episode_terminal_zeros = lambda: jnp.zeros((self.episode_length,), dtype=bool)
         return MonteCarloBufferState(
             observations=zeros(),
             actions=zeros(),
             returns=zeros(),
             discounts=zeros(),
             next_observations=zeros(),
+            terminals=jnp.zeros((self.buffer_size,), dtype=bool),
             position=0,
             size=0,
             episode_observations=episode_zeros(),
             episode_actions=episode_zeros(),
             episode_rewards=episode_zeros(),
             episode_next_observations=episode_zeros(),
+            episode_terminals=episode_terminal_zeros(),
             episode_steps=0,
             discount=self.discount,
         )

@@ -70,13 +70,22 @@ class OptimisticQLearningAgent:
             a = batch.action[i].astype(jnp.int32).squeeze()
             r = batch.reward[i]
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
+            terminal = batch.terminal[i]
 
             visit_counts = visit_counts.at[s, a].add(1)
             is_unknown = visit_counts[s, a] < self.known_threshold
-            is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
+            is_next_unknown = jnp.logical_and(
+                jnp.logical_not(terminal),
+                jnp.any(visit_counts[s_next] < self.known_threshold)
+            )
 
             q_current = q_table[s, a]
-            q_next_max = jnp.where(is_next_unknown, self.optimistic_value, jnp.max(q_table[s_next]))
+            q_next_max = jax.lax.cond(
+                terminal,
+                lambda _: 0.0,
+                lambda _: jnp.where(is_next_unknown, self.optimistic_value, jnp.max(q_table[s_next])),
+                operand=None
+            )
             target = r + self.discount * q_next_max
 
             td_error = target - q_current
@@ -101,3 +110,7 @@ class OptimisticQLearningAgent:
         )
         
         return new_state, mean_loss
+
+    def bootstrap_value(self, state: OptimisticQLearningState, next_observation: jnp.ndarray) -> jax.Array:
+        s_next = next_observation.astype(jnp.int32).squeeze()
+        return jnp.max(state.q_table[s_next])

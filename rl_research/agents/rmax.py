@@ -93,20 +93,24 @@ class RMaxAgent:
         new_reward_sums = state.reward_sums
         new_visit_counts = state.visit_counts
         prev_is_known = state.visit_counts >= self.known_threshold
-        
-        for i in range(batch_size):
+
+        def update_body(i, carry):
+            trans_counts, rew_sums, vis_counts = carry
             s = batch.observation[i].astype(jnp.int32).squeeze()
             a = batch.action[i].astype(jnp.int32).squeeze()
             r = batch.reward[i]
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
+            terminal = batch.terminal[i]
             
-            valid_unknown = jnp.logical_and(batch_mask[i], new_visit_counts[s, a] < self.known_threshold)
-            inc = jnp.where(valid_unknown, 1, 0)
+            valid_unknown = jnp.logical_and(batch_mask[i], vis_counts[s, a] < self.known_threshold)
+            inc = jnp.where(jnp.logical_and(valid_unknown, jnp.logical_not(terminal)), 1, 0)
 
-            new_transition_counts = new_transition_counts.at[s, a, s_next].add(inc)
-            new_reward_sums = new_reward_sums.at[s, a].add(jnp.where(valid_unknown, r, 0.0))
-            new_visit_counts = new_visit_counts.at[s, a].add(inc)
-        
+            trans_counts = trans_counts.at[s, a, s_next].add(inc)
+            rew_sums = rew_sums.at[s, a].add(r * inc)
+            vis_counts = vis_counts.at[s, a].add(inc)
+            return trans_counts, rew_sums, vis_counts
+
+        new_transition_counts, new_reward_sums, new_visit_counts = jax.lax.fori_loop(0, batch_size, update_body, (new_transition_counts, new_reward_sums, new_visit_counts))
         q_table = state.q_table
         new_is_known = new_visit_counts >= self.known_threshold
         newly_known = jnp.logical_and(jnp.logical_not(prev_is_known), new_is_known)
@@ -141,3 +145,7 @@ class RMaxAgent:
         
         loss = jnp.mean(jnp.abs(q_table - state.q_table))
         return new_state, loss
+
+    def bootstrap_value(self, state: RMaxState, next_observation: jnp.ndarray) -> jax.Array:
+        s_next = next_observation.astype(jnp.int32).squeeze()
+        return jnp.max(state.q_table[s_next])

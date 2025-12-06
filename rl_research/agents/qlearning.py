@@ -103,10 +103,11 @@ class QLearningAgent:
             a = batch.action[i].astype(jnp.int32).squeeze()
             r = batch.reward[i]
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
+            terminal = batch.terminal[i]
             
             q_current = state.q_table[s, a]
             q_next_max = jnp.max(state.q_table[s_next])
-            target = r + self.discount * q_next_max
+            target = r + self.discount * q_next_max * (1.0 - terminal.astype(jnp.float32))
             td_error = target - q_current
             new_q = q_current + self.step_size * td_error
             
@@ -127,9 +128,7 @@ class QLearningAgent:
 
         new_q_table = jax.lax.fori_loop(0, batch_size, apply_q_updates, state.q_table)
         
-        new_visit_counts = state.visit_counts
-        for i in range(batch_size):
-            new_visit_counts = new_visit_counts.at[states[i], actions[i]].add(visit_incs[i])
+        new_visit_counts = state.visit_counts.at[states, actions].add(visit_incs)
         
         new_state = state.replace(
             q_table=new_q_table,
@@ -140,3 +139,7 @@ class QLearningAgent:
         total_valid = jnp.maximum(jnp.sum(visit_incs), 1)
         loss = jnp.sum(jnp.abs(td_errors)) / total_valid
         return new_state, loss
+
+    def bootstrap_value(self, state: QLearningState, next_observation: jnp.ndarray) -> jax.Array:
+        s_next = next_observation.astype(jnp.int32).squeeze()
+        return jnp.max(state.q_table[s_next])

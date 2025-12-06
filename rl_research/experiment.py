@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from typing import Tuple, Any
 from flax import struct
+from functools import partial
 import gin
 from rl_research.buffers import BufferState, Transition
 
@@ -63,17 +64,16 @@ def run_episode(
                 action=action,
                 reward=reward,
                 discount=agent.discount,
-                next_observation=next_obs
+                next_observation=next_obs,
+                terminal=terminal
             )
 
-            # TODO: check if not terminal
-            q_table = getattr(agent_st, "q_table", None)
-            if q_table is not None:
-                s_next = transition.next_observation.astype(jnp.int32).squeeze()
-                bootstrap_value = jnp.max(q_table[s_next])
-            else:
-                bootstrap_value = jnp.asarray(0.0)
-
+            bootstrap_value = jax.lax.cond(
+                jnp.logical_not(terminal),
+                lambda _: agent.bootstrap_value(agent_st, next_obs),
+                lambda _: 0.0,
+                operand=None
+            )
             new_buff_st = buff_st.push(transition, bootstrap_value=bootstrap_value)
             
             def train_step(states):
@@ -167,8 +167,8 @@ def run_episode(
     return agent_st, env_st, buff_st, ep_return, ep_disc_return, ep_length, losses, final_global_step
 
 @gin.configurable
-# @partial(jax.jit, static_argnames=['agent', 'environment', 'batch_size', 'max_episode_steps',
-#                                      'train_episodes', 'evaluate_every', 'eval_episodes'])
+@partial(jax.jit, static_argnames=['agent', 'environment', 'batch_size', 'max_episode_steps',
+                                     'train_episodes', 'evaluate_every', 'eval_episodes'])
 def run_loop(
     agent,
     environment,
@@ -269,8 +269,6 @@ def run_loop(
         eval_rets, eval_disc_rets, eval_lens, agent_states) = jax.lax.scan(
         episode_fn, init_carry, jnp.arange(train_episodes)
     )
-
-    # jax.debug.print("{x}", x=final_agent_state.q_table)
     
     history = History(
         train_returns=train_rets,

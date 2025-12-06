@@ -78,20 +78,18 @@ class DelayedQLearningAgent:
         pending_returns = state.pending_returns
         learn_flags = state.learn_flags
 
-        total_change = jnp.array(0.0)
-        total_updates = jnp.array(0.0)
-        success_any = jnp.array(False)
-
-        for i in range(batch_size):
-            valid = batch_mask[i]
+        def update_body(i, carry):
+            q_table, visit_counts, pending_counts, pending_returns, learn_flags, total_change, total_updates, success_any = carry
             s = batch.observation[i].astype(jnp.int32).squeeze()
             a = batch.action[i].astype(jnp.int32).squeeze()
             r = batch.reward[i]
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
+            terminal = batch.terminal[i]
 
             q_next_max = jnp.max(q_table[s_next])
-            target = r + self.discount * q_next_max
+            target = r + self.discount * q_next_max * (1.0 - terminal.astype(jnp.float32))
 
+            valid = batch_mask[i]
             visit_counts = visit_counts.at[s, a].add(jnp.where(valid, 1, 0))
 
             can_learn = jnp.logical_and(valid, learn_flags[s, a])
@@ -136,10 +134,16 @@ class DelayedQLearningAgent:
             total_change = total_change + change
             total_updates = total_updates + update_flag
             success_any = jnp.logical_or(success_any, update_flag > 0)
+            return q_table, visit_counts, pending_counts, pending_returns, learn_flags, total_change, total_updates, success_any
+
+        init_carry = (q_table, visit_counts, pending_counts, pending_returns, learn_flags, 0.0, 0.0, False)
+        q_table, visit_counts, pending_counts, pending_returns, learn_flags, total_change, total_updates, success_any = jax.lax.fori_loop(
+            0, batch_size, update_body, init_carry
+        )
 
         learn_flags = jax.lax.cond(
             success_any,
-            lambda f: jnp.ones_like(f, dtype=bool),
+            lambda _: jnp.ones_like(learn_flags, dtype=bool),
             lambda f: f,
             learn_flags
         )
@@ -155,3 +159,7 @@ class DelayedQLearningAgent:
 
         loss = total_change / jnp.maximum(total_updates, 1.0)
         return new_state, loss
+
+    def bootstrap_value(self, state: DelayedQLearningState, next_observation: jnp.ndarray) -> jax.Array:
+        s_next = next_observation.astype(jnp.int32).squeeze()
+        return jnp.max(state.q_table[s_next])

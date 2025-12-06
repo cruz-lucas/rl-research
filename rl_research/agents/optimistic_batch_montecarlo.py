@@ -98,3 +98,7 @@ class OptimisticMonteCarloAgent:
         )
         
         return new_state, mean_loss
+
+    def bootstrap_value(self, state: OptimisticQLearningState, next_observation: jnp.ndarray) -> jax.Array:
+        s_next = next_observation.astype(jnp.int32).squeeze()
+        return jnp.max(state.q_table[s_next])
