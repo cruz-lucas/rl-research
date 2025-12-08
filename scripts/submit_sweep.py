@@ -19,6 +19,8 @@ from typing import Annotated, Any, Dict, List, Sequence
 import gin
 import tyro
 
+from rl_research.main import run_single_seed, setup_mlflow
+
 
 # Default space is a starting point; override with --space-file.
 DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
@@ -88,7 +90,7 @@ class Args:
         tyro.conf.arg(help="Path to the sbatch script that calls rl_research.main."),
     ] = Path("scripts/job.sh")
     sbatch_opt: Annotated[
-        List[str], tyro.conf.arg(append=True, help="Extra sbatch options (repeatable).")
+        List[str], tyro.conf.arg(help="Extra sbatch options (repeatable).")
     ] = field(default_factory=list)
     dry_run: Annotated[
         bool, tyro.conf.arg(help="Print sbatch commands without submitting.")
