@@ -153,7 +153,6 @@ class Args:
     binding: Annotated[
         list[str],
         tyro.conf.arg(
-            append=True,
             help=(
                 "Optional gin binding overrides (repeatable). "
                 "Example: --binding OptimisticQLearningAgent.step_size=0.05"
@@ -170,13 +169,13 @@ def main(args: Args) -> None:
     else:
         seed = args.seed
 
-    local_root = Path(os.environ.get("SLURM_TMPDIR", "./local_runs")) / "mlruns"
-    local_root.mkdir(parents=True, exist_ok=True)
+    # local_root = Path(os.environ.get("SLURM_TMPDIR", "./local_runs")) / "mlruns"
+    # local_root.mkdir(parents=True, exist_ok=True)
 
     shared_root = Path("./mlruns")
     shared_root.mkdir(parents=True, exist_ok=True)
 
-    mlflow.set_tracking_uri(local_root)
+    mlflow.set_tracking_uri(shared_root)
 
     with setup_mlflow(seed=seed) as run:
         run_bindings = gin.get_bindings("run_single_seed")
@@ -203,9 +202,9 @@ def main(args: Args) -> None:
         log_history_to_mlflow(history)
         log_agent_states_to_mlflow(agent_states)
 
-    subprocess.run(
-        ["rsync", "-av", str(local_root) + "/", str(shared_root) + "/"], check=True
-    )
+    # subprocess.run(
+    #     ["rsync", "-av", str(local_root) + "/", str(shared_root) + "/"], check=True
+    # )
 
 
 if __name__ == "__main__":
