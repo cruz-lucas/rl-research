@@ -50,7 +50,7 @@ def run_episode(
     global_step: jnp.ndarray,
 ) -> Tuple[Any, Any, BufferState, float, float, int, jnp.ndarray, jnp.ndarray]:
     """Run a single episode."""
-    total_updates = max(int(update_frequency * replay_ratio), 0)
+    total_updates = update_frequency * replay_ratio
     train_flag = jnp.asarray(is_training)
 
     def step_fn(carry, _):
@@ -210,6 +210,9 @@ def run_episode(
         "train_episodes",
         "evaluate_every",
         "eval_episodes",
+        "update_frequency",
+        "replay_ratio",
+        "warmup_steps",
     ],
 )
 def run_loop(
