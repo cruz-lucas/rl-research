@@ -41,7 +41,7 @@ class OptimisticQLearningAgent:
         """Initialize with optimistic Q-values."""
         return OptimisticQLearningState(
             q_table=jnp.full(
-                (self.num_states, self.num_actions), self.optimistic_value
+                (self.num_states, self.num_actions), 0.0 #self.optimistic_value
             ),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
@@ -57,7 +57,11 @@ class OptimisticQLearningAgent:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
 
-        return _select_greedy(q_values, key)
+        is_known = state.visit_counts[obs] > self.known_threshold
+        values = jnp.where(is_known, q_values, self.optimistic_value)
+
+        return _select_greedy(values, key)
+        # return _select_greedy(q_values, key)
 
     def update(
         self,
@@ -76,12 +80,14 @@ class OptimisticQLearningAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
-            visit_counts = visit_counts.at[s, a].add(1)
             is_unknown = visit_counts[s, a] < self.known_threshold
             is_next_unknown = jnp.logical_and(
                 jnp.logical_not(terminal),
                 jnp.any(visit_counts[s_next] < self.known_threshold),
             )
+
+            # changed this to after the known check
+            visit_counts = visit_counts.at[s, a].add(1)
 
             q_current = q_table[s, a]
             q_next_max = jax.lax.cond(
