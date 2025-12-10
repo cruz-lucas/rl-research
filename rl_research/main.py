@@ -182,10 +182,10 @@ def main(args: Args) -> None:
     # local_root = Path(os.environ.get("SLURM_TMPDIR", "./local_runs")) / "mlruns"
     # local_root.mkdir(parents=True, exist_ok=True)
 
-    shared_root = Path("./mlruns")
-    shared_root.mkdir(parents=True, exist_ok=True)
+    # shared_root = Path("~/mlruns")
+    # shared_root.mkdir(parents=True, exist_ok=True)
 
-    mlflow.set_tracking_uri(shared_root)
+    # mlflow.set_tracking_uri(shared_root)
     # mlflow.set_tracking_uri("sqlite:///mlruns.db")
 
     with setup_mlflow(seed=seed) as run:

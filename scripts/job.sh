@@ -1,17 +1,22 @@
 #!/bin/bash
 #SBATCH --job-name=rl_experiment
-#SBATCH --account=aip-machado
-#SBATCH --time=4:00:00
+#SBATCH --account=def-machado
+#SBATCH --time=8:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=8G
+#SBATCH --mem=16G
 #SBATCH --array=0-0               # Override with --array on sbatch command line
-#SBATCH --output=logs/job_%A_%a.out
-#SBATCH --error=logs/job_%A_%a.err
+#SBATCH --output=/home/%u/logs/job_%A_%a.out
+#SBATCH --error=/home/%u/logs/job_%A_%a.err
 
 set -euo pipefail
-mkdir -p logs
+
+LOG_DIR="$HOME/logs"
+mkdir -p "$LOG_DIR"
 
 module load python/3.11 cuda gcc arrow
+
+VENV_DIR="$HOME/.venv/"
+source "${VENV_DIR}/bin/activate"
 
 echo "Job ID: ${SLURM_JOB_ID:-local}"
 echo "Job Name: ${SLURM_JOB_NAME:-interactive}"
@@ -32,11 +37,11 @@ CONFIG_PATH="$1"
 shift
 BINDINGS=("$@")
 
-export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-~/mlruns}"
+export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$HOME/mlruns}"
 
 SEED="${SLURM_ARRAY_TASK_ID:-0}"
 
-cmd=(uv run --offline python -m rl_research.main --config "$CONFIG_PATH" --seed "$SEED")
+cmd=(uv run --active --offline python -m rl_research.main --config "$CONFIG_PATH" --seed "$SEED")
 for b in "${BINDINGS[@]}"; do
   cmd+=(--binding "$b")
 done
