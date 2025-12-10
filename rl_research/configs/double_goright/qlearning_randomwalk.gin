@@ -23,6 +23,8 @@ EnvParams.second_reward = 6.0
 EnvParams.is_partially_obs = True
 EnvParams.mapping = 'default'
 
+GoRight.use_precomputed = True
+
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
 run_loop.batch_size = 1

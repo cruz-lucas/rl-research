@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "double_goright_fullyobs_qlearningrandomwalk"
+setup_mlflow.experiment_name = "double_goright_fullyobs"
 setup_mlflow.experiment_group = "qlearning_randomwalk"
 
 run_single_seed.agent_cls = @QLearningAgent
@@ -22,6 +22,8 @@ EnvParams.second_checkpoint = 20
 EnvParams.second_reward = 6.0
 EnvParams.is_partially_obs = False
 EnvParams.mapping = 'default'
+
+GoRight.use_precomputed = True
 
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
