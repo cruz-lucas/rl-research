@@ -25,10 +25,20 @@ def setup_mlflow(
 ):
     """Setup MLflow experiment and run."""
     experiment = mlflow.get_experiment_by_name(experiment_name)
-    if experiment is None:
-        experiment_id = mlflow.create_experiment(experiment_name)
-    else:
-        experiment_id = experiment.experiment_id
+    max_tries = 10
+    tries = 0
+    while experiment is None:
+        try:
+            tries += 1
+            experiment_id = mlflow.create_experiment(experiment_name)
+        except mlflow.MlflowException:
+            experiment = mlflow.get_experiment_by_name(experiment_name)
+        
+        if tries >= max_tries:
+            break
+    # TODO: better handle exception, experiment shouldn't be allowed to be none
+
+    experiment_id = experiment.experiment_id
 
     run_name = f"{experiment_group}_seed_{seed}"
     return mlflow.start_run(
@@ -176,6 +186,7 @@ def main(args: Args) -> None:
     shared_root.mkdir(parents=True, exist_ok=True)
 
     mlflow.set_tracking_uri(shared_root)
+    # mlflow.set_tracking_uri("sqlite:///mlruns.db")
 
     with setup_mlflow(seed=seed) as run:
         run_bindings = gin.get_bindings("run_single_seed")
@@ -200,7 +211,7 @@ def main(args: Args) -> None:
 
         history, agent_states = run_single_seed(seed=seed)
         log_history_to_mlflow(history)
-        log_agent_states_to_mlflow(agent_states)
+        # log_agent_states_to_mlflow(agent_states)
 
     # subprocess.run(
     #     ["rsync", "-av", str(local_root) + "/", str(shared_root) + "/"], check=True
