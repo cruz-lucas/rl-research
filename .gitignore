@@ -180,3 +180,5 @@ cython_debug/
 /mlruns_db_store/*
 
 **/logs/**
+
+*.db
