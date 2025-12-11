@@ -1,11 +1,10 @@
-#!/usr/bin/env bash
-# Compress or decompress the local mlruns directory.
+#!/bin/bash
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ARCHIVE="$ROOT_DIR/mlruns.tar.gz"
-DEFAULT_DIR="$ROOT_DIR/mlruns"
+DEFAULT_DIR="$HOME/mlruns"
 
 usage() {
   cat <<'EOF'
@@ -53,6 +52,12 @@ case "$cmd" in
     mkdir -p "$dest_dir"
     tar -xzf "$archive_path" -C "$dest_dir"
     echo "Extracted $archive_path -> $dest_dir"
+    ;;
+  backup)
+    sqlite3 mlruns.db .dump > mlruns_snapshot.sql
+    ;;
+  restore)
+    sqlite3 mlruns.db < mlruns_snapshot.sql
     ;;
   *)
     usage
