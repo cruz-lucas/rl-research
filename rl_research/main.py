@@ -213,10 +213,6 @@ def main(args: Args) -> None:
         log_history_to_mlflow(history)
         # log_agent_states_to_mlflow(agent_states)
 
-    # subprocess.run(
-    #     ["rsync", "-av", str(local_root) + "/", str(shared_root) + "/"], check=True
-    # )
-
 
 if __name__ == "__main__":
     main(tyro.cli(Args))
