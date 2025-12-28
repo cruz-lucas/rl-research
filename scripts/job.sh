@@ -42,9 +42,10 @@ export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$HOME/mlruns}"
 SEED="${SLURM_ARRAY_TASK_ID:-0}"
 
 cmd=(uv run --active --offline python -m rl_research.main --config "$CONFIG_PATH" --seed "$SEED")
-for b in "${BINDINGS[@]}"; do
-  cmd+=(--binding "$b")
-done
+
+if [ "$#" -gt 0 ]; then
+  cmd+=(--binding "$@")
+fi
 
 echo "Command: ${cmd[*]}"
 "${cmd[@]}"
