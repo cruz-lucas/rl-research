@@ -135,7 +135,7 @@ def sample_bindings(
     param_space = space.get("params", {})
     bindings: List[List[str]] = []
     for _ in range(num_samples):
-        combo = []
+        combo: List[str] = []
         for name, spec in algo_space.items():
             val = _sample_value(spec, rng)
             combo.append(f"{algorithm}.{name}={_format_value(val)}")
@@ -144,7 +144,7 @@ def sample_bindings(
             val = _sample_value(spec, rng)
             combo.append(f"{name}={_format_value(val)}")
 
-        bindings.append(combo)
+        bindings.append(combo.copy())
     return bindings
 
 
@@ -176,8 +176,6 @@ def infer_algorithm_from_config(config_path: Path) -> str:
     """Return the agent class name configured in the gin file."""
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    # Import inside the function to avoid heavy imports at module load time.
 
     gin.clear_config()
     gin.parse_config_files_and_bindings(
