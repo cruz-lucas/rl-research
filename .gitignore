@@ -172,8 +172,8 @@ cython_debug/
 .pypirc
 
 **/mlruns/
-**/mlruns_hpo/
-**/mlruns_hpo2/
+**/mlruns_sweep/
+**/mlruns_sqlite_artifacts/
 **/outputs/
 .deprecated/**
 
@@ -182,3 +182,6 @@ cython_debug/
 **/logs/**
 
 *.db
+*.tar.gz
+
+.DS_Store
