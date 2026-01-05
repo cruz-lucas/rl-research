@@ -1,15 +1,15 @@
 setup_mlflow.experiment_name = "double_goright"
 setup_mlflow.experiment_group = "optimistic_qlearning"
 
-run_single_seed.agent_cls = @OptimisticQLearningAgent
+run_single_seed.agent_cls = @BMFRmaxAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 2048
+ReplayBuffer.buffer_size = 3140
 
-OptimisticQLearningAgent.r_max = 6.0
-OptimisticQLearningAgent.discount = 0.9
-OptimisticQLearningAgent.step_size = 0.1
-OptimisticQLearningAgent.known_threshold = 23
+BMFRmaxAgent.r_max = 6.0
+BMFRmaxAgent.discount = 0.9
+BMFRmaxAgent.step_size = 0.01
+BMFRmaxAgent.known_threshold = 23
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2
@@ -23,9 +23,9 @@ EnvParams.mapping = 'default'
 
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
-run_loop.batch_size = 512
-run_loop.update_frequency = 1
-run_loop.replay_ratio = 10
-run_loop.warmup_steps = 0
+run_loop.batch_size = 48
+run_loop.update_frequency = 11
+run_loop.replay_ratio = 58
+run_loop.warmup_steps = 261
 run_loop.evaluate_every = 1
 run_loop.eval_episodes = 1

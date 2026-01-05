@@ -8,7 +8,7 @@ from rl_research.policies import _select_greedy
 
 
 @struct.dataclass
-class OptimisticQLearningState:
+class BMFRmaxState:
     """State for optimistic Q-learning agent."""
 
     q_table: jnp.ndarray
@@ -17,7 +17,7 @@ class OptimisticQLearningState:
 
 
 @gin.configurable
-class OptimisticQLearningAgent:
+class BMFRmaxAgent:
     """Model-free R-Max variant using optimistic initialization."""
 
     def __init__(
@@ -37,11 +37,11 @@ class OptimisticQLearningAgent:
         self.known_threshold = known_threshold
         self.optimistic_value = r_max / (1 - discount)
 
-    def initial_state(self) -> OptimisticQLearningState:
+    def initial_state(self) -> BMFRmaxState:
         """Initialize with optimistic Q-values."""
-        return OptimisticQLearningState(
+        return BMFRmaxState(
             q_table=jnp.full(
-                (self.num_states, self.num_actions), 0.0 #self.optimistic_value
+                (self.num_states, self.num_actions), 0.0#self.optimistic_value
             ),
             visit_counts=jnp.zeros((self.num_states, self.num_actions)),
             step=0,
@@ -49,7 +49,7 @@ class OptimisticQLearningAgent:
 
     def select_action(
         self,
-        state: OptimisticQLearningState,
+        state: BMFRmaxState,
         obs: jnp.ndarray,
         key: jax.Array,
         is_training: bool,
@@ -65,9 +65,9 @@ class OptimisticQLearningAgent:
 
     def update(
         self,
-        state: OptimisticQLearningState,
+        state: BMFRmaxState,
         batch: Transition,
-    ) -> tuple[OptimisticQLearningState, jax.Array]:
+    ) -> tuple[BMFRmaxState, jax.Array]:
         """Single-step optimistic Q-learning updates for each transition."""
         batch_size = batch.observation.shape[0]
 
@@ -81,12 +81,9 @@ class OptimisticQLearningAgent:
             terminal = batch.terminal[i]
 
             is_unknown = visit_counts[s, a] < self.known_threshold
-            is_next_unknown = jnp.logical_and(
-                jnp.logical_not(terminal),
-                jnp.any(visit_counts[s_next] < self.known_threshold),
-            )
+            is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
 
-            # changed this to after the known check
+            # # changed this to after the known check
             visit_counts = visit_counts.at[s, a].add(1)
 
             q_current = q_table[s, a]
@@ -101,6 +98,7 @@ class OptimisticQLearningAgent:
             target = r + self.discount * q_next_max
 
             td_error = target - q_current
+            # new_q = q_current + self.step_size * td_error
             updated_q = q_current + self.step_size * td_error
             new_q = jnp.where(is_unknown, self.optimistic_value, updated_q)
 
@@ -122,7 +120,7 @@ class OptimisticQLearningAgent:
         return new_state, mean_loss
 
     def bootstrap_value(
-        self, state: OptimisticQLearningState, next_observation: jnp.ndarray
+        self, state: BMFRmaxState, next_observation: jnp.ndarray
     ) -> jax.Array:
         s_next = next_observation.astype(jnp.int32).squeeze()
         return jnp.max(state.q_table[s_next])
