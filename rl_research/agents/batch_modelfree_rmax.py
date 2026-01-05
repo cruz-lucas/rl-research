@@ -80,11 +80,11 @@ class BMFRmaxAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
+            # The version 2 of this algo increments visit counts after checking knownness. This is version 3.
+            visit_counts = visit_counts.at[s, a].add(1)
+
             is_unknown = visit_counts[s, a] < self.known_threshold
             is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
-
-            # # changed this to after the known check
-            visit_counts = visit_counts.at[s, a].add(1)
 
             q_current = q_table[s, a]
             q_next_max = jax.lax.cond(
