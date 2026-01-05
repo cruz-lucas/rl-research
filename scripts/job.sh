@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=rl_experiment
-#SBATCH --account=def-machado
+#SBATCH --account=aip-machado
 #SBATCH --time=8:00:00
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=16G
