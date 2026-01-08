@@ -24,6 +24,10 @@ from rl_research.main import run_single_seed, setup_mlflow
 
 # Default space is a starting point; override with --space-file.
 DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
+    "BMFMBIEEBAgent": {
+        "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
+        "beta": {"type": "uniform", "min": 0, "max": 100},
+    },
     "BMFRmaxAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "known_threshold": {"type": "int", "min": 1, "max": 50},
