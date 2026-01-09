@@ -14,8 +14,7 @@ Usage:
   mlruns_sync_cc.sh <user@host> [REMOTE_DIR] [LOCAL_DIR]
 
 Examples:
-  mlruns_sync_cc.sh abc123@cedar.computecanada.ca ~/projects/mlruns
-  mlruns_sync_cc.sh abc123@beluga.computecanada.ca
+  mlruns_sync_cc.sh abc123@vulcan.alliancecan.ca ~/projects/mlruns
 
 Defaults:
   REMOTE_DIR: ~/mlruns
@@ -32,7 +31,7 @@ REMOTE_DIR="${2:-${CC_MLRUNS_DIR:-$DEFAULT_REMOTE_DIR}}"
 LOCAL_DIR="${3:-${LOCAL_MLRUNS_DIR:-$DEFAULT_LOCAL_DIR}}"
 
 if [[ -z "$REMOTE_HOST" ]]; then
-  echo "Missing remote host (e.g., user@cedar.computecanada.ca)" >&2
+  echo "Missing remote host (e.g., user@vulcan.alliancecan.ca)" >&2
   usage
   exit 1
 fi
