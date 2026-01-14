@@ -4,12 +4,12 @@ setup_mlflow.experiment_group = "batch_modelfree_mbieeb"
 run_single_seed.agent_cls = @BMFMBIEEBAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 1000
+ReplayBuffer.buffer_size = 1926
 
 BMFMBIEEBAgent.r_max = 6.0
 BMFMBIEEBAgent.discount = 0.9
-BMFMBIEEBAgent.step_size = 0.5
-BMFMBIEEBAgent.beta = 60
+BMFMBIEEBAgent.step_size = 0.00231278
+BMFMBIEEBAgent.beta = 69.1775
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2
@@ -25,9 +25,9 @@ GoRight.use_precomputed = True
 
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
-run_loop.batch_size = 512
-run_loop.update_frequency = 1
-run_loop.replay_ratio = 1
-run_loop.warmup_steps = 0
+run_loop.batch_size = 357
+run_loop.update_frequency = 12
+run_loop.replay_ratio = 2
+run_loop.warmup_steps = 944
 run_loop.evaluate_every = 1
 run_loop.eval_episodes = 1

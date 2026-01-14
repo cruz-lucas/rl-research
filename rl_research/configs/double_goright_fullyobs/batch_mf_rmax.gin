@@ -4,12 +4,12 @@ setup_mlflow.experiment_group = "batch_modelfree_rmax"
 run_single_seed.agent_cls = @BMFRmaxAgent
 run_single_seed.env_cls = @GoRight
 run_single_seed.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 1000
+ReplayBuffer.buffer_size = 3203
 
 BMFRmaxAgent.r_max = 6.0
 BMFRmaxAgent.discount = 0.9
-BMFRmaxAgent.step_size = 0.5
-BMFRmaxAgent.known_threshold = 1
+BMFRmaxAgent.step_size = 0.358055
+BMFRmaxAgent.known_threshold = 2
 
 EnvParams.length = 21
 EnvParams.num_indicators = 2
@@ -25,9 +25,9 @@ GoRight.use_precomputed = True
 
 run_loop.train_episodes = 600
 run_loop.max_episode_steps = 500
-run_loop.batch_size = 512
-run_loop.update_frequency = 1
-run_loop.replay_ratio = 1
-run_loop.warmup_steps = 0
+run_loop.batch_size = 1
+run_loop.update_frequency = 48
+run_loop.replay_ratio = 24
+run_loop.warmup_steps = 1238
 run_loop.evaluate_every = 1
 run_loop.eval_episodes = 1
