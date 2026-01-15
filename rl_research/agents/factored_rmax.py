@@ -50,10 +50,17 @@ class FactoredRMaxAgent:
         )
         self.optimistic_value = r_max / (1 - discount)
 
+        self.factored_states = self._all_factored_states()
+
+    def _all_factored_states(self):
+        return jnp.stack(
+            jnp.unravel_index(jnp.arange(self.num_states), self.observation_shape),
+            axis=1,
+        )
+
     def _flat_to_factored(self, flat_obs: jnp.ndarray) -> jnp.ndarray:
         """Convert flat observation index to factored representation."""
-        indices = jnp.unravel_index(flat_obs, self.observation_shape)
-        return jnp.array(indices)
+        return self.factored_states[flat_obs]
 
     def _factored_to_flat(self, factored_obs: jnp.ndarray) -> jnp.ndarray:
         """Convert factored observation to flat index."""
@@ -82,43 +89,39 @@ class FactoredRMaxAgent:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
         return _select_greedy(q_values, key)
-
-    def _compute_joint_transitions(self, marginal_counts, visit_counts):
-        """Compute joint transition probabilities from marginal counts."""
-        # Compute marginal probabilities for each dimension
+    
+    def _compute_marginal_probs(self, marginal_counts):
         marginal_probs = []
-        for dim_idx, counts in enumerate(marginal_counts):
-            dim_size = self.observation_shape[dim_idx]
-            # counts shape: (dim_size, num_actions, dim_size)
-            safe_counts = jnp.maximum(
-                jnp.sum(counts, axis=2, keepdims=True), 1
-            )
-            probs = counts / safe_counts
-            marginal_probs.append(probs)
-        
-        # Compute joint probabilities by multiplying marginals
-        # Result shape: (num_states, num_actions, num_states)
-        joint_transitions = jnp.zeros((self.num_states, self.num_actions, self.num_states))
-        
-        def compute_joint_prob(s, a, s_next):
-            """Compute P(s_next | s, a) as product of marginals."""
-            s_factored = self._flat_to_factored(s)
-            s_next_factored = self._flat_to_factored(s_next)
-            
-            prob = 1.0
-            for dim_idx in range(self.num_dims):
-                prob *= marginal_probs[dim_idx][s_factored[dim_idx], a, s_next_factored[dim_idx]]
-            return prob
-        
-        # Vectorize over all state-action-nextstate triples
-        for s in range(self.num_states):
-            for a in range(self.num_actions):
-                for s_next in range(self.num_states):
-                    joint_transitions = joint_transitions.at[s, a, s_next].set(
-                        compute_joint_prob(s, a, s_next)
-                    )
-        
-        return joint_transitions
+        for counts in marginal_counts:
+            safe = jnp.maximum(jnp.sum(counts, axis=2, keepdims=True), 1)
+            marginal_probs.append(counts / safe)
+        return marginal_probs
+
+    def _compute_joint_transitions(self, marginal_counts):
+        marginal_probs = self._compute_marginal_probs(marginal_counts)
+
+        factored = self.factored_states
+
+        S = self.num_states
+        A = self.num_actions
+
+        joint = jnp.ones((S, A, S))
+
+        for d in range(self.num_dims):
+            mp = marginal_probs[d]
+            s_d = factored[:, d]
+            s_next_d = factored[:, d]
+
+            probs_d = mp[
+                s_d[:, None, None],              # (S,1,1)
+                jnp.arange(A)[None, :, None],    # (1,A,1)
+                s_next_d[None, None, :],         # (1,1,S)
+            ]
+            # probs_d: (S, A, S)
+
+            joint = joint * probs_d
+
+        return joint
 
     def _value_iteration_step(self, q_table, is_known, rewards, transitions):
         """Single step of value iteration."""
@@ -158,7 +161,6 @@ class FactoredRMaxAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
-            # Convert to factored representation
             s_factored = self._flat_to_factored(s)
             s_next_factored = self._flat_to_factored(s_next)
 
@@ -169,11 +171,9 @@ class FactoredRMaxAgent:
                 jnp.logical_and(valid_unknown, jnp.logical_not(terminal)), 1, 0
             )
 
-            # Update marginal counts for each dimension
             new_marg_counts = []
             for dim_idx in range(self.num_dims):
-                dim_counts = marg_counts[dim_idx]
-                dim_counts = dim_counts.at[
+                dim_counts = marg_counts[dim_idx].at[
                     s_factored[dim_idx], a, s_next_factored[dim_idx]
                 ].add(inc)
                 new_marg_counts.append(dim_counts)
@@ -198,9 +198,8 @@ class FactoredRMaxAgent:
             safe_counts = jnp.maximum(new_visit_counts, 1)
             avg_rewards = new_reward_sums / safe_counts
             
-            # Compute joint transitions from marginals
             transition_probs = self._compute_joint_transitions(
-                new_marginal_counts, new_visit_counts
+                new_marginal_counts
             )
 
             def body(_, carry):
