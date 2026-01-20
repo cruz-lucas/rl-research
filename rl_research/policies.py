@@ -6,8 +6,9 @@ import jax.random as jrandom
 def _break_ties_randomly(values: jnp.ndarray, key: jax.Array) -> jax.Array:
     """Break ties randomly among maximum values."""
     max_val = jnp.max(values)
-    is_max = jnp.where(values == max_val, 1.0, 0.0)
-    return jrandom.choice(key=key, a=values.size, p=is_max)
+    mask = values == max_val
+    probs = mask / jnp.sum(mask)
+    return jrandom.choice(key, values.shape[0], p=probs)
 
 
 def _select_greedy(q_values: jnp.ndarray, key: jax.Array) -> jax.Array:
