@@ -21,6 +21,7 @@ dependencies = [
     "seaborn==0.13.2",
     "dopamine-rl>=4.0.0",
     "minigrid>=2.0.0",
+    "navix",
 ]
 
 [project.optional-dependencies]
@@ -64,6 +65,7 @@ enableTypeIgnoreComments = true
 [tool.uv.sources]
 gymnasium = { git = "https://github.com/cruz-lucas/Gymnasium.git" }
 dopamine-rl = { git = "https://github.com/google/dopamine" }
+navix = { git = "https://github.com/epignatelli/navix" }
 
 [dependency-groups]
 dev = [
