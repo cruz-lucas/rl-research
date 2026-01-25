@@ -29,8 +29,12 @@ class RMaxAgent:
         r_max: float = 6.0,
         discount: float = 0.9,
         known_threshold: int = 1,
-        convergence_threshold: float = 1e-2,
+        convergence_threshold: float = 1e-5,
     ):
+        num_states = num_states + 1
+        terminal_state = num_states - 1
+
+        self.terminal_state = terminal_state
         self.num_states = num_states
         self.num_actions = num_actions
         self.r_max = r_max
@@ -46,10 +50,14 @@ class RMaxAgent:
 
     def initial_state(self) -> RMaxState:
         """Initialize with optimistic Q-values."""
+        q_table = jnp.full(
+            (self.num_states, self.num_actions), self.optimistic_value
+        )
+        q_table = q_table.at[self.terminal_state].set(0.0)
+
+
         return RMaxState(
-            q_table=jnp.full(
-                (self.num_states, self.num_actions), self.optimistic_value
-            ),
+            q_table=q_table,
             transition_counts=jnp.zeros(
                 (self.num_states, self.num_actions, self.num_states)
             ),
@@ -69,6 +77,7 @@ class RMaxAgent:
     def _value_iteration_step(self, q_table, is_known, rewards, transitions):
         """Single step of value iteration."""
         v_table = jnp.max(q_table, axis=1)
+        v_table = v_table.at[self.terminal_state].set(0.0)
 
         def compute_q(s, a):
             expected_next_value = jnp.sum(transitions[s, a] * v_table)
@@ -81,7 +90,7 @@ class RMaxAgent:
             lambda s: jax.vmap(lambda a: compute_q(s, a))(jnp.arange(self.num_actions))
         )(jnp.arange(self.num_states))
 
-        return new_q
+        return new_q.at[self.terminal_state].set(0.0)
 
     def update(
         self, state: RMaxState, batch: Transition, batch_mask: jnp.ndarray | None = None
@@ -105,11 +114,13 @@ class RMaxAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
+            s_next = jnp.where(terminal, self.terminal_state, s_next)
+
             valid_unknown = jnp.logical_and(
                 batch_mask[i], vis_counts[s, a] < self.known_threshold
             )
             inc = jnp.where(
-                jnp.logical_and(valid_unknown, jnp.logical_not(terminal)), 1, 0
+                valid_unknown, 1, 0
             )
 
             trans_counts = trans_counts.at[s, a, s_next].add(inc)
