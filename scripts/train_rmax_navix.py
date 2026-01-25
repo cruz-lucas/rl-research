@@ -13,27 +13,26 @@ import jax.lax as lax
 import jax.random as jrng
 import navix as nx
 import numpy as np
-
-import matplotlib.pyplot as plt
+import pickle
+from pathlib import Path
+from functools import partial
+from navix.environments.door_key import *
 
 from rl_research.agents.rmax import RMaxAgent, RMaxState
 from rl_research.buffers import Transition
+from rl_research.environments import FixedGridDoorKey
 
 
 NUM_STEPS = 1_000_000
 DISCOUNT = 0.99
 R_MAX = 1.0
 KNOWN_THRESHOLD = 1
+OUTPUT_DIR = "./outputs/rmax_navix"
 
-MAX_STATES = 550
-NUM_ACTIONS = 7
+MAX_STATES = 9 * 2 * 2 * 4
+NUM_ACTIONS = 5
 
-
-def encode_state(obs: jnp.ndarray, direction: jnp.int32) -> jnp.int32:
-    flat = obs.reshape(-1).astype(jnp.int32)
-    h = jnp.sum(flat * jnp.arange(flat.size, dtype=jnp.int32))
-    h = h + direction * 1315423911
-    return jnp.mod(h, MAX_STATES)
+SEED = 2
 
 
 
@@ -42,18 +41,32 @@ def make_step_fn(env: nx.Environment, agent: RMaxAgent):
     def step_fn(carry, _):
         timestep, rng, state, ep_return, discount_acc = carry
 
-        obs = timestep.observation
-        direction = timestep.state.get_player().direction
-        s = encode_state(obs, direction)
+        is_start = timestep.is_start()
+        discount_acc = lax.cond(
+            is_start,
+            lambda discount_acc: 1.0,
+            lambda discount_acc: discount_acc * DISCOUNT,
+            discount_acc,
+        )
+
+        ep_return = lax.cond(
+            is_start,
+            lambda ep_return: 0.0,
+            lambda ep_return: ep_return,
+            ep_return,
+        )
+
+        s = env.encode_state(timestep)
 
         rng, a_rng = jrng.split(rng)
         a = agent.select_action(state, s, a_rng, is_training=True)
 
-        timestep = env.step(timestep, a)
+        # remap to remove unused actions
+        env_a = jnp.where(jnp.equal(a, 4), 5, a)
 
-        next_obs = timestep.observation
-        next_dir = timestep.state.get_player().direction
-        sp = encode_state(next_obs, next_dir)
+        timestep = env.step(timestep, env_a)
+
+        sp = env.encode_state(timestep)
 
         r = timestep.reward
 
@@ -66,68 +79,100 @@ def make_step_fn(env: nx.Environment, agent: RMaxAgent):
             discount=jnp.array([DISCOUNT]),
         )
 
-        state, _ = agent.update(state, batch)
+        next_state, _ = agent.update(state, batch)
 
         done = timestep.is_done()
+        rng, reset_rng = jrng.split(rng)
+
         timestep = lax.cond(
             done,
-            lambda ts: env.reset(rng),
+            lambda ts: env.reset(reset_rng),
             lambda ts: ts,
             timestep,
         )
 
-        discount_acc = discount_acc * DISCOUNT
-        ep_return = ep_return + discount_acc * r
+        ep_return += discount_acc * r
 
-        return (timestep, rng, state, ep_return, discount_acc), (ep_return, done)
+        return (timestep, rng, next_state, ep_return, discount_acc), (ep_return, done)
 
     return step_fn
 
 
 def main():
+    output_dir = Path(OUTPUT_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     env = nx.make(
-        "Navix-DoorKey-Random-5x5-v0",
-        observation_fn=nx.observations.categorical,
+        "FixedGridDoorKey-5x5-layout1-v0",
     )
 
-    rng = jrng.PRNGKey(0)
+    rng = jrng.PRNGKey(SEED)
     rng, reset_rng = jrng.split(rng)
     timestep = env.reset(reset_rng)
 
     agent = RMaxAgent(
         num_states=MAX_STATES,
         num_actions=NUM_ACTIONS,
-        r_max=R_MAX,
+        r_max=R_MAX * (1 - DISCOUNT),
         discount=DISCOUNT,
         known_threshold=KNOWN_THRESHOLD,
     )
-    
+
     state = agent.initial_state()
 
     step_fn = make_step_fn(env, agent)
 
     carry = (timestep, rng, state, 0.0, 1.0)
-    print(f"Running {NUM_STEPS:,} fully-jitted R-Max steps...")
+
+    print(f"Running {NUM_STEPS:,} steps...")
+
     carry, (episodic_returns, dones) = lax.scan(step_fn, carry, None, length=NUM_STEPS)
 
     jax.block_until_ready(carry)
 
-    print("Done.")
+    final_timestep, final_rng, final_agent_state, _, _ = carry
+
+    print("Done. Saving results...")
 
     episodic_returns = np.asarray(episodic_returns)
     dones = np.asarray(dones)
 
-    steps = np.arange(NUM_STEPS)
-
-    terminal_steps = steps[dones]
-    terminal_returns = episodic_returns[dones]
-
-    plt.plot(terminal_steps, terminal_returns)
-    plt.xlabel("Steps")
-    plt.ylabel("Episodic Return")
-    plt.title("R-Max Episodic Return vs Environment Steps")
-    plt.grid(True)
-    plt.show()
+    # Save all results
+    results = {
+        'episodic_returns': episodic_returns,
+        'dones': dones,
+        'num_steps': NUM_STEPS,
+        'discount': DISCOUNT,
+        'r_max': R_MAX,
+        'known_threshold': KNOWN_THRESHOLD,
+    }
+    
+    np.save(output_dir / "episodic_returns.npy", episodic_returns)
+    np.save(output_dir / "dones.npy", dones)
+    
+    # Save agent state
+    q_table_np = np.asarray(final_agent_state.q_table)
+    transition_counts_np = np.asarray(final_agent_state.transition_counts)
+    reward_sums_np = np.asarray(final_agent_state.reward_sums)
+    visit_counts_np = np.asarray(final_agent_state.visit_counts)
+    
+    np.save(output_dir / "q_table.npy", q_table_np)
+    np.save(output_dir / "transition_counts.npy", transition_counts_np)
+    np.save(output_dir / "reward_sums.npy", reward_sums_np)
+    np.save(output_dir / "visit_counts.npy", visit_counts_np)
+    
+    # Save metadata
+    with open(output_dir / "metadata.pkl", 'wb') as f:
+        pickle.dump(results, f)
+    
+    print(f"\nSaved all results to {output_dir}/")
+    print(f"  - episodic_returns.npy")
+    print(f"  - dones.npy")
+    print(f"  - q_table.npy (shape: {q_table_np.shape})")
+    print(f"  - transition_counts.npy (shape: {transition_counts_np.shape})")
+    print(f"  - reward_sums.npy (shape: {reward_sums_np.shape})")
+    print(f"  - visit_counts.npy (shape: {visit_counts_np.shape})")
+    print(f"  - metadata.pkl")
 
 
 if __name__ == "__main__":

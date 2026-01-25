@@ -71,7 +71,7 @@ def run_episode(
 
         obs = environment.env.observation(env_st)
         action = agent.select_action(agent_st, obs, k_action, is_training)
-        next_env_st, next_obs, reward, terminal, _, _ = environment.step(env_st, action)
+        next_env_st, next_obs, reward, terminal, truncation, info = environment.step(env_st, action)
 
         def update_buffer_and_train(buff_st, agent_st):
             transition = Transition(
