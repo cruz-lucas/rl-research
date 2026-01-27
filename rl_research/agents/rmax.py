@@ -29,7 +29,7 @@ class RMaxAgent:
         r_max: float = 6.0,
         discount: float = 0.9,
         known_threshold: int = 1,
-        convergence_threshold: float = 1e-5,
+        convergence_threshold: float = 1e-6,
     ):
         num_states = num_states + 1
         terminal_state = num_states - 1
@@ -41,11 +41,10 @@ class RMaxAgent:
         self.discount = discount
         self.known_threshold = known_threshold
         self.convergence_threshold = convergence_threshold
-        self.vi_iterations = int(
+        self.vi_iterations = (
             jnp.ceil(
                 jnp.log(1 / (convergence_threshold * (1 - discount))) / (1 - discount)
-            )
-        )
+            )).astype(int)
         self.optimistic_value = r_max / (1 - discount)
 
     def initial_state(self) -> RMaxState:

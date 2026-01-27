@@ -5,7 +5,10 @@ from navix.environments.door_key import *
 
 
 class FixedGridDoorKey(nx.environments.DoorKey):
-    fixed_grid_seed: int = struct.field(pytree_node=False, default=0)
+    door_row: int = struct.field(pytree_node=False, default=1)
+    door_col: int = struct.field(pytree_node=False, default=2)
+    key_row: int = struct.field(pytree_node=False, default=2)
+    key_col: int = struct.field(pytree_node=False, default=1)
     
     def encode_state(self, timestep: nx.Timestep) -> int:
         state = timestep.state
@@ -15,6 +18,7 @@ class FixedGridDoorKey(nx.environments.DoorKey):
 
         door_open = state.get_doors().open
 
+        # check pocket != -1
         krow, _ = state.get_keys().position[0]
         kpicked = krow == 0
 
@@ -34,12 +38,11 @@ class FixedGridDoorKey(nx.environments.DoorKey):
 
         grid = room(height=self.height, width=self.width)
 
-        fixed_key = jax.random.PRNGKey(self.fixed_grid_seed)
         # door positions
         # col can be between 1 and height - 2
-        door_col = jax.random.randint(fixed_key, (), 2, self.width - 2)  # col
+        door_col = self.door_col
         # row can be between 1 and height - 2
-        door_row = jax.random.randint(fixed_key, (), 1, self.height - 1)  # row
+        door_row = self.door_row
         door_pos = jnp.asarray((door_row, door_col))
         doors = Door.create(
             position=door_pos,
@@ -85,7 +88,7 @@ class FixedGridDoorKey(nx.environments.DoorKey):
         goals = Goal.create(position=goal_pos, probability=jnp.asarray(1.0))
 
         # spawn key
-        key_pos = random_positions(k2, first_room, exclude=player_pos)
+        key_pos = jnp.array((self.key_row, self.key_col))#random_positions(k2, first_room, exclude=player_pos)
         keys = Key.create(position=key_pos, id=jnp.asarray(3), colour=PALETTE.YELLOW)
 
         # remove the wall beneath the door
@@ -123,7 +126,8 @@ nx.register_env(
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
     width=5,
-    fixed_grid_seed=2,
+    door_row=1,
+    random_start=False,
     **kwargs,
     )
 )
@@ -136,7 +140,8 @@ nx.register_env(
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
     width=5,
-    fixed_grid_seed=1,
+    door_row=2,
+    random_start=False,
     **kwargs,
     )
 )
@@ -149,7 +154,23 @@ nx.register_env(
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
     width=5,
-    fixed_grid_seed=5,
+    door_row=3,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "FixedGridDoorKey-16x16-layout1-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.categorical,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=14,
+    door_col=13,
+    random_start=False,
     **kwargs,
     )
 )

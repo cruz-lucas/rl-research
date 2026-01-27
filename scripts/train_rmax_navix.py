@@ -27,12 +27,15 @@ NUM_STEPS = 1_000_000
 DISCOUNT = 0.99
 R_MAX = 1.0
 KNOWN_THRESHOLD = 1
-OUTPUT_DIR = "./outputs/rmax_navix"
+ENV_ID = "FixedGridDoorKey-5x5-layout1-v0"
 
-MAX_STATES = 9 * 2 * 2 * 4
+OUTPUT_DIR = f"./outputs/rmax_navix/{ENV_ID}"
+
+MAX_STATES = 3 ** 2 * 2 * 2 * 4
 NUM_ACTIONS = 5
 
-SEED = 2
+NUM_SEEDS = 1
+BASE_SEED = 0
 
 
 
@@ -61,7 +64,6 @@ def make_step_fn(env: nx.Environment, agent: RMaxAgent):
         rng, a_rng = jrng.split(rng)
         a = agent.select_action(state, s, a_rng, is_training=True)
 
-        # remap to remove unused actions
         env_a = jnp.where(jnp.equal(a, 4), 5, a)
 
         timestep = env.step(timestep, env_a)
@@ -98,15 +100,12 @@ def make_step_fn(env: nx.Environment, agent: RMaxAgent):
     return step_fn
 
 
-def main():
-    output_dir = Path(OUTPUT_DIR)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
+def run_one_seed(seed: jax.Array):
     env = nx.make(
-        "FixedGridDoorKey-5x5-layout1-v0",
+        ENV_ID,
     )
 
-    rng = jrng.PRNGKey(SEED)
+    rng = jrng.PRNGKey(seed)
     rng, reset_rng = jrng.split(rng)
     timestep = env.reset(reset_rng)
 
@@ -118,61 +117,80 @@ def main():
         known_threshold=KNOWN_THRESHOLD,
     )
 
-    state = agent.initial_state()
+    agent_state = agent.initial_state()
 
     step_fn = make_step_fn(env, agent)
 
-    carry = (timestep, rng, state, 0.0, 1.0)
+    carry = (timestep, rng, agent_state, 0.0, 1.0)
 
-    print(f"Running {NUM_STEPS:,} steps...")
-
-    carry, (episodic_returns, dones) = lax.scan(step_fn, carry, None, length=NUM_STEPS)
-
-    jax.block_until_ready(carry)
+    carry, (episodic_returns, dones) = lax.scan(
+        step_fn, carry, None, length=NUM_STEPS
+    )
 
     final_timestep, final_rng, final_agent_state, _, _ = carry
+
+    return episodic_returns, dones, final_agent_state
+
+# @jax.jit
+def run_many_seeds(seeds):
+    # return jax.vmap(run_one_seed)(seeds)
+    return run_one_seed(seeds)
+
+def main():
+    output_dir = Path(OUTPUT_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    seeds = jnp.arange(BASE_SEED, BASE_SEED + NUM_SEEDS)[0]
+
+    print(f"Running {NUM_SEEDS} seeds × {NUM_STEPS:,} steps...")
+
+    episodic_returns, dones, final_states = run_many_seeds(seeds)
+
+    jax.block_until_ready(episodic_returns)
 
     print("Done. Saving results...")
 
     episodic_returns = np.asarray(episodic_returns)
     dones = np.asarray(dones)
 
-    # Save all results
-    results = {
-        'episodic_returns': episodic_returns,
-        'dones': dones,
-        'num_steps': NUM_STEPS,
-        'discount': DISCOUNT,
-        'r_max': R_MAX,
-        'known_threshold': KNOWN_THRESHOLD,
-    }
-    
+    # Save per-seed trajectories
     np.save(output_dir / "episodic_returns.npy", episodic_returns)
     np.save(output_dir / "dones.npy", dones)
-    
-    # Save agent state
-    q_table_np = np.asarray(final_agent_state.q_table)
-    transition_counts_np = np.asarray(final_agent_state.transition_counts)
-    reward_sums_np = np.asarray(final_agent_state.reward_sums)
-    visit_counts_np = np.asarray(final_agent_state.visit_counts)
-    
-    np.save(output_dir / "q_table.npy", q_table_np)
-    np.save(output_dir / "transition_counts.npy", transition_counts_np)
-    np.save(output_dir / "reward_sums.npy", reward_sums_np)
-    np.save(output_dir / "visit_counts.npy", visit_counts_np)
-    
-    # Save metadata
-    with open(output_dir / "metadata.pkl", 'wb') as f:
-        pickle.dump(results, f)
-    
+
+    # Save per-seed agent state
+    np.save(
+        output_dir / "q_table.npy",
+        np.asarray(final_states.q_table),
+    )
+    np.save(
+        output_dir / "transition_counts.npy",
+        np.asarray(final_states.transition_counts),
+    )
+    np.save(
+        output_dir / "reward_sums.npy",
+        np.asarray(final_states.reward_sums),
+    )
+    np.save(
+        output_dir / "visit_counts.npy",
+        np.asarray(final_states.visit_counts),
+    )
+
+    metadata = {
+        "num_seeds": NUM_SEEDS,
+        "num_steps": NUM_STEPS,
+        "discount": DISCOUNT,
+        "r_max": R_MAX,
+        "known_threshold": KNOWN_THRESHOLD,
+        "base_seed": BASE_SEED,
+    }
+
+    with open(output_dir / "metadata.pkl", "wb") as f:
+        pickle.dump(metadata, f)
+
     print(f"\nSaved all results to {output_dir}/")
-    print(f"  - episodic_returns.npy")
-    print(f"  - dones.npy")
-    print(f"  - q_table.npy (shape: {q_table_np.shape})")
-    print(f"  - transition_counts.npy (shape: {transition_counts_np.shape})")
-    print(f"  - reward_sums.npy (shape: {reward_sums_np.shape})")
-    print(f"  - visit_counts.npy (shape: {visit_counts_np.shape})")
-    print(f"  - metadata.pkl")
+    print(f"  episodic_returns.npy: {episodic_returns.shape}")
+    print(f"  dones.npy: {dones.shape}")
+    print(f"  q_table.npy: {final_states.q_table.shape}")
 
 
 if __name__ == "__main__":
