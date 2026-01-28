@@ -1,7 +1,39 @@
+from typing import Union, Callable
 import jax
 import jax.numpy as jnp
+from jax import Array
+from flax import struct
 import navix as nx
-from navix.environments.door_key import *
+import gin
+
+from navix.states import State
+from navix.environments.environment import Timestep
+from navix.entities import Player, Key, Door, Goal, Wall
+from navix.rendering.registry import PALETTE
+from navix.rendering.cache import RenderingCache, TILE_SIZE
+from navix.components import EMPTY_POCKET_ID
+from navix import rewards, observations, terminations
+from navix.grid import mask_by_coordinates, room
+from navix.spaces import Space, Discrete, Continuous
+
+from rl_research.environments import BaseJaxEnv
+
+
+
+def tabular_obs_fn(state: State) -> Array:
+    H, W = state.grid.shape
+
+    prow, pcol = state.get_player().position
+    player_pos = (prow - 1) * (W - 2) + (pcol - 1)
+
+    door_open = state.get_doors().open
+
+    # check pocket != -1 might be a better solution
+    krow, _ = state.get_keys().position[0]
+    kpicked = krow == 0
+
+    direction = state.get_player().direction
+    return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)[0]
 
 
 class FixedGridDoorKey(nx.environments.DoorKey):
@@ -12,20 +44,6 @@ class FixedGridDoorKey(nx.environments.DoorKey):
     goal_row: int = struct.field(pytree_node=False, default=2)
     goal_col: int = struct.field(pytree_node=False, default=1)
     
-    def encode_state(self, timestep: nx.Timestep) -> int:
-        state = timestep.state
-
-        prow, pcol = state.get_player().position
-        player_pos = (prow - 1) * (self.width - 2) + (pcol - 1)
-
-        door_open = state.get_doors().open
-
-        # check pocket != -1
-        krow, _ = state.get_keys().position[0]
-        kpicked = krow == 0
-
-        direction = state.get_player().direction
-        return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)[0]
 
     def _reset(self, key: Array, cache: Union[RenderingCache, None] = None) -> Timestep:
         # check minimum height and width
@@ -42,9 +60,9 @@ class FixedGridDoorKey(nx.environments.DoorKey):
 
         # door positions
         # col can be between 1 and height - 2
-        door_col = self.door_col
+        door_col = jnp.asarray(self.door_col)
         # row can be between 1 and height - 2
-        door_row = self.door_row
+        door_row = jnp.asarray(self.door_row)
         door_pos = jnp.asarray((door_row, door_col))
         doors = Door.create(
             position=door_pos,
@@ -74,15 +92,9 @@ class FixedGridDoorKey(nx.environments.DoorKey):
         second_room = jnp.where(second_room_mask, grid, -1)  # put walls where not mask
 
         # set player and goal pos
-        if self.random_start:
-            player_pos = random_positions(k1, first_room)
-            player_dir = random_directions(k2)
-            goal_pos = random_positions(k2, second_room)
-        else:
-            player_pos = jnp.asarray([1, 1])
-            player_dir = jnp.asarray(0)
-            # goal_pos = jnp.asarray([self.height - 2, self.width - 2])
-            goal_pos = jnp.asarray([self.goal_row, self.goal_col])
+        player_pos = jnp.asarray([1, 1])
+        player_dir = jnp.asarray(0)
+        goal_pos = jnp.asarray([self.goal_row, self.goal_col])
 
         # spawn goal and player
         player = Player.create(
@@ -120,11 +132,79 @@ class FixedGridDoorKey(nx.environments.DoorKey):
             state=state,
         )
     
+    @staticmethod
+    def _get_obs_space_from_fn(
+        width: int, height: int, observation_fn: Callable[[State], Array]
+    ) -> Space:
+        if observation_fn == observations.none:
+            return Continuous.create(
+                shape=(), minimum=jnp.asarray(0.0), maximum=jnp.asarray(0.0)
+            )
+        elif observation_fn == observations.categorical:
+            return Discrete.create(n_elements=9, shape=(height, width))
+        elif observation_fn == observations.categorical_first_person:
+            radius = observations.RADIUS
+            return Discrete.create(n_elements=9, shape=(radius * 2 + 1, radius * 2 + 1))
+        elif observation_fn == observations.rgb:
+            return Discrete.create(
+                256,
+                shape=(height * TILE_SIZE, width * TILE_SIZE, 3),
+                dtype=jnp.uint8,
+            )
+        elif observation_fn == observations.rgb_first_person:
+            radius = observations.RADIUS
+            return Discrete.create(
+                n_elements=256,
+                shape=((radius * 2 + 1) * TILE_SIZE, (radius * 2 + 1) * TILE_SIZE, 3),
+                dtype=jnp.uint8,
+            )
+        elif observation_fn == observations.symbolic:
+            return Discrete.create(
+                n_elements=9,
+                shape=(height, width, 3),
+                dtype=jnp.uint8,
+            )
+        elif observation_fn == observations.symbolic_first_person:
+            radius = observations.RADIUS
+            return Discrete.create(
+                n_elements=256,
+                shape=(radius * 2 + 1, radius * 2 + 1, 3),
+                dtype=jnp.uint8,
+            )
+        elif observation_fn == tabular_obs_fn:
+            return Discrete.create(
+                n_elements=height * width * 2 * 2 * 4,
+                shape=(1,),
+                dtype=jnp.uint8,
+            )
+        else:
+            raise NotImplementedError(
+                "Unknown observation space for observation function {}".format(
+                    observation_fn
+                )
+            )
+
+
+@gin.configurable
+class NavixWrapper(BaseJaxEnv):
+    def __init__(self, env_id: str):
+        self.env = nx.make(
+            env_id,
+        )
+
+    def reset(self, key: Array):
+        timestep = self.env.reset(key)
+        return timestep, timestep.observation
+
+    def step(self, timestep: Timestep, action: Array):
+        timestep = self.env.step(timestep, action)
+        return timestep, timestep.observation, timestep.reward, timestep.is_termination(), timestep.is_truncation(), timestep.info  # observations.rgb(timestep.state) # set info to rgb for debugging purposes
+
 
 nx.register_env(
-    "FixedGridDoorKey-5x5-layout1-v0",
+    "TabularGridDoorKey-5x5-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.symbolic,
+    observation_fn=tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
@@ -138,9 +218,9 @@ nx.register_env(
 )
 
 nx.register_env(
-    "FixedGridDoorKey-5x5-layout2-v0",
+    "TabularGridDoorKey-5x5-layout2-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.symbolic,
+    observation_fn=tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
@@ -154,9 +234,9 @@ nx.register_env(
 )
 
 nx.register_env(
-    "FixedGridDoorKey-5x5-layout3-v0",
+    "TabularGridDoorKey-5x5-layout3-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.symbolic,
+    observation_fn=tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
@@ -170,9 +250,9 @@ nx.register_env(
 )
 
 nx.register_env(
-    "FixedGridDoorKey-16x16-layout1-v0",
+    "TabularGridDoorKey-16x16-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.symbolic,
+    observation_fn=tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=16,
@@ -187,9 +267,9 @@ nx.register_env(
 )
 
 nx.register_env(
-    "FixedGridDoorKey-16x16-layout2-v0",
+    "TabularGridDoorKey-16x16-layout2-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.symbolic,
+    observation_fn=tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=16,
@@ -204,9 +284,9 @@ nx.register_env(
 )
 
 nx.register_env(
-    "FixedGridDoorKey-16x16-layout3-v0",
+    "TabularGridDoorKey-16x16-layout3-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.symbolic,
+    observation_fn=tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=16,

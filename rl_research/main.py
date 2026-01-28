@@ -69,17 +69,18 @@ def log_history_to_mlflow(history: History):
             step=episode * max_episode_steps,
         )
 
-    num_evals = train_episodes // evaluate_every
-    for episode in range(num_evals):
-        mlflow.log_metrics(
-            {
-                "eval/mean_return": float(history.eval_returns[episode]),
-                "eval/mean_discounted_return": float(
-                    history.eval_discounted_returns[episode]
-                ),
-            },
-            step=episode * max_episode_steps,
-        )
+    if evaluate_every != 0:
+        num_evals = train_episodes // evaluate_every
+        for episode in range(num_evals):
+            mlflow.log_metrics(
+                {
+                    "eval/mean_return": float(history.eval_returns[episode]),
+                    "eval/mean_discounted_return": float(
+                        history.eval_discounted_returns[episode]
+                    ),
+                },
+                step=episode * max_episode_steps,
+            )
 
     final_train_window = 100
     mlflow.log_metrics(

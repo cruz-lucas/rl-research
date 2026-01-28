@@ -1,0 +1,23 @@
+setup_mlflow.experiment_name = "test_navix_5x5_layout1"
+setup_mlflow.experiment_group = "rmax"
+
+run_single_seed.agent_cls = @RMaxAgent
+run_single_seed.env_cls = @NavixWrapper
+run_single_seed.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 1
+
+RMaxAgent.r_max = 6.0
+RMaxAgent.discount = 0.9
+RMaxAgent.known_threshold = 1
+RMaxAgent.convergence_threshold = 1e-6
+
+NavixWrapper.env_id = "TabularGridDoorKey-5x5-layout1-v0"
+
+run_loop.train_episodes = 600
+run_loop.max_episode_steps = 500
+run_loop.batch_size = 1
+run_loop.update_frequency = 1
+run_loop.replay_ratio = 1
+run_loop.warmup_steps = 0
+run_loop.evaluate_every = 0
+run_loop.eval_episodes = 1

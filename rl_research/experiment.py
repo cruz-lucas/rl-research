@@ -37,6 +37,7 @@ class History:
 def run_episode(
     agent_state: Any,
     env_state: Any,
+    env_obs: Any,
     buffer_state: BufferState,
     key: jax.Array,
     agent,
@@ -48,7 +49,7 @@ def run_episode(
     warmup_steps: int,
     is_training: bool,
     global_step: jnp.ndarray,
-) -> Tuple[Any, Any, BufferState, float, float, int, jnp.ndarray, jnp.ndarray]:
+) -> Tuple[Any, Any, Any, BufferState, float, float, int, jnp.ndarray, jnp.ndarray]:
     """Run a single episode."""
     total_updates = update_frequency * replay_ratio
     train_flag = jnp.asarray(is_training)
@@ -57,8 +58,9 @@ def run_episode(
         (
             agent_st,
             env_st,
+            obs,
             buff_st,
-            k,
+            key,
             ep_return,
             ep_disc_return,
             discount_factor,
@@ -67,9 +69,8 @@ def run_episode(
             g_step,
         ) = carry
 
-        k, k_action, k_update = jax.random.split(k, 3)
+        key, k_action, k_update = jax.random.split(key, 3)
 
-        obs = environment.env.observation(env_st)
         action = agent.select_action(agent_st, obs, k_action, is_training)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(env_st, action)
 
@@ -139,8 +140,9 @@ def run_episode(
         new_carry = (
             new_agent_st,
             next_env_st,
+            next_obs,
             new_buff_st,
-            k,
+            key,
             new_ep_return,
             new_ep_disc_return,
             new_discount_factor,
@@ -160,6 +162,7 @@ def run_episode(
     init_carry = (
         agent_state,
         env_state,
+        env_obs,
         buffer_state,
         key,
         ep_return,
@@ -177,6 +180,7 @@ def run_episode(
     (
         agent_st,
         env_st,
+        env_obs,
         buff_st,
         _,
         ep_return,
@@ -190,6 +194,7 @@ def run_episode(
     return (
         agent_st,
         env_st,
+        env_obs,
         buff_st,
         ep_return,
         ep_disc_return,
@@ -262,10 +267,11 @@ def run_loop(
 
         k, k_reset, k_episode, k_eval = jax.random.split(k, 4)
 
-        env_st, _ = environment.reset(k_reset)
+        env_st, env_obs = environment.reset(k_reset)
         (
             agent_st,
             env_st,
+            env_obs,
             buff_st,
             train_rets,
             train_disc_rets,
@@ -275,6 +281,7 @@ def run_loop(
         ) = run_episode(
             agent_st,
             env_st,
+            env_obs,
             buff_st,
             k_episode,
             agent,
@@ -295,10 +302,11 @@ def run_loop(
                 k_e = eval_carry
                 k_e, k_e_reset, k_e_episode = jax.random.split(k_e, 3)
 
-                eval_env_st, _ = environment.reset(k_e_reset)
-                _, _, _, eval_return, eval_disc_return, eval_length, _, _ = run_episode(
+                eval_env_st, eval_obs = environment.reset(k_e_reset)
+                _, _, _, _, eval_return, eval_disc_return, eval_length, _, _ = run_episode(
                     agent_st,
                     eval_env_st,
+                    eval_obs,
                     buff_st,
                     k_e_episode,
                     agent,

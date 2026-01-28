@@ -23,10 +23,6 @@ class BaseJaxEnv:
         self, params: EnvParams | None = None, render_mode: str | None = None, **kwargs
     ): ...
 
-    @property
-    @abstractmethod
-    def env(self): ...
-
     @abstractmethod
     def reset(self, rng: PRNGKey) -> Tuple[EnvState, jax.Array]: ...
 
