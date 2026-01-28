@@ -9,6 +9,8 @@ class FixedGridDoorKey(nx.environments.DoorKey):
     door_col: int = struct.field(pytree_node=False, default=2)
     key_row: int = struct.field(pytree_node=False, default=2)
     key_col: int = struct.field(pytree_node=False, default=1)
+    goal_row: int = struct.field(pytree_node=False, default=2)
+    goal_col: int = struct.field(pytree_node=False, default=1)
     
     def encode_state(self, timestep: nx.Timestep) -> int:
         state = timestep.state
@@ -79,7 +81,8 @@ class FixedGridDoorKey(nx.environments.DoorKey):
         else:
             player_pos = jnp.asarray([1, 1])
             player_dir = jnp.asarray(0)
-            goal_pos = jnp.asarray([self.height - 2, self.width - 2])
+            # goal_pos = jnp.asarray([self.height - 2, self.width - 2])
+            goal_pos = jnp.asarray([self.goal_row, self.goal_col])
 
         # spawn goal and player
         player = Player.create(
@@ -121,12 +124,14 @@ class FixedGridDoorKey(nx.environments.DoorKey):
 nx.register_env(
     "FixedGridDoorKey-5x5-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.categorical,
+    observation_fn=nx.observations.symbolic,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
     width=5,
     door_row=1,
+    goal_row=1,
+    goal_col=3,
     random_start=False,
     **kwargs,
     )
@@ -135,12 +140,14 @@ nx.register_env(
 nx.register_env(
     "FixedGridDoorKey-5x5-layout2-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.categorical,
+    observation_fn=nx.observations.symbolic,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
     width=5,
-    door_row=2,
+    door_row=3,
+    goal_row=3,
+    goal_col=3,
     random_start=False,
     **kwargs,
     )
@@ -149,12 +156,14 @@ nx.register_env(
 nx.register_env(
     "FixedGridDoorKey-5x5-layout3-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.categorical,
+    observation_fn=nx.observations.symbolic,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
     width=5,
     door_row=3,
+    goal_row=1,
+    goal_col=3,
     random_start=False,
     **kwargs,
     )
@@ -163,13 +172,49 @@ nx.register_env(
 nx.register_env(
     "FixedGridDoorKey-16x16-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=nx.observations.categorical,
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=1,
+    door_col=13,
+    goal_row=1,
+    goal_col=14,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "FixedGridDoorKey-16x16-layout2-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=16,
     width=16,
     door_row=14,
     door_col=13,
+    goal_row=14,
+    goal_col=14,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "FixedGridDoorKey-16x16-layout3-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=14,
+    door_col=13,
+    goal_row=1,
+    goal_col=14,
     random_start=False,
     **kwargs,
     )
