@@ -27,11 +27,11 @@ NUM_STEPS = 1_000_000
 DISCOUNT = 0.99
 R_MAX = 1.0
 KNOWN_THRESHOLD = 1
-ENV_ID = "FixedGridDoorKey-5x5-layout1-v0"
+ENV_ID = "FixedGridDoorKey-16x16-layout1-v0"
 
 OUTPUT_DIR = f"./outputs/rmax_navix/{ENV_ID}"
 
-MAX_STATES = 3 ** 2 * 2 * 2 * 4
+MAX_STATES = 14 ** 2 * 2 * 2 * 4
 NUM_ACTIONS = 5
 
 NUM_SEEDS = 1
@@ -77,7 +77,7 @@ def make_step_fn(env: nx.Environment, agent: RMaxAgent):
             action=jnp.array([a]),
             reward=jnp.array([r]),
             next_observation=jnp.array([sp]),
-            terminal=jnp.array([timestep.is_termination()]),
+            terminal=jnp.array([timestep.is_termination()], dtype=jnp.bool),
             discount=jnp.array([DISCOUNT]),
         )
 
