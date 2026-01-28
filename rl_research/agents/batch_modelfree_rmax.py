@@ -88,7 +88,7 @@ class BMFRmaxAgent:
 
             q_current = q_table[s, a]
             q_next_max = jax.lax.cond(
-                terminal[0], # TODO: this indexing is a hack to use navix, fix this
+                terminal,
                 lambda _: 0.0,
                 lambda _: jnp.where(
                     is_next_unknown, self.optimistic_value, jnp.max(q_table[s_next])
@@ -104,7 +104,7 @@ class BMFRmaxAgent:
             new_q = jnp.where(is_unknown, q_current, updated_q)
 
             loss_val = jnp.abs(td_error)
-            return (q_table.at[s, a].set(new_q[0]), visit_counts), loss_val # TODO: this indexing is a hack to use navix, fix this
+            return (q_table.at[s, a].set(new_q), visit_counts), loss_val
 
         (new_q_table, new_visit_counts), losses = jax.lax.scan(
             update_single, (state.q_table, state.visit_counts), jnp.arange(batch_size)
