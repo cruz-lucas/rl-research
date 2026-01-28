@@ -24,7 +24,7 @@ import optax
 
 
 # Configuration
-NUM_STEPS = 1_000
+NUM_STEPS = 1_000_000
 ENV_ID = "FixedGridDoorKey-5x5-layout1-v0"
 OUTPUT_DIR = f"./outputs/dqn_dopamine/{ENV_ID}"
 
@@ -138,8 +138,7 @@ def select_action(
         rng, key_action = jrng.split(rng)
         action = jrng.randint(key_action, (), 0, num_actions)
     else:
-        # Get Q-values
-        q_vals = network_def.apply(params, state[None])[0]  # Add batch dim
+        q_vals = network_def.apply(params, state[None])[0]
         action = jnp.argmax(q_vals)
     
     return rng, int(action)
@@ -153,15 +152,12 @@ def compute_td_target(
     terminals,
 ) -> jnp.ndarray:
     """Compute TD target using target network."""
-    # Get next state Q-values
     next_q_vals = jax.vmap(
         lambda s: network_def.apply(target_params, s[None]).q_values[0]
     )(next_states)
     
-    # Max Q-value for next state
     max_next_q = jnp.max(next_q_vals, axis=1)
     
-    # Bellman target
     target = rewards + GAMMA * max_next_q * (1.0 - terminals)
     return jax.lax.stop_gradient(target)
 
