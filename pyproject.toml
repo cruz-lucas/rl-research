@@ -19,7 +19,6 @@ dependencies = [
     "tyro==0.9.35",
     "seaborn==0.13.2",
     "dopamine-rl>=4.0.0",
-    "minigrid>=2.0.0",
     "navix",
     "jax>=0.9.0",
     "optax>=0.2.6",
