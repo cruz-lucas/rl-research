@@ -101,8 +101,6 @@ class QLearningAgent:
             batch_mask = jnp.ones((batch_size,), dtype=bool)
         batch_mask = batch_mask.astype(jnp.bool_)
 
-        # jax.debug.print("step {t}: {s} - {a} - {r} - {sp}", s=batch.observation, a=batch.action, r=batch.reward, sp=batch.next_observation, t=state.step)
-
         def update_single(i):
             valid = batch_mask[i]
             s = batch.observation[i].astype(jnp.int32).squeeze()
