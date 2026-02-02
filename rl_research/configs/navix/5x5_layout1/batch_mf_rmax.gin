@@ -1,0 +1,23 @@
+setup_mlflow.experiment_name = "test_navix_5x5_layout1"
+setup_mlflow.experiment_group = "batch_modelfree_rmax"
+
+run_single_seed.agent_cls = @BMFRmaxAgent
+run_single_seed.env_cls = @NavixWrapper
+run_single_seed.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 3571
+
+BMFRmaxAgent.r_max = 6.0
+BMFRmaxAgent.discount = 0.9
+BMFRmaxAgent.step_size = 0.00106934
+BMFRmaxAgent.known_threshold = 46
+
+NavixWrapper.env_id = "TabularGridDoorKey-5x5-layout1-v0"
+
+run_loop.train_episodes = 600
+run_loop.max_episode_steps = 500
+run_loop.batch_size = 326
+run_loop.update_frequency = 21
+run_loop.replay_ratio = 5
+run_loop.warmup_steps = 2150
+run_loop.evaluate_every = 1
+run_loop.eval_episodes = 1

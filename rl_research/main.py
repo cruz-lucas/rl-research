@@ -1,13 +1,14 @@
 import os
-import subprocess
-import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Type
+from typing import Annotated, Type, Tuple
 
 import gin
 import jax
 import mlflow
+from mlflow.tracking import MlflowClient
+from mlflow.entities import Metric
 import numpy as np
 import tyro
 
@@ -52,68 +53,76 @@ def setup_mlflow(
 
 def log_history_to_mlflow(history: History):
     """Log training history to MLflow."""
-    train_episodes = gin.get_bindings("run_loop")["train_episodes"]
-    max_episode_steps = gin.get_bindings("run_loop")["max_episode_steps"]
+    client = MlflowClient()
+    run_id = mlflow.active_run().info.run_id
+
+    dones = history.dones
+    steps = history.global_steps[dones]
+
+    metrics = []
+    timestamp = int(time.time() * 1000)
+
+    for i, step in enumerate(steps):
+        metrics.extend([
+            Metric(
+                key="train/return",
+                value=float(history.train_returns[dones][i]),
+                step=int(step),
+                timestamp=timestamp,
+            ),
+            Metric(
+                key="train/discounted_return",
+                value=float(history.train_discounted_returns[dones][i]),
+                step=int(step),
+                timestamp=timestamp,
+            ),
+            Metric(
+                key="train/loss",
+                value=float(history.train_losses[dones][i]),
+                step=int(step),
+                timestamp=timestamp,
+            ),
+        ])
+
+    # Log in chunks to avoid memory blow-up
+    BATCH_SIZE = 100_000
+    for i in range(0, len(metrics), BATCH_SIZE):
+        client.log_batch(
+            run_id=run_id,
+            metrics=metrics[i:i + BATCH_SIZE],
+        )
+
+    mlflow.log_metric(
+        "last_100/train_disc_return_mean",
+        float(np.mean(history.train_discounted_returns[dones][-100:])),
+    )
+
     evaluate_every = gin.get_bindings("run_loop")["evaluate_every"]
     eval_episodes = gin.get_bindings("run_loop")["eval_episodes"]
 
-    for episode in range(train_episodes):
-        mlflow.log_metrics(
-            {
-                "train/return": float(history.train_returns[episode]),
-                "train/discounted_return": float(
-                    history.train_discounted_returns[episode]
-                ),
-                "train/loss": float(history.train_losses[episode]),
-            },
-            step=episode * max_episode_steps,
-        )
-
-    if evaluate_every != 0:
-        num_evals = train_episodes // evaluate_every
-        for episode in range(num_evals):
-            mlflow.log_metrics(
-                {
-                    "eval/mean_return": float(history.eval_returns[episode]),
-                    "eval/mean_discounted_return": float(
-                        history.eval_discounted_returns[episode]
-                    ),
-                },
-                step=episode * max_episode_steps,
-            )
+    # if evaluate_every != 0:
+    #     for episode in range(0, num_episodes, evaluate_every):
+    #         mlflow.log_metrics(
+    #             {
+    #                 "eval/mean_return": float(history.eval_returns[episode]),
+    #                 "eval/mean_discounted_return": float(
+    #                     history.eval_discounted_returns[episode]
+    #                 ),
+    #             },
+    #             step=int(history.global_steps[episode]),
+    #         )
 
     final_train_window = 100
     mlflow.log_metrics(
         {
             "last_100/train_disc_return_mean": float(
-                np.mean(history.train_discounted_returns[-final_train_window:])
+                np.mean(history.train_discounted_returns[history.dones][-final_train_window:])
             ),
-            "last_100/eval_disc_return_mean": float(
-                np.mean(history.eval_discounted_returns[-final_train_window:])
-            ),
+            # "last_100/eval_disc_return_mean": float(
+            #     np.mean(history.eval_discounted_returns[-final_train_window:])
+            # ),
         }
     )
-
-
-def log_agent_states_to_mlflow(agent_states):
-    """Save per-episode agent state tensors as an MLflow artifact."""
-    agent_states_np = jax.tree_util.tree_map(np.array, agent_states)
-
-    payload = {}
-    if hasattr(agent_states_np, "q_table"):
-        payload["q_values"] = agent_states_np.q_table
-    if hasattr(agent_states_np, "visit_counts"):
-        payload["sa_counts"] = agent_states_np.visit_counts
-    if hasattr(agent_states_np, "behavior_q_values"):
-        payload["behavior_q_values"] = agent_states_np.behavior_q_values
-
-    if not payload:
-        return
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        save_path = os.path.join(tmpdir, "agent_states.npz")
-        np.savez(save_path, **payload)
-        mlflow.log_artifact(save_path, artifact_path="artifacts")
 
 
 @gin.configurable
@@ -139,7 +148,7 @@ def run_single_seed(
     buffer = buffer_cls(**buffer_init_kwargs)
     buffer_state = buffer.initial_state()
 
-    history, agent_states = run_loop(
+    history = run_loop(
         agent=agent,
         environment=env,
         buffer_state=buffer_state,
@@ -147,9 +156,7 @@ def run_single_seed(
         seed=seed,
     )
 
-    history = jax.tree_util.tree_map(np.array, history)
-
-    return history, agent_states
+    return history
 
 
 @dataclass
@@ -187,7 +194,7 @@ def main(args: Args) -> None:
     # shared_root.mkdir(parents=True, exist_ok=True)
 
     # mlflow.set_tracking_uri(shared_root)
-    # mlflow.set_tracking_uri("sqlite:///mlruns.db")
+    mlflow.set_tracking_uri("sqlite:///mlruns.db")
 
     with setup_mlflow(seed=seed) as run:
         run_bindings = gin.get_bindings("run_single_seed")
@@ -210,9 +217,10 @@ def main(args: Args) -> None:
             }
         )
 
-        history, agent_states = run_single_seed(seed=seed)
+        history = run_single_seed(seed=seed)
+        history = jax.device_get(history)
+
         log_history_to_mlflow(history)
-        # log_agent_states_to_mlflow(agent_states)
 
 
 if __name__ == "__main__":
