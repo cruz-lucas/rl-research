@@ -299,3 +299,105 @@ nx.register_env(
     **kwargs,
     )
 )
+
+
+
+nx.register_env(
+    "GridDoorKey-5x5-layout1-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=5,
+    width=5,
+    door_row=1,
+    goal_row=1,
+    goal_col=3,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+
+nx.register_env(
+    "GridDoorKey-5x5-layout2-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=5,
+    width=5,
+    door_row=3,
+    goal_row=3,
+    goal_col=3,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "GridDoorKey-5x5-layout3-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=5,
+    width=5,
+    door_row=3,
+    goal_row=1,
+    goal_col=3,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "GridDoorKey-16x16-layout1-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=1,
+    door_col=13,
+    goal_row=1,
+    goal_col=14,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "GridDoorKey-16x16-layout2-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=14,
+    door_col=13,
+    goal_row=14,
+    goal_col=14,
+    random_start=False,
+    **kwargs,
+    )
+)
+
+nx.register_env(
+    "GridDoorKey-16x16-layout3-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=nx.observations.symbolic,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=14,
+    door_col=13,
+    goal_row=1,
+    goal_col=14,
+    random_start=False,
+    **kwargs,
+    )
+)
