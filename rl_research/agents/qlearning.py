@@ -14,8 +14,7 @@ from rl_research.policies import (
 )
 
 
-@struct.dataclass
-class QLearningState:
+class QLearningState(struct.PyTreeNode):
     """State for Q-learning agent."""
 
     q_table: jnp.ndarray
@@ -36,8 +35,11 @@ class QLearningAgent:
         initial_epsilon: float,
         step_size: float,
         initial_q_value: float,
-        ucb_c: float,
-        policy: Literal["epsilon_greedy", "random", "ucb"],
+        ucb_c: float = 0.0,
+        policy: Literal["epsilon_greedy", "random", "ucb"] = "random",
+        use_scheduler: bool = False,
+        anneal_steps: int = 1_000_000,
+        final_epsilon: float = 0.01,
     ):
         self.num_states = num_states
         self.num_actions = num_actions
@@ -48,6 +50,9 @@ class QLearningAgent:
         self.initial_epsilon = initial_epsilon
         self.ucb_c = ucb_c
         self.policy = policy
+        self.anneal_steps = anneal_steps
+        self.final_epsilon = final_epsilon
+        self.use_scheduler = use_scheduler
 
     def initial_state(self) -> QLearningState:
         """Initialize Q-table and visit counts."""
@@ -93,60 +98,33 @@ class QLearningAgent:
         self,
         state: QLearningState,
         batch: Transition,
-        batch_mask: jnp.ndarray | None = None,
     ) -> tuple[QLearningState, jax.Array]:
-        """Update Q-table with batch of transitions."""
-        batch_size = batch.observation.shape[0]
-        if batch_mask is None:
-            batch_mask = jnp.ones((batch_size,), dtype=bool)
-        batch_mask = batch_mask.astype(jnp.bool_)
+        """Update Q-table."""
+        s = batch.observation.astype(jnp.int32)
+        a = batch.action.astype(jnp.int32)
+        r = batch.reward
+        s_next = batch.next_observation.astype(jnp.int32)
+        terminal = batch.terminal.astype(jnp.bool)
 
-        def update_single(i):
-            valid = batch_mask[i]
-            s = batch.observation[i].astype(jnp.int32).squeeze()
-            a = batch.action[i].astype(jnp.int32).squeeze()
-            r = batch.reward[i]
-            s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
-            terminal = batch.terminal[i]
+        q_current = state.q_table[s, a]
+        q_next_max = jnp.max(state.q_table[s_next])
+        target = r + self.discount * q_next_max * (
+            1.0 - terminal.astype(jnp.float32)
+        )
+        td_error = target - q_current
+        new_q = q_current + self.step_size * td_error
 
-            q_current = state.q_table[s, a]
-            q_next_max = jnp.max(state.q_table[s_next])
-            target = r + self.discount * q_next_max * (
-                1.0 - terminal.astype(jnp.float32)
-            )
-            td_error = target - q_current
-            new_q = q_current + self.step_size * td_error
-
-            masked_q = jnp.where(valid, new_q, q_current)
-            masked_td = jnp.where(valid, td_error, 0.0)
-            visit_inc = jnp.where(valid, 1, 0)
-            return s, a, masked_q, masked_td, visit_inc
-
-        states, actions, new_qs, td_errors, visit_incs = jax.vmap(update_single)(
-            jnp.arange(batch_size)
+        next_state = state.replace(
+            q_table=state.q_table.at[s, a].set(new_q),
+            visit_counts=state.visit_counts.at[s, a].add(1),
+            step=state.step + 1,
         )
 
-        def apply_q_updates(i, table):
-            return jax.lax.cond(
-                visit_incs[i] > 0,
-                lambda t: t.at[states[i], actions[i]].set(new_qs[i]),
-                lambda t: t,
-                table,
-            )
+        frac = jnp.where(self.use_scheduler, jnp.clip(next_state.step / self.anneal_steps, 0.0, 1.0), 0.0)
+        new_eps = self.initial_epsilon + frac * (self.final_epsilon - self.initial_epsilon)
+        next_state = next_state.replace(eps_greedy_epsilon=new_eps)
 
-        new_q_table = jax.lax.fori_loop(0, batch_size, apply_q_updates, state.q_table)
-
-        new_visit_counts = state.visit_counts.at[states, actions].add(visit_incs)
-
-        new_state = state.replace(
-            q_table=new_q_table,
-            visit_counts=new_visit_counts,
-            step=state.step + jnp.sum(visit_incs),
-        )
-
-        total_valid = jnp.maximum(jnp.sum(visit_incs), 1)
-        loss = jnp.sum(jnp.abs(td_errors)) / total_valid
-        return new_state, loss
+        return next_state, td_error
 
     def bootstrap_value(
         self, state: QLearningState, next_observation: jnp.ndarray
