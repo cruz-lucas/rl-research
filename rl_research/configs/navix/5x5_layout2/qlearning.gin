@@ -1,0 +1,29 @@
+setup_mlflow.experiment_name = "navix_5x5_layout2"
+setup_mlflow.experiment_group = "qlearning_epsgreedy"
+
+run_single_seed.agent_cls = @QLearningAgent
+run_single_seed.env_cls = @NavixWrapper
+run_single_seed.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 1
+
+QLearningAgent.discount = 0.99
+QLearningAgent.step_size = 0.1
+QLearningAgent.initial_q_value = 0.0
+QLearningAgent.policy = "epsilon_greedy"
+QLearningAgent.initial_epsilon = 1.0
+QLearningAgent.final_epsilon = 0.01
+QLearningAgent.anneal_steps = 300_000
+QLearningAgent.use_scheduler = True
+
+NavixWrapper.env_id = "TabularGridDoorKey-5x5-layout2-v0"
+
+run_loop.train_episodes = 0
+run_loop.use_steps = True
+run_loop.train_steps = 1_000_000
+run_loop.max_episode_steps = 100
+run_loop.minibatch_size = 1
+run_loop.update_frequency = 1
+run_loop.num_minibatches = 1
+run_loop.warmup_steps = 0
+run_loop.evaluate_every = 0
+run_loop.eval_episodes = 0
