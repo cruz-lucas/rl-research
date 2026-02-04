@@ -17,8 +17,7 @@ class Transition(NamedTuple):
     terminal: jnp.ndarray
 
 
-@struct.dataclass
-class BufferState:
+class BufferState(struct.PyTreeNode):
     """Jittable buffer state for storing transitions."""
 
     observations: jnp.ndarray
@@ -38,12 +37,15 @@ class BufferState:
         max_size = self.observations.shape[0]
         idx = self.position % max_size
 
-        observations = self.observations.at[idx].set(transition.observation)
+        flat_obs = transition.observation.flatten()
+        flat_next_obs = transition.observation.flatten()
+
+        observations = self.observations.at[idx].set(flat_obs)
         actions = self.actions.at[idx].set(transition.action)
         rewards = self.rewards.at[idx].set(transition.reward)
         discounts = self.discounts.at[idx].set(transition.discount)
         next_observations = self.next_observations.at[idx].set(
-            transition.next_observation
+            flat_next_obs
         )
         terminals = self.terminals.at[idx].set(transition.terminal)
 
@@ -273,3 +275,34 @@ class MonteCarloBuffer(BaseBuffer):
             episode_steps=0,
             discount=self.discount,
         )
+
+
+@gin.configurable
+class FlatteningReplayBuffer(BaseBuffer):
+    """Replay buffer that flattens observations before storing."""
+
+    def __init__(
+        self,
+        buffer_size: int,
+        obs_shape: tuple[int, ...],
+        dtype=jnp.float32,
+    ):
+        self.buffer_size = buffer_size
+        self.obs_shape = obs_shape
+        self.obs_dim = int(jnp.prod(jnp.array(obs_shape)))
+        self.dtype = dtype
+
+    def initial_state(self) -> BufferState:
+        obs = jnp.zeros((self.buffer_size, self.obs_dim), dtype=self.dtype)
+        return BufferState(
+            observations=obs,
+            actions=jnp.zeros((self.buffer_size,), dtype=jnp.int32),
+            rewards=jnp.zeros((self.buffer_size,), dtype=jnp.float32),
+            discounts=jnp.zeros((self.buffer_size,), dtype=jnp.float32),
+            next_observations=obs,
+            terminals=jnp.zeros((self.buffer_size,), dtype=bool),
+            position=0,
+            size=0,
+        )
+    
+    
