@@ -49,7 +49,7 @@ class History(struct.PyTreeNode):
     static_argnames=[
         "agent",
         "environment",
-        "buffer"
+        "buffer",
         "minibatch_size",
         "max_episode_steps",
         "train_episodes",
