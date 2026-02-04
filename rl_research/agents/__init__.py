@@ -7,6 +7,7 @@ from rl_research.agents.batch_modelfree_mbieeb import BMFMBIEEBAgent
 from rl_research.agents.qlearning import QLearningAgent
 from rl_research.agents.rmax import RMaxAgent
 from rl_research.agents.factored_rmax import FactoredRMaxAgent
+from rl_research.agents.dqn import DQNAgent
 
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "RMaxAgent",
     "FactoredRMaxAgent",
     "DelayedQLearningAgent",
-    "BMFMBIEEBAgent"
+    "BMFMBIEEBAgent",
+    "DQNAgent",
 ]

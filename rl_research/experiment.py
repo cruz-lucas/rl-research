@@ -49,6 +49,7 @@ class History(struct.PyTreeNode):
     static_argnames=[
         "agent",
         "environment",
+        "buffer"
         "minibatch_size",
         "max_episode_steps",
         "train_episodes",
@@ -64,8 +65,7 @@ class History(struct.PyTreeNode):
 def run_loop(
     agent,
     environment,
-    buffer_state: BufferState,
-    agent_state: Any,
+    buffer,
     seed: int,
     minibatch_size: int,
     max_episode_steps: int,
@@ -79,6 +79,9 @@ def run_loop(
     use_steps: bool = False,
     is_training: bool = True,
 ) -> History:
+    
+    agent_state = agent.initial_state()
+    buffer_state = buffer.initial_state()
 
     config = TrainingConfig(
         minibatch_size=minibatch_size,

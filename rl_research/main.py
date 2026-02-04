@@ -13,6 +13,8 @@ import numpy as np
 import tyro
 
 from rl_research.agents import *
+# from rl_research.agents.dqn import DQNAgent
+# from rl_research.agents.dqn_runner import run_dqn_training
 from rl_research.buffers import BaseBuffer, ReplayBuffer
 from rl_research.environments import *
 from rl_research.experiment import History, run_loop
@@ -135,24 +137,33 @@ def run_single_seed(
     """Run training for a single seed."""
     env = env_cls()
 
-    n_states = env.env.observation_space.n
+    # TODO: fix agent API, this is a temporary fix
+    obs_shape = env.env.observation_space.shape
+    n_states = env.env.observation_space.n if obs_shape in [(), (1,)] else int(np.prod(np.array(obs_shape)))
     n_actions = env.env.action_space.n
 
     agent = agent_cls(
         num_states=n_states,
         num_actions=n_actions,
     )
-    agent_state = agent.initial_state()
 
     buffer_init_kwargs = {}
     buffer = buffer_cls(**buffer_init_kwargs)
-    buffer_state = buffer.initial_state()
 
+    # Use a DQN-specific non-jitted runner because nnx modules cannot be
+    # contained inside the jitted training loop used by `run_loop`.
+    # if isinstance(agent, DQNAgent):
+    #     history = run_dqn_training(
+    #         agent=agent,
+    #         environment=env,
+    #         buffer=buffer,
+    #         seed=seed,
+    #     )
+    # else:
     history = run_loop(
         agent=agent,
         environment=env,
-        buffer_state=buffer_state,
-        agent_state=agent_state,
+        buffer=buffer,
         seed=seed,
     )
 
