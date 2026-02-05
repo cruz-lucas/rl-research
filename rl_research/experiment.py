@@ -4,7 +4,7 @@ from typing import Any, Tuple
 import gin
 import jax
 import jax.numpy as jnp
-from flax import struct
+from flax import struct, nnx
 
 from rl_research.buffers import BufferState, Transition
 
@@ -113,7 +113,7 @@ def run_loop(
         done=jnp.asarray(False),
     )
 
-    def run_episodes(train_state: TrainingState, _) -> Tuple[TrainingState, History]:
+    def run_episodes(train_state: TrainingState) -> Tuple[TrainingState, History]:
         next_key, action_key = jax.random.split(train_state.key)
         obs = train_state.env_obs
 
@@ -150,19 +150,19 @@ def run_loop(
         )
 
         def update_agent(ts: TrainingState):
-            def single_update(carry, _):
+            def single_update(carry):
                 agent_carry, key_carry = carry
                 key_carry, subkey = jax.random.split(key_carry)
                 batch = ts.buffer_state.sample(subkey, config.minibatch_size)
                 new_agent_state, loss_val = agent.update(agent_carry, batch)
                 return (new_agent_state, key_carry), loss_val
 
-            (agent_st, new_key), losses = jax.lax.scan(
+            (agent_st, new_key), losses = nnx.scan(
                 single_update,
-                (ts.agent_state, ts.key),
-                None,
+                in_axes=nnx.Carry,
+                out_axes=(nnx.Carry, 0),
                 length=config.num_minibatches,
-            )
+            )((ts.agent_state, ts.key))
 
             return ts.replace(
                 agent_state=agent_st,
@@ -177,7 +177,7 @@ def run_loop(
         should_train = jnp.logical_and(should_train, jnp.asarray(has_updates))
         must_train = jnp.logical_and(is_training, should_train)
 
-        train_state = jax.lax.cond(
+        train_state = nnx.cond(
             must_train,
             lambda ts: update_agent(ts),
             lambda ts: ts,
@@ -212,7 +212,7 @@ def run_loop(
             dones=train_state.done
         )
 
-        return jax.lax.cond(
+        return nnx.cond(
             must_reset,
             lambda ts: reset_fn(ts),
             lambda ts: ts,
@@ -220,7 +220,7 @@ def run_loop(
         ), output
 
 
-    final_carry, history = jax.lax.scan(run_episodes, init_train_state, None, length=num_iters)
+    final_carry, history = nnx.scan(run_episodes, length=num_iters, in_axes=nnx.Carry, out_axes=(nnx.Carry, 0))(init_train_state)
     return history
 
 

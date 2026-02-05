@@ -13,8 +13,6 @@ import numpy as np
 import tyro
 
 from rl_research.agents import *
-from rl_research.agents.dqn import DQNAgent
-from rl_research.dqn_runner import run_dqn_training
 from rl_research.buffers import BaseBuffer, ReplayBuffer
 from rl_research.environments import *
 from rl_research.experiment import History, run_loop
@@ -150,22 +148,12 @@ def run_single_seed(
     buffer_init_kwargs = {}
     buffer = buffer_cls(**buffer_init_kwargs)
 
-    # Use a DQN-specific non-jitted runner because nnx modules cannot be
-    # contained inside the jitted training loop used by `run_loop`.
-    if isinstance(agent, DQNAgent):
-        history = run_dqn_training(
-            agent=agent,
-            environment=env,
-            buffer=buffer,
-            seed=seed,
-        )
-    else:
-        history = run_loop(
-            agent=agent,
-            environment=env,
-            buffer=buffer,
-            seed=seed,
-        )
+    history = run_loop(
+        agent=agent,
+        environment=env,
+        buffer=buffer,
+        seed=seed,
+    )
 
     return history
 
