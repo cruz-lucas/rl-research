@@ -39,7 +39,7 @@ fi
 mkdir -p "$LOCAL_DIR"
 
 RSYNC_OPTS=(
-  -avh
+  -zavh
   --progress
   --partial
   --no-perms
