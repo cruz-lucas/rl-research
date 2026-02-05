@@ -37,8 +37,8 @@ class BufferState(struct.PyTreeNode):
         max_size = self.observations.shape[0]
         idx = self.position % max_size
 
-        flat_obs = transition.observation.flatten()
-        flat_next_obs = transition.observation.flatten()
+        flat_obs = transition.observation.reshape(-1)
+        flat_next_obs = transition.next_observation.reshape(-1)
 
         observations = self.observations.at[idx].set(flat_obs)
         actions = self.actions.at[idx].set(transition.action)
@@ -227,7 +227,7 @@ class ReplayBuffer(BaseBuffer):
         self.buffer_size = buffer_size
 
     def initial_state(self) -> BufferState:
-        zeros = lambda: jnp.zeros((self.buffer_size,))
+        zeros = lambda: jnp.zeros((self.buffer_size, 1))
         return BufferState(
             observations=zeros(),
             actions=zeros(),
