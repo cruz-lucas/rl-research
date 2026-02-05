@@ -63,7 +63,7 @@ class DQNAgent:
         self.eps_start = eps_start
         self.eps_end = eps_end
         self.eps_decay_steps = eps_decay_steps
-        self.target_update_freq = target_update_freq
+        self.target_update_freq = int(target_update_freq)
         self.max_grad_norm = max_grad_norm
         self.seed = int(seed)
 
@@ -100,7 +100,7 @@ class DQNAgent:
             action_dist = distrax.EpsilonGreedy(q_vals, epsilon=eps)
             return action_dist.sample(seed=key)
 
-        return jax.lax.cond(is_training, eps_greedy, greedy)
+        return nnx.cond(is_training, eps_greedy, greedy)
 
     def update(self, state: DQNState, batch: Transition) -> tuple[DQNState, jax.Array]:
         def loss_fn(network: Network):
@@ -118,9 +118,13 @@ class DQNAgent:
         state.optimizer.update(grads)
 
         new_step = state.step + 1
-        if new_step % self.target_update_freq == 0:
-            _graphdef, _state = nnx.split(state.online_network)
-            nnx.update(state.target_network, _state)
+        _graphdef, _state = nnx.cond(
+            new_step % self.target_update_freq == 0,
+            lambda _: nnx.split(state.online_network),
+            lambda _: nnx.split(state.target_network),
+            None
+        )
+        nnx.update(state.target_network, _state)
 
         return state.replace(step=new_step), loss
 
