@@ -93,8 +93,20 @@ def log_history_to_mlflow(history: History):
         )
 
     mlflow.log_metric(
-        "last_100/train_disc_return_mean",
+        "summary/last100_train_disc_return_mean",
         float(np.mean(history.train_discounted_returns[dones][-100:])),
+    )
+    mlflow.log_metric(
+        "summary/last100_train_return_mean",
+        float(np.mean(history.train_returns[dones][-100:])),
+    )
+    mlflow.log_metric(
+        "summary/train_disc_return_mean",
+        float(np.mean(history.train_discounted_returns[dones])),
+    )
+    mlflow.log_metric(
+        "summary/train_return_mean",
+        float(np.mean(history.train_returns[dones])),
     )
 
     evaluate_every = gin.get_bindings("run_loop")["evaluate_every"]
@@ -112,17 +124,17 @@ def log_history_to_mlflow(history: History):
     #             step=int(history.global_steps[episode]),
     #         )
 
-    final_train_window = 100
-    mlflow.log_metrics(
-        {
-            "last_100/train_disc_return_mean": float(
-                np.mean(history.train_discounted_returns[history.dones][-final_train_window:])
-            ),
-            # "last_100/eval_disc_return_mean": float(
-            #     np.mean(history.eval_discounted_returns[-final_train_window:])
-            # ),
-        }
-    )
+    # final_train_window = 100
+    # mlflow.log_metrics(
+    #     {
+    #         "last_100/train_disc_return_mean": float(
+    #             np.mean(history.train_discounted_returns[history.dones][-final_train_window:])
+    #         ),
+    #         # "last_100/eval_disc_return_mean": float(
+    #         #     np.mean(history.eval_discounted_returns[-final_train_window:])
+    #         # ),
+    #     }
+    # )
 
 
 @gin.configurable
@@ -191,9 +203,10 @@ def main(args: Args) -> None:
 
     # shared_root = Path("~/mlruns")
     # shared_root.mkdir(parents=True, exist_ok=True)
+    # mlflow.set_tracking_uri("./mlruns")
 
     # mlflow.set_tracking_uri(shared_root)
-    mlflow.set_tracking_uri("sqlite:///mlruns.db")
+    # mlflow.set_tracking_uri("sqlite:///mlruns.db")
 
     with setup_mlflow(seed=seed) as run:
         run_bindings = gin.get_bindings("run_single_seed")
