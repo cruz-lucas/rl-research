@@ -3,7 +3,7 @@
 #SBATCH --account=aip-machado
 #SBATCH --time=8:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=16G
+#SBATCH --mem=24G
 #SBATCH --array=0-0               # Override with --array on sbatch command line
 #SBATCH --output=/home/%u/logs/job_%A_%a.out
 #SBATCH --error=/home/%u/logs/job_%A_%a.err

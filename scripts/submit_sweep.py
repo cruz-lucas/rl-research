@@ -30,14 +30,25 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "BMFRmaxAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
-        "known_threshold": {"type": "int", "min": 1, "max": 50},
+        "known_threshold": {"type": "int", "min": 1, "max": 100},
     },
     "OptimisticMonteCarloAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "known_threshold": {"type": "int", "min": 1, "max": 50},
     },
     "QLearningAgent": {
-        "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1.0},
+        "step_size": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
+        "initial_epsilon": {"type": "uniform", "min": 0.3, "max": 1.0},
+        "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
+        "anneal_steps": {"type": "int", "min": 1_000, "max": 500_000},
+    },
+    "DQNAgent": {
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-1},
+        "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
+        "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
+        "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
+        "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
+        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
     },
     "MCTSAgent": {
         "num_simulations": {"type": "int", "min": 1, "max": 500},
@@ -46,19 +57,18 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "RMaxAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
-        "convergence_threshold": {"type": "log_uniform", "min": 1e-5, "max": 1},
     },
     "DelayedQLearningAgent": {
         "update_threshold": {"type": "int", "min": 1, "max": 500},
         "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
     },
-    "params": {
-        "ReplayBuffer.buffer_size": {"type": "int", "min": 512, "max": 4096},
-        "run_loop.batch_size": {"type": "int", "min": 1, "max": 512},
-        "run_loop.update_frequency": {"type": "int", "min": 1, "max": 50},
-        "run_loop.replay_ratio": {"type": "int", "min": 1, "max": 100},
-        "run_loop.warmup_steps": {"type": "int", "min": 0, "max": 2500},
-    },
+    # "params": {
+    #     "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
+    #     "run_loop.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])},
+    #     "run_loop.update_frequency": {"type": "int", "min": 1, "max": 50},
+    #     # "run_loop.num_minibatches": {"type": "int", "min": 1, "max": 100},
+    #     "run_loop.warmup_steps": {"type": "choice", "values": list([2**i for i in range(1, 14)])},
+    # },
 }
 
 
