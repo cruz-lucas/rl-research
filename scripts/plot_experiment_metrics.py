@@ -8,22 +8,62 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Annotated, List
+from typing import Annotated, List, Dict, Tuple
 
-import tyro
+# =============================
+# User-defined plot appearance
+# =============================
 
-def plot_metrics(experiment_name, mlflow_tracking_uri="./mlruns.db", metric_name="train/discounted_return", filter_string=None, group_tag="group"):
-    """
-    Fetches runs from an mlflow experiment, groups them, and plots a metric
-    with 95% CI.
+GROUP_COLORS = {
+    "dqn": "#1f77b4",
+    "qlearning_epsgreedy": "#ff7f0e",
+    "rmax": "#2ca02c",
+    "replaybased_rmax": "#d62728",
+}
 
-    Args:
-        experiment_name: The name of the mlflow experiment.
-        mlflow_tracking_uri: The path to the mlflow registry.
-        metric_name: The name of the metric to plot.
-        filter_string: A string to filter runs.
-        group_tag: The tag to group runs by.
-    """
+GROUP_LABELS = {
+    "dqn": "DQN",
+    "qlearning_epsgreedy": "Q-learning (Epsilon-Greedy)",
+    "rmax": "R-Max",
+    "replaybased_rmax": "Replay-based R-Max",
+}
+
+# Order in legend (optional but recommended)
+GROUP_ORDER = [
+    "dqn",
+    "qlearning_epsgreedy",
+    "rmax",
+    "replaybased_rmax",
+]
+
+# =============================
+# Experiment settings
+# =============================
+# EXPERIMENT_NAME = "navix_5x5_layout1",
+MLFLOW_TRACKING_URI = "sqlite:///mlruns.db"
+METRIC_NAME = "train/discounted_return"
+FILTER_STRING = None
+GROUP_TAG = "group"
+
+# =============================
+# Configuration
+# =============================
+N_GRID = 200
+N_BOOTSTRAP = 2000
+CI_ALPHA = 0.05
+
+FIGSIZE = (6.5, 4.2)      # ICML single-column
+LINEWIDTH = 2.0
+ALPHA_FILL = 0.2
+RANDOM_SEED = 0
+
+np.random.seed(RANDOM_SEED)
+
+
+# =============================
+# MLFlow data fetching
+# =============================
+def fetch_data(experiment_name, mlflow_tracking_uri="./mlruns.db", metric_name="train/discounted_return", filter_string=None, group_tag="group") -> pd.DataFrame:
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     client = mlflow.tracking.MlflowClient()
 
@@ -49,124 +89,166 @@ def plot_metrics(experiment_name, mlflow_tracking_uri="./mlruns.db", metric_name
 
     grouped_runs = runs.groupby(f"tags.{group_tag}")
 
-    plt.figure(figsize=(10, 6))
-    
-    all_metrics_data = []
+    all_group_metric_histories = []
 
     for group_name, group_data in grouped_runs:
         print(f"Processing group: {group_name}")
+        # if group_name not in ["rmax", "factored_rmax", "batch_modelfree_rmax"]:
+        #     continue
+        # print(f"Processing group: {group_name}")
+        # group_name = "R-max" if (group_name == "rmax") else "Misspecified R-max" if (group_name == "factored_rmax") else "Replay-based R-max (Ours)"
+        
         
         group_metric_histories = []
-        min_length = float('inf')
 
         for run_id in group_data["run_id"]:
             try:
                 metric_history = client.get_metric_history(run_id, metric_name)
-                group_metric_histories.append([step.value for step in metric_history])
+                group_metric_histories.extend([{"group": group_name, "step": step.step, "value": step.value, "run_id": run_id} for step in metric_history])
 
-                if metric_history is not None:
-                    min_length = min(min_length, len(metric_history))
+                # if metric_history is not None:
+                #     min_length = min(min_length, len(metric_history))
             except Exception as e:
                 print(f"Could not retrieve metric '{metric_name}' for run '{run_id}': {e}")
 
         if not group_metric_histories:
             print(f"No metric data for '{metric_name}' in group '{group_name}'")
             continue
-        
-        # Truncate all histories to the minimum common length
-        truncated_histories = [hist[:min_length] for hist in group_metric_histories]
-        
-        if not truncated_histories:
-            print(f"No valid metric data to plot for group '{group_name}'.")
+
+        all_group_metric_histories.append(group_metric_histories)
+
+    return pd.DataFrame([d for sublist in all_group_metric_histories for d in sublist])
+
+# =============================
+# Interpolation
+# =============================
+def interpolate_run(
+    run_df: pd.DataFrame,
+    step_grid: np.ndarray,
+) -> np.ndarray:
+    run_df = run_df.sort_values("step")
+    return np.interp(
+        step_grid,
+        run_df["step"].to_numpy(),
+        run_df["value"].to_numpy(),
+        left=np.nan,
+        right=np.nan,
+    )
+
+
+def interpolate_all_runs(
+    df: pd.DataFrame,
+    step_grid: np.ndarray,
+) -> Dict[str, np.ndarray]:
+    curves = {}
+
+    for group, gdf in df.groupby("group"):
+        run_curves = []
+        for _, rdf in gdf.groupby("run_id"):
+            run_curves.append(interpolate_run(rdf, step_grid))
+        curves[group] = np.stack(run_curves, axis=0)
+
+    return curves
+
+
+# =============================
+# Bootstrap statistics
+# =============================
+def bootstrap_mean_ci(
+    x: np.ndarray,
+    n_boot: int,
+    alpha: float,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n_runs, n_steps = x.shape
+
+    mean = np.nanmean(x, axis=0)
+
+    boot_means = np.empty((n_boot, n_steps))
+    for i in range(n_boot):
+        idx = np.random.choice(n_runs, size=n_runs, replace=True)
+        boot_means[i] = np.nanmean(x[idx], axis=0)
+
+    low = np.percentile(boot_means, 100 * alpha / 2, axis=0)
+    high = np.percentile(boot_means, 100 * (1 - alpha / 2), axis=0)
+
+    return mean, low, high
+
+
+# =============================
+# Main plotting function
+# =============================
+def plot_learning_curves(df: pd.DataFrame):
+    # Step grid
+    step_grid = np.linspace(df.step.min(), df.step.max(), N_GRID)
+
+    # Interpolate
+    curves = interpolate_all_runs(df, step_grid)
+
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+
+    for group in GROUP_ORDER:
+        if group not in curves:
             continue
 
-        metric_matrix = np.array(truncated_histories)
+        x = curves[group]
+        mean, low, high = bootstrap_mean_ci(
+            x,
+            n_boot=N_BOOTSTRAP,
+            alpha=CI_ALPHA,
+        )
 
-        # Normality Test (Shapiro-Wilk)
-        # We test for normality at a few key points (e.g., start, middle, end)
-        # because testing every single step could be overwhelming.
-        print(f"\nNormality Test (Shapiro-Wilk) for group '{group_name}':")
-        for step in [0, min_length // 2, min_length - 1]:
-            if step < metric_matrix.shape[1]:
-                stat, p_value = stats.shapiro(metric_matrix[:, step])
-                print(f"  Step {step}: p-value={p_value:.3f}", end="")
-                if p_value > 0.05:
-                    print(" (Data appears normal)")
-                else:
-                    print(" (Data does not appear normal)")
-        print("-" * 20)
+        color = GROUP_COLORS.get(group, None)
+        label = GROUP_LABELS.get(group, group)
 
-        # Prepare data for Seaborn
-        # We need a long-form DataFrame for sns.lineplot
-        steps = np.arange(min_length)
-        for history in truncated_histories:
-            for step, value in zip(steps, history):
-                all_metrics_data.append({"group": group_name, "step": step, "value": value})
+        ax.plot(
+            step_grid,
+            mean,
+            color=color,
+            linewidth=LINEWIDTH,
+            label=label,
+        )
+        ax.fill_between(
+            step_grid,
+            low,
+            high,
+            color=color,
+            alpha=ALPHA_FILL,
+        )
 
-    if not all_metrics_data:
-        print("No data to plot.")
-        return
+    # Axes styling
+    ax.set_xlabel("Environment Steps")
+    ax.set_ylabel("Discounted Episodic Return")
+    ax.grid(True, alpha=0.3)
 
-    metrics_df = pd.DataFrame(all_metrics_data)
-
-    # Plotting with Seaborn
-    sns.set_theme(style="whitegrid")
-    sns.lineplot(
-        data=metrics_df,
-        x="step",
-        y="value",
-        hue="group",
-        errorbar=("ci", 95), #This calculates the 95% CI
+    # Legend ABOVE the plot
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=len(GROUP_ORDER),
+        frameon=False,
+        columnspacing=1.5,
+        handlelength=2.5,
     )
 
-    plt.title(f"'{metric_name}' for Experiment '{experiment_name}'")
-    plt.xlabel("Step")
-    plt.ylabel(metric_name)
-    plt.legend(title=group_tag)
-    
-    # Save the plot
-    output_path = Path("outputs")
-    output_path.mkdir(exist_ok=True)
-    metric_name_safe = metric_name.replace("/", "_")
-    filename = f"{experiment_name}_{metric_name_safe}.png"
-    plt.savefig(output_path / filename, bbox_inches="tight", dpi=300)
-    print(f"\nPlot saved to {output_path / filename}")
-    
-    plt.show()
-
-@dataclass
-class Args:
-    """Arguments for running seeds locally and migrating MLflow runs."""
-
-    experiment_name: Annotated[
-        str,
-        tyro.conf.arg(help="The name of the MLflow experiment."),
-    ]
-    metric_name: Annotated[
-        str,
-        tyro.conf.arg(help="The name of the metric to plot."),
-    ] = "train/discounted_return"
-    mlflow_tracking_uri: Annotated[
-        str,
-        tyro.conf.arg(help="The MLflow tracking URI."),
-    ] = "sqlite:///mlruns.db"
-    filter: Annotated[
-        str | None,
-        tyro.conf.arg(help="An MLflow filter string (e.g., \"params.learning_rate='0.01'\")."),
-    ] = None
-    group_tag: Annotated[
-        str,
-        tyro.conf.arg(help="The tag to group runs by (default: 'group')."),
-    ] = "group"
-
+    fig.tight_layout(rect=[0, 0, 1, 0.92])
+    return fig, ax
 
 if __name__ == "__main__":
-    args = tyro.cli(Args)
-
-    plot_metrics(
-        args.experiment_name,
-        args.mlflow_tracking_uri,
-        args.metric_name,
-        filter_string=args.filter,
-        group_tag=args.group_tag,
-    )
+    for EXPERIMENT_NAME in [
+        "navix_5x5_layout1",
+        # "navix_5x5_layout2",
+        # "navix_5x5_layout3",
+        # "navix_16x16_layout1",
+        # "navix_16x16_layout2",
+        # "navix_16x16_layout3",
+    ]:
+        df = fetch_data(
+            EXPERIMENT_NAME,
+            MLFLOW_TRACKING_URI,
+            METRIC_NAME,
+            FILTER_STRING,
+            group_tag=GROUP_TAG,
+        )
+        fig, ax = plot_learning_curves(df)
+        plt.show()
+        fig.savefig(f"{EXPERIMENT_NAME}_learning_curves.pdf")
