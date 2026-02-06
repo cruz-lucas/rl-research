@@ -201,6 +201,7 @@ class NavixWrapper(BaseJaxEnv):
         return timestep, timestep.observation, timestep.reward, timestep.is_termination(), timestep.is_truncation(), timestep.info  # observations.rgb(timestep.state) # set info to rgb for debugging purposes
 
 
+# TODO: fix and submit PR to remove max_steps default value.
 nx.register_env(
     "TabularGridDoorKey-5x5-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
@@ -212,8 +213,9 @@ nx.register_env(
     door_row=1,
     goal_row=1,
     goal_col=3,
+    max_steps=100,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -228,8 +230,9 @@ nx.register_env(
     door_row=3,
     goal_row=3,
     goal_col=3,
+    max_steps=100,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -244,8 +247,9 @@ nx.register_env(
     door_row=3,
     goal_row=1,
     goal_col=3,
+    max_steps=100,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -261,8 +265,9 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
+    max_steps=2048,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -279,7 +284,7 @@ nx.register_env(
     goal_row=14,
     goal_col=14,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -296,7 +301,7 @@ nx.register_env(
     goal_row=1,
     goal_col=14,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -313,8 +318,9 @@ nx.register_env(
     door_row=1,
     goal_row=1,
     goal_col=3,
+    max_steps=100,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -330,8 +336,9 @@ nx.register_env(
     door_row=3,
     goal_row=3,
     goal_col=3,
+    max_steps=100,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -346,8 +353,9 @@ nx.register_env(
     door_row=3,
     goal_row=1,
     goal_col=3,
+    max_steps=100,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -363,8 +371,9 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
+    max_steps=2048,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -380,8 +389,9 @@ nx.register_env(
     door_col=13,
     goal_row=14,
     goal_col=14,
+    max_steps=2048,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )
 
@@ -397,7 +407,8 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
+    max_steps=2048,
     random_start=False,
-    **kwargs,
+    # **kwargs,
     )
 )

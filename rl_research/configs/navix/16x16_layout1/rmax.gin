@@ -9,14 +9,14 @@ ReplayBuffer.buffer_size = 1
 RMaxAgent.r_max = 0.01
 RMaxAgent.discount = 0.99
 RMaxAgent.known_threshold = 1
-RMaxAgent.convergence_threshold = 1e-6
+RMaxAgent.convergence_threshold = 1e-8
 
 NavixWrapper.env_id = "TabularGridDoorKey-16x16-layout1-v0"
 
 run_loop.train_episodes = 0
 run_loop.use_steps = True
 run_loop.train_steps = 1_000_000
-run_loop.max_episode_steps = 100
+run_loop.max_episode_steps = 2048
 run_loop.minibatch_size = 1
 run_loop.update_frequency = 1
 run_loop.num_minibatches = 1

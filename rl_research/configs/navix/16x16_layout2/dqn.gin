@@ -1,26 +1,26 @@
-setup_mlflow.experiment_name = "navix_5x5_layout1"
+setup_mlflow.experiment_name = "navix_16x16_layout2"
 setup_mlflow.experiment_group = "dqn"
 
 run_single_seed.agent_cls = @DQNAgent
 run_single_seed.env_cls = @NavixWrapper
 run_single_seed.buffer_cls = @FlatteningReplayBuffer
 FlatteningReplayBuffer.buffer_size = 131_072
-FlatteningReplayBuffer.obs_shape = (5, 5, 3)
+FlatteningReplayBuffer.obs_shape = (16, 16, 3)
 
 DQNAgent.discount = 0.99
-DQNAgent.learning_rate = 1e-3
+DQNAgent.learning_rate = 3e-4
 DQNAgent.eps_start = 1.0
 DQNAgent.eps_end = 0.01
 DQNAgent.eps_decay_steps = 500_000
 DQNAgent.target_update_freq = 2_048
 DQNAgent.max_grad_norm = 1.0
 
-NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
+NavixWrapper.env_id = "GridDoorKey-16x16-layout2-v0"
 
 run_loop.train_episodes = 0
 run_loop.use_steps = True
 run_loop.train_steps = 1_000_000
-run_loop.max_episode_steps = 100
+run_loop.max_episode_steps = 2048
 run_loop.minibatch_size = 512
 run_loop.update_frequency = 4
 run_loop.num_minibatches = 1
