@@ -93,7 +93,6 @@ class DQNAgent:
             return action_dist.sample(seed=key)
 
         def eps_greedy():
-            # epsilon depends on step
             frac = jnp.clip(state.step / max(1, self.eps_decay_steps), 0.0, 1.0)
             eps = self.eps_start + frac * (self.eps_end - self.eps_start)
 
@@ -117,7 +116,8 @@ class DQNAgent:
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
         state.optimizer.update(grads)
 
-        new_step = state.step + 1
+        # TODO: update step with update frequency
+        new_step = state.step + 4
         _graphdef, _state = nnx.cond(
             new_step % self.target_update_freq == 0,
             lambda _: nnx.split(state.online_network),
