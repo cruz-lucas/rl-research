@@ -101,7 +101,7 @@ class BMFRmaxAgent:
             # new_q = q_current + self.step_size * td_error
             updated_q = q_current + self.step_size * td_error
             # new_q = jnp.where(is_unknown, self.optimistic_value, updated_q)
-            new_q = jnp.where(is_unknown, q_current, updated_q)
+            new_q = jnp.array(jnp.where(is_unknown, q_current, updated_q))[0]
 
             loss_val = jnp.abs(td_error)
             return (q_table.at[s, a].set(new_q), visit_counts), loss_val
