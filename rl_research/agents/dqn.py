@@ -116,17 +116,15 @@ class DQNAgent:
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
         state.optimizer.update(grads)
 
-        # TODO: update step with update frequency
-        new_step = state.step + 4
         _graphdef, _state = nnx.cond(
-            new_step % self.target_update_freq == 0,
+            state.step % self.target_update_freq == 0,
             lambda _: nnx.split(state.online_network),
             lambda _: nnx.split(state.target_network),
             None
         )
         nnx.update(state.target_network, _state)
 
-        return state.replace(step=new_step), loss
+        return state, loss
 
     def bootstrap_value(self, state: DQNState, next_observation: jnp.ndarray) -> jax.Array:
         return jnp.array(0.0)

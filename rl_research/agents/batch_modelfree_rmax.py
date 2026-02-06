@@ -115,7 +115,6 @@ class BMFRmaxAgent:
         new_state = state.replace(
             q_table=new_q_table,
             visit_counts=new_visit_counts,
-            step=state.step + jnp.sum(batch_size),
         )
 
         return new_state, mean_loss

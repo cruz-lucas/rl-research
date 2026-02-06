@@ -120,6 +120,10 @@ def run_loop(
         action = agent.select_action(train_state.agent_state, obs, action_key, is_training)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
 
+        train_state = train_state.replace(
+            agent_state=train_state.agent_state.replace(step=train_state.agent_state.step + 1),
+        )
+
         transition = Transition(
             observation=obs,
             action=action,

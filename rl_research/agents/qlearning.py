@@ -117,7 +117,6 @@ class QLearningAgent:
         next_state = state.replace(
             q_table=state.q_table.at[s, a].set(new_q),
             visit_counts=state.visit_counts.at[s, a].add(1),
-            step=state.step + 1,
         )
 
         frac = jnp.where(self.use_scheduler, jnp.clip(next_state.step / self.anneal_steps, 0.0, 1.0), 0.0)
