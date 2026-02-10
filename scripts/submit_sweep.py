@@ -111,7 +111,7 @@ class Args:
     job_script: Annotated[
         Path,
         tyro.conf.arg(help="Path to the sbatch script that calls rl_research.main."),
-    ] = Path("scripts/job.sh")
+    ] = Path("scripts/single_seed_job.sh")
     sbatch_opt: Annotated[
         List[str], tyro.conf.arg(help="Extra sbatch options (repeatable).")
     ] = field(default_factory=list)
