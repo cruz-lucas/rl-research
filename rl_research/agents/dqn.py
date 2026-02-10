@@ -33,14 +33,6 @@ class DQNState(struct.PyTreeNode):
 
 @gin.configurable
 class DQNAgent:
-    """Simple DQN using an MLP over one-hot state encodings.
-
-    This implementation assumes discrete observations (indexed states) so that
-    states are encoded with a one-hot vector of length ``num_states``.
-
-    It conforms to the same API used by the experiment.run_loop.
-    """
-
     def __init__(
         self,
         num_states: int, # this is the input size
@@ -127,4 +119,5 @@ class DQNAgent:
         return state, loss
 
     def bootstrap_value(self, state: DQNState, next_observation: jnp.ndarray) -> jax.Array:
+        # TODO: implement this properly.
         return jnp.array(0.0)
