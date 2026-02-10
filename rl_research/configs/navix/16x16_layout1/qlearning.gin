@@ -7,12 +7,12 @@ run_single_seed.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 1
 
 QLearningAgent.discount = 0.99
-QLearningAgent.step_size = 0.1
+QLearningAgent.step_size = 0.727544
 QLearningAgent.initial_q_value = 0.0
 QLearningAgent.policy = "epsilon_greedy"
-QLearningAgent.initial_epsilon = 1.0
-QLearningAgent.final_epsilon = 0.01
-QLearningAgent.anneal_steps = 300_000
+QLearningAgent.initial_epsilon = 0.640149
+QLearningAgent.final_epsilon = 0.227166
+QLearningAgent.anneal_steps = 436_081
 QLearningAgent.use_scheduler = True
 
 NavixWrapper.env_id = "TabularGridDoorKey-16x16-layout1-v0"
