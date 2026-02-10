@@ -8,7 +8,7 @@ ReplayBuffer.buffer_size = 1
 
 RMaxAgent.r_max = 0.01
 RMaxAgent.discount = 0.99
-RMaxAgent.known_threshold = 1
+RMaxAgent.known_threshold = 8
 RMaxAgent.convergence_threshold = 1e-6
 
 NavixWrapper.env_id = "TabularGridDoorKey-5x5-layout1-v0"
