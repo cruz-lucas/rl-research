@@ -43,10 +43,17 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "anneal_steps": {"type": "int", "min": 1_000, "max": 500_000},
     },
     "DQNAgent": {
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-1},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
         "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
         "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
         "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
+        "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
+        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
+    },
+    "DRMAgent": {
+        "known_threshold": {"type": "int", "min": 1, "max": 500},
+        "num_update_epochs": {"type": "int", "min": 1, "max": 1},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
     },
@@ -56,19 +63,21 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "ucb_c": {"type": "uniform", "min": 0, "max": 100},
     },
     "RMaxAgent": {
-        "known_threshold": {"type": "int", "min": 1, "max": 500},
+        "known_threshold": {"type": "int", "min": 1, "max": 1_000},
+        "convergence_threshold": {"type": "log_uniform", "min": 1e-9, "max": 1e-4},
     },
     "DelayedQLearningAgent": {
         "update_threshold": {"type": "int", "min": 1, "max": 500},
         "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
     },
-    # "params": {
-    #     "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
-    #     "run_loop.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])},
-    #     "run_loop.update_frequency": {"type": "int", "min": 1, "max": 50},
-    #     # "run_loop.num_minibatches": {"type": "int", "min": 1, "max": 100},
-    #     "run_loop.warmup_steps": {"type": "choice", "values": list([2**i for i in range(1, 14)])},
-    # },
+    "params": {
+        # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
+        # "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(10, 18)])},
+        # "run_loop.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])},
+        # "run_loop.update_frequency": {"type": "int", "min": 1, "max": 50},
+        # "run_loop.num_minibatches": {"type": "int", "min": 1, "max": 1},
+        # "run_loop.warmup_steps": {"type": "choice", "values": list([2**i for i in range(1, 14)])},
+    },
 }
 
 
