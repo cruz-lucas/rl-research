@@ -283,6 +283,7 @@ nx.register_env(
     door_col=13,
     goal_row=14,
     goal_col=14,
+    max_steps=2048,
     random_start=False,
     # **kwargs,
     )
@@ -300,6 +301,7 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
+    max_steps=2048,
     random_start=False,
     # **kwargs,
     )
