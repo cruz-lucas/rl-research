@@ -8,12 +8,12 @@ FlatteningReplayBuffer.buffer_size = 131_072
 FlatteningReplayBuffer.obs_shape = (16, 16, 3)
 
 DQNAgent.discount = 0.99
-DQNAgent.learning_rate = 3e-4
-DQNAgent.eps_start = 1.0
-DQNAgent.eps_end = 0.01
-DQNAgent.eps_decay_steps = 500_000
-DQNAgent.target_update_freq = 2_048
-DQNAgent.max_grad_norm = 1.0
+DQNAgent.learning_rate = 6.203e-05
+DQNAgent.eps_start = 0.344701
+DQNAgent.eps_end = 0.18863
+DQNAgent.eps_decay_steps = 369_052
+DQNAgent.target_update_freq = 64
+DQNAgent.max_grad_norm = 13.5549
 
 NavixWrapper.env_id = "GridDoorKey-16x16-layout1-v0"
 
@@ -21,9 +21,9 @@ run_loop.train_episodes = 0
 run_loop.use_steps = True
 run_loop.train_steps = 1_000_000
 run_loop.max_episode_steps = 2048
-run_loop.minibatch_size = 512
-run_loop.update_frequency = 4
+run_loop.minibatch_size = 128
+run_loop.update_frequency = 8
 run_loop.num_minibatches = 1
-run_loop.warmup_steps = 8_192
+run_loop.warmup_steps = 256
 run_loop.evaluate_every = 0
 run_loop.eval_episodes = 0
