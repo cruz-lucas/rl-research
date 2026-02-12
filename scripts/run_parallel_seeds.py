@@ -85,7 +85,7 @@ class Args:
     skip_migration: Annotated[
         bool,
         tyro.conf.arg(help="Only run seeds; skip SQLite sync step."),
-    ] = False
+    ] = True
 
 
 def run_seeds(args: Args) -> None:
