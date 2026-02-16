@@ -89,6 +89,10 @@ def parse_mlflow_run(run_dir: Path):
             run_data['end_time'] = meta.get('end_time', '')
             run_data['artifact_uri'] = meta.get('artifact_uri', '')
             run_data['lifecycle_stage'] = meta.get('lifecycle_stage', '')
+
+    if run_data.get('lifecycle_stage') == 'deleted':
+        # print(f"Skipping deleted run: {run_data.get('run_id', '')}")
+        return None
     
     # Parse params
     params_dir = run_dir / "params"
@@ -164,8 +168,9 @@ def parse_mlflow_experiment(mlruns_path: str = "mlruns") -> pd.DataFrame:
             
             try:
                 run_data = parse_mlflow_run(run_dir)
-                run_data['experiment_name'] = experiment_name
-                all_runs.append(run_data)
+                if run_data is not None:
+                    run_data['experiment_name'] = experiment_name
+                    all_runs.append(run_data)
             except Exception as e:
                 print(f"Error parsing run {run_dir}: {e}")
                 continue
@@ -253,6 +258,7 @@ class LearningCurvePlotter:
                     # Fallback if step is missing - use index
                     values.append(float(parts[1]))
                     steps.append(len(steps))
+                    print(f"Warning: Step information missing in {metric_file}, using index as steps.")
         
         if not values:
             return None
