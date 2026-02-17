@@ -1,3 +1,4 @@
+"""Replay-based R-max + DQN agent."""
 import gin
 import jax
 import jax.numpy as jnp

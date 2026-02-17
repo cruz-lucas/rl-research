@@ -1,13 +1,23 @@
 from functools import partial
-from typing import Any, Tuple
-
+from typing import Any, Tuple, Type
 import gin
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 from flax import struct, nnx
+import numpy as np
 
-from rl_research.buffers import BufferState, Transition
+from rl_research.agents import *
+from rl_research.buffers import BaseBuffer, ReplayBuffer, Transition, BufferState
+from rl_research.environments import *
+from rl_research.utils import RecordWriter
+import orbax.checkpoint as ocp
 
+# TODO: include the path in the config and make it more general to support different agents and checkpoints
+path = Path("./tmp/ckpt/").resolve()
+path = ocp.test_utils.erase_and_create_empty(path)
+checkpointer = ocp.StandardCheckpointer()
 
 class TrainingState(struct.PyTreeNode):
     agent_state: Any
@@ -25,12 +35,19 @@ class TrainingState(struct.PyTreeNode):
     done: jax.Array
 
 
+@gin.configurable
 class TrainingConfig(struct.PyTreeNode):
     minibatch_size: int
     num_minibatches: int
     max_episode_steps: int
     update_frequency: int
     warmup_steps: int
+    train_episodes: int
+    evaluate_every: int
+    eval_episodes: int
+    train_steps: int = 0
+    use_steps: bool = False
+    checkpoint_freq: int | None = None
 
 
 class History(struct.PyTreeNode):
@@ -42,66 +59,41 @@ class History(struct.PyTreeNode):
     global_steps: jax.Array
     dones: jax.Array
 
-
 @gin.configurable
-@partial(
-    jax.jit,
-    static_argnames=[
-        "agent",
-        "environment",
-        "buffer",
-        "minibatch_size",
-        "max_episode_steps",
-        "train_episodes",
-        "train_steps",
-        "evaluate_every",
-        "eval_episodes",
-        "update_frequency",
-        "num_minibatches",
-        "warmup_steps",
-        "use_steps",
-    ],
-)
 def run_loop(
-    agent,
-    environment,
-    buffer,
+    agent_cls: Type[BaseAgent],
+    buffer_cls: Type[BaseBuffer],
+    env_cls: Type[BaseJaxEnv],
     seed: int,
-    minibatch_size: int,
-    max_episode_steps: int,
-    train_episodes: int,
-    evaluate_every: int,
-    eval_episodes: int,
-    update_frequency: int,
-    num_minibatches: int,
-    warmup_steps: int,
-    train_steps: int = 0,
-    use_steps: bool = False,
-    is_training: bool = True,
-) -> History:
-    
-    agent_state = agent.initial_state()
-    buffer_state = buffer.initial_state()
+) -> None:
+    config = TrainingConfig()
+    environment = env_cls()
 
-    config = TrainingConfig(
-        minibatch_size=minibatch_size,
-        num_minibatches=num_minibatches,
-        max_episode_steps=max_episode_steps,
-        update_frequency=update_frequency,
-        warmup_steps=warmup_steps,
+    obs_shape = environment.env.observation_space.shape
+    n_states = environment.env.observation_space.n if obs_shape in [(), (1,)] else int(np.prod(np.array(obs_shape)))
+    n_actions = environment.env.action_space.n
+    agent = agent_cls(
+        num_states=n_states,
+        num_actions=n_actions,
     )
 
-    num_iters = train_steps if use_steps else train_episodes * max_episode_steps
+    buffer_init_kwargs = {}
+    buffer = buffer_cls(**buffer_init_kwargs)
+
+    fresh_agent_state = agent.initial_state()
+    empty_buffer_state = buffer.initial_state()
+
+    num_iters = config.train_steps if config.use_steps else config.train_episodes * config.max_episode_steps
 
     key = jax.random.PRNGKey(seed)
     key, k_reset = jax.random.split(key)
     env_state, env_obs = environment.reset(k_reset)
 
-    init_train_state = TrainingState(
-        agent_state=agent_state,
+    train_state = TrainingState(
+        agent_state=fresh_agent_state,
         env_state=env_state,
         env_obs=env_obs,
-        buffer_state=buffer_state,
+        buffer_state=empty_buffer_state,
         key=key,
         episode_return=jnp.asarray(0.0, jnp.float32),
         episode_discounted_return=jnp.asarray(0.0, jnp.float32),
@@ -110,14 +102,15 @@ def run_loop(
         loss=jnp.asarray(0.0, jnp.float32),
         global_step=jnp.asarray(0, jnp.int32),
         episode_idx=jnp.asarray(0, jnp.int32),
-        done=jnp.asarray(False),
+        done=jnp.asarray(False)
     )
 
-    def run_episodes(train_state: TrainingState) -> Tuple[TrainingState, History]:
+    @nnx.jit
+    def train_step(train_state: TrainingState) -> Tuple[TrainingState, History]:
         next_key, action_key = jax.random.split(train_state.key)
         obs = train_state.env_obs
 
-        action = agent.select_action(train_state.agent_state, obs, action_key, is_training)
+        action = agent.select_action(train_state.agent_state, obs, action_key, is_training=True)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
 
         train_state = train_state.replace(
@@ -178,8 +171,7 @@ def run_loop(
         should_train = jnp.logical_and(
             train_state.buffer_state.is_ready(config.minibatch_size), train_state.global_step >= config.warmup_steps
         )
-        should_train = jnp.logical_and(should_train, jnp.asarray(has_updates))
-        must_train = jnp.logical_and(is_training, should_train)
+        must_train = jnp.logical_and(should_train, jnp.asarray(has_updates))
 
         train_state = nnx.cond(
             must_train,
@@ -213,7 +205,7 @@ def run_loop(
             train_losses=train_state.loss,
             episode_idx=train_state.episode_idx,
             global_steps=train_state.global_step,
-            dones=train_state.done
+            dones=train_state.done,
         )
 
         return nnx.cond(
@@ -223,51 +215,59 @@ def run_loop(
             train_state
         ), output
 
+    record_writer = RecordWriter()
+    run_bindings = gin.get_bindings("run_loop")
+    agent_cls = run_bindings.get("agent_cls", BaseAgent)
+    agent_cls_name = agent_cls.__name__
+    
+    for step in range(num_iters):
+        train_state, history = train_step(train_state)
 
-    final_carry, history = nnx.scan(run_episodes, length=num_iters, in_axes=nnx.Carry, out_axes=(nnx.Carry, 0))(init_train_state)
-    return history
+        if history.dones:
+            record_writer({"step": step, "metrics": history})
 
+        if (config.checkpoint_freq is not None) and (step % config.checkpoint_freq == 0):
+            _, state = nnx.split(train_state.agent_state.online_network)
+            checkpointer.save(path / agent_cls_name / f"checkpoint_{step}", state)
 
-@partial(
-    jax.jit,
-    static_argnames=("agent", "environment", "max_episode_steps"),
-)
-def run_eval(
-    agent,
-    environment,
-    agent_state,
-    key,
-    max_episode_steps,
-    num_episodes,
-):
-    def run_one_episode(carry, _):
-        key = carry
-        key, k_reset = jax.random.split(key)
-        env_state, obs = environment.reset(k_reset)
+        # if step % config.evaluate_every == 0:
+        #     def run_one_episode(key, _):
+        #         key, k_reset = jax.random.split(key)
+        #         env_state, obs = environment.reset(k_reset)
 
-        def step_fn(step_carry, _):
-            env_state, obs, ret, done = step_carry
-            action = agent.select_action(agent_state, obs, None, is_training=False)
-            env_state, obs, reward, terminal, trunc, _ = environment.step(env_state, action)
-            done = jnp.logical_or(terminal, trunc)
-            ret = ret + reward
-            return (env_state, obs, ret, done), None
+        #         def step_fn(step_carry):
+        #             env_state, obs, ret, done, key = step_carry
+        #             key, action_key = jax.random.split(key)
+        #             action = agent.select_action(train_state.agent_state, obs, action_key, is_training=False)
+        #             env_state, obs, reward, terminal, trunc, _ = environment.step(env_state, action)
+        #             done = jnp.logical_or(terminal, trunc)
+        #             ret = ret + reward * (1 - done)
+        #             return (env_state, obs, ret, done, key), None
 
-        (env_state, obs, ret, done), _ = jax.lax.scan(
-            step_fn,
-            (env_state, obs, 0.0, False),
-            None,
-            length=max_episode_steps,
-        )
+        #         (env_state, obs, ret, done, key), _ = nnx.scan(
+        #             step_fn,
+        #             in_axes=nnx.Carry,
+        #             out_axes=(nnx.Carry, 0),
+        #             length=config.max_episode_steps,
+        #         )((env_state, obs, 0.0, False, key))
 
-        return key, ret
+        #         return key, ret
 
-    key, returns = jax.lax.scan(
-        run_one_episode,
-        key,
-        None,
-        length=num_episodes,
-    )
+        #     _, eval_returns = nnx.vmap(run_one_episode, in_axes=(0, None))(
+        #         jax.random.split(train_state.key, config.eval_episodes), None
+        #     )
 
-    return returns
+        #     mean_return = float(np.mean(eval_returns))
+        #     all_eval_returns.append(mean_return)
+            
+        #     mlflow.log_metrics(
+        #         {
+        #             "eval/return_mean": mean_return,
+        #         },
+        #         step=int(step),
+        #     )
+
+    
+    record_writer.flush_summary()
+
 

@@ -9,6 +9,7 @@ from rl_research.agents.rmax import RMaxAgent
 from rl_research.agents.factored_rmax import FactoredRMaxAgent
 from rl_research.agents.dqn import DQNAgent
 from rl_research.agents.drm import DRMAgent
+from rl_research.agents.nfq import NFQAgent
 
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     "DelayedQLearningAgent",
     "BMFMBIEEBAgent",
     "DQNAgent",
-    "DRMAgent"
+    "DRMAgent",
+    "NFQAgent"
 ]

@@ -24,7 +24,7 @@ class Network(nnx.Module):
         x = self.out_layer(x)
         return x
 
-class DQNState(struct.PyTreeNode):
+class NFQState(struct.PyTreeNode):
     online_network: Network
     target_network: Network
     optimizer: nnx.Optimizer
@@ -32,7 +32,7 @@ class DQNState(struct.PyTreeNode):
 
 
 @gin.configurable
-class DQNAgent:
+class NFQAgent:
     def __init__(
         self,
         num_states: int, # this is the input size
@@ -43,7 +43,6 @@ class DQNAgent:
         eps_start: float = 1.0,
         eps_end: float = 0.01,
         eps_decay_steps: int = 100_000,
-        target_update_freq: int = 1000,
         max_grad_norm: float = 1.0,
         seed: int = 0,
     ):
@@ -55,11 +54,10 @@ class DQNAgent:
         self.eps_start = eps_start
         self.eps_end = eps_end
         self.eps_decay_steps = eps_decay_steps
-        self.target_update_freq = int(target_update_freq)
         self.max_grad_norm = max_grad_norm
         self.seed = int(seed)
 
-    def initial_state(self) -> DQNState:
+    def initial_state(self) -> NFQState:
         rng = jax.random.PRNGKey(self.seed)
         rng_online, rng_target = jax.random.split(rng)
         online_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng_online), hidden_features=self.hidden_units)
@@ -69,15 +67,17 @@ class DQNAgent:
             optax.chain(optax.clip_by_global_norm(self.max_grad_norm), optax.adam(self.learning_rate)),
             wrt=nnx.Param
         )
+
+        self.initial_network_state = nnx.split(online_network)[1]
         
-        return DQNState(
+        return NFQState(
             online_network=online_network,
             target_network=target_network,
             optimizer=optimizer,
             step=0,
         )
 
-    def select_action(self, state: DQNState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
+    def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
         q_vals = state.online_network(obs.reshape(-1))
 
         def greedy():
@@ -93,7 +93,9 @@ class DQNAgent:
 
         return nnx.cond(is_training, eps_greedy, greedy)
 
-    def update(self, state: DQNState, batch: Transition) -> tuple[DQNState, jax.Array]:
+    def update(self, state: NFQState, batch: Transition) -> tuple[NFQState, jax.Array]:
+        nnx.update(state.online_network, self.initial_network_state)
+        
         def loss_fn(network: Network):
             q_values = network(batch.observation)
             q_sel = jnp.take_along_axis(q_values, batch.action[:, None], axis=1).squeeze()
@@ -108,16 +110,11 @@ class DQNAgent:
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
         state.optimizer.update(state.online_network, grads)
 
-        _graphdef, _state = nnx.cond(
-            state.step % self.target_update_freq == 0,
-            lambda _: nnx.split(state.online_network),
-            lambda _: nnx.split(state.target_network),
-            None
-        )
+        _, _state = nnx.split(state.online_network)
         nnx.update(state.target_network, _state)
 
         return state, loss
 
-    def bootstrap_value(self, state: DQNState, next_observation: jnp.ndarray) -> jax.Array:
+    def bootstrap_value(self, state: NFQState, next_observation: jnp.ndarray) -> jax.Array:
         # TODO: implement this properly.
         return jnp.array(0.0)

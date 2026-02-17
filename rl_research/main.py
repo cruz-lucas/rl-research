@@ -1,173 +1,17 @@
 import os
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Type, Tuple
+from typing import Annotated
 
 import gin
-import jax
 import mlflow
-from mlflow.tracking import MlflowClient
-from mlflow.entities import Metric
-import numpy as np
 import tyro
 
-from rl_research.agents import *
-from rl_research.buffers import BaseBuffer, ReplayBuffer
+from rl_research.agents import BaseAgent
+from rl_research.buffers import ReplayBuffer
 from rl_research.environments import *
-from rl_research.experiment import History, run_loop
-
-
-@gin.configurable
-def setup_mlflow(
-    seed: int,
-    experiment_name: str = "placeholder",
-    experiment_group: str = "placeholder",
-):
-    """Setup MLflow experiment and run."""
-    experiment = mlflow.get_experiment_by_name(experiment_name)
-    max_tries = 10
-    tries = 0
-    while experiment is None:
-        try:
-            tries += 1
-            experiment_id = mlflow.create_experiment(experiment_name)
-        except mlflow.MlflowException:
-            experiment = mlflow.get_experiment_by_name(experiment_name)
-        
-        if tries >= max_tries:
-            break
-    # TODO: better handle exception, experiment shouldn't be allowed to be none
-
-    experiment_id = experiment.experiment_id
-
-    run_name = f"{experiment_group}_seed_{seed}"
-    return mlflow.start_run(
-        run_name=run_name,
-        experiment_id=experiment_id,
-        tags={
-            "group": experiment_group,
-        },
-    )
-
-
-def log_history_to_mlflow(history: History):
-    """Log training history to MLflow."""
-    client = MlflowClient()
-    run_id = mlflow.active_run().info.run_id
-
-    dones = history.dones
-    steps = history.global_steps[dones]
-
-    metrics = []
-    timestamp = int(time.time() * 1000)
-
-    for i, step in enumerate(steps):
-        metrics.extend([
-            Metric(
-                key="train/return",
-                value=float(history.train_returns[dones][i]),
-                step=int(step),
-                timestamp=timestamp,
-            ),
-            Metric(
-                key="train/discounted_return",
-                value=float(history.train_discounted_returns[dones][i]),
-                step=int(step),
-                timestamp=timestamp,
-            ),
-            Metric(
-                key="train/loss",
-                value=float(history.train_losses[dones][i]),
-                step=int(step),
-                timestamp=timestamp,
-            ),
-        ])
-
-    # Log in chunks to avoid memory blow-up
-    BATCH_SIZE = 100_000
-    for i in range(0, len(metrics), BATCH_SIZE):
-        client.log_batch(
-            run_id=run_id,
-            metrics=metrics[i:i + BATCH_SIZE],
-        )
-
-    mlflow.log_metric(
-        "summary/last100_train_disc_return_mean",
-        float(np.mean(history.train_discounted_returns[dones][-100:])),
-    )
-    mlflow.log_metric(
-        "summary/last100_train_return_mean",
-        float(np.mean(history.train_returns[dones][-100:])),
-    )
-    mlflow.log_metric(
-        "summary/train_disc_return_mean",
-        float(np.mean(history.train_discounted_returns[dones])),
-    )
-    mlflow.log_metric(
-        "summary/train_return_mean",
-        float(np.mean(history.train_returns[dones])),
-    )
-
-    evaluate_every = gin.get_bindings("run_loop")["evaluate_every"]
-    eval_episodes = gin.get_bindings("run_loop")["eval_episodes"]
-
-    # if evaluate_every != 0:
-    #     for episode in range(0, num_episodes, evaluate_every):
-    #         mlflow.log_metrics(
-    #             {
-    #                 "eval/mean_return": float(history.eval_returns[episode]),
-    #                 "eval/mean_discounted_return": float(
-    #                     history.eval_discounted_returns[episode]
-    #                 ),
-    #             },
-    #             step=int(history.global_steps[episode]),
-    #         )
-
-    # final_train_window = 100
-    # mlflow.log_metrics(
-    #     {
-    #         "last_100/train_disc_return_mean": float(
-    #             np.mean(history.train_discounted_returns[history.dones][-final_train_window:])
-    #         ),
-    #         # "last_100/eval_disc_return_mean": float(
-    #         #     np.mean(history.eval_discounted_returns[-final_train_window:])
-    #         # ),
-    #     }
-    # )
-
-
-@gin.configurable
-def run_single_seed(
-    seed: int,
-    buffer_cls: Type[BaseBuffer] = ReplayBuffer,
-    env_cls: Type[BaseJaxEnv] = BaseJaxEnv,
-    agent_cls: Type[BaseAgent] = BaseAgent,
-):
-    """Run training for a single seed."""
-    env = env_cls()
-
-    # TODO: fix agent API, this is a temporary fix
-    obs_shape = env.env.observation_space.shape
-    n_states = env.env.observation_space.n if obs_shape in [(), (1,)] else int(np.prod(np.array(obs_shape)))
-    n_actions = env.env.action_space.n
-
-    agent = agent_cls(
-        num_states=n_states,
-        num_actions=n_actions,
-    )
-
-    buffer_init_kwargs = {}
-    buffer = buffer_cls(**buffer_init_kwargs)
-
-    history = run_loop(
-        agent=agent,
-        environment=env,
-        buffer=buffer,
-        seed=seed,
-    )
-
-    return history
+from rl_research.experiment import run_loop
+from rl_research.utils import setup_mlflow
 
 
 @dataclass
@@ -198,25 +42,19 @@ def main(args: Args) -> None:
     else:
         seed = args.seed
 
-    # local_root = Path(os.environ.get("SLURM_TMPDIR", "./local_runs")) / "mlruns"
-    # local_root.mkdir(parents=True, exist_ok=True)
-
-    # shared_root = Path("~/mlruns")
-    # shared_root.mkdir(parents=True, exist_ok=True)
-    # mlflow.set_tracking_uri("./mlruns")
-
-    # mlflow.set_tracking_uri(shared_root)
+    mlflow.set_tracking_uri("./mlruns_test/")
+    # mlflow.set_tracking_uri("./mlruns/")
     # mlflow.set_tracking_uri("sqlite:///mlruns.db")
 
     with setup_mlflow(seed=seed) as run:
-        run_bindings = gin.get_bindings("run_single_seed")
+        run_bindings = gin.get_bindings("run_loop")
         agent_cls = run_bindings.get("agent_cls", BaseAgent)
         agent_cls_name = agent_cls.__name__
         agent_params = gin.get_bindings(agent_cls_name)
         buffer_cls = run_bindings.get("buffer_cls", ReplayBuffer)
         buffer_cls_name = buffer_cls.__name__
         buffer_params = gin.get_bindings(buffer_cls_name)
-        train_params = gin.get_bindings("run_loop")
+        train_params = gin.get_bindings("TrainingConfig")
 
         mlflow.log_params(
             {
@@ -229,10 +67,7 @@ def main(args: Args) -> None:
             }
         )
 
-        history = run_single_seed(seed=seed)
-        history = jax.device_get(history)
-
-        log_history_to_mlflow(history)
+        run_loop(seed=seed)
 
 
 if __name__ == "__main__":
