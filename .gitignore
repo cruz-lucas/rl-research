@@ -172,6 +172,7 @@ cython_debug/
 .pypirc
 
 **/mlruns/
+**/mlruns_test/
 **/mlruns_sweep/
 **/mlruns_sqlite_artifacts/
 **/outputs/
@@ -185,3 +186,5 @@ cython_debug/
 *.tar.gz
 
 .DS_Store
+
+/tmp/*

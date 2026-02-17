@@ -14,7 +14,7 @@ dependencies = [
     "gin-config==0.5.0",
     "gymnasium",
     "plotly==6.5.0",
-    "flax==0.10.4",
+    "flax>=0.10.4",
     "nbformat==5.10.4",
     "tyro==0.9.35",
     "seaborn==0.13.2",
@@ -24,6 +24,7 @@ dependencies = [
     "optax>=0.2.6",
     "chex>=0.1.91",
     "jaxlib>=0.9.0",
+    "distrax>=0.1.7",
 ]
 
 [project.optional-dependencies]
