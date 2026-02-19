@@ -16,7 +16,7 @@ import orbax.checkpoint as ocp
 
 # TODO: include the path in the config and make it more general to support different agents and checkpoints
 path = Path("./tmp/ckpt/").resolve()
-path = ocp.test_utils.erase_and_create_empty(path)
+# path = ocp.test_utils.erase_and_create_empty(path)
 checkpointer = ocp.StandardCheckpointer()
 
 class TrainingState(struct.PyTreeNode):
@@ -147,7 +147,7 @@ def run_loop(
         )
 
         def update_agent(ts: TrainingState):
-            def single_update(carry):
+            def update_minibatch(carry):
                 agent_carry, key_carry = carry
                 key_carry, subkey = jax.random.split(key_carry)
                 batch = ts.buffer_state.sample(subkey, config.minibatch_size)
@@ -155,7 +155,7 @@ def run_loop(
                 return (new_agent_state, key_carry), loss_val
 
             (agent_st, new_key), losses = nnx.scan(
-                single_update,
+                update_minibatch,
                 in_axes=nnx.Carry,
                 out_axes=(nnx.Carry, 0),
                 length=config.num_minibatches,

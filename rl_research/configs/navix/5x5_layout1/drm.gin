@@ -1,30 +1,33 @@
 setup_mlflow.experiment_name = "navix_5x5_layout1"
 setup_mlflow.experiment_group = "drm"
 
-run_single_seed.agent_cls = @DRMAgent
-run_single_seed.env_cls = @NavixWrapper
-run_single_seed.buffer_cls = @FlatteningReplayBuffer
-FlatteningReplayBuffer.buffer_size = 8192
+run_loop.agent_cls = @DRMAgent
+run_loop.env_cls = @NavixWrapper
+run_loop.buffer_cls = @FlatteningReplayBuffer
+FlatteningReplayBuffer.buffer_size = 131072
 FlatteningReplayBuffer.obs_shape = (5, 5, 3)
 
 DRMAgent.grid_size = 5
-DRMAgent.r_max = 0.01
+DRMAgent.r_max = 1.0
+DRMAgent.v_max = 1.0
+DRMAgent.use_vmax = True
 DRMAgent.num_update_epochs = 1
-DRMAgent.known_threshold = 480
+DRMAgent.known_threshold = 1
 DRMAgent.discount = 0.99
-DRMAgent.learning_rate = 0.000125247
-DRMAgent.target_update_freq = 128
-DRMAgent.max_grad_norm = 7.30099
+DRMAgent.learning_rate = 3e-4
+DRMAgent.target_update_freq = 2048
+DRMAgent.max_grad_norm = 1.0
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
-run_loop.train_episodes = 0
-run_loop.use_steps = True
-run_loop.train_steps = 1_000_000
-run_loop.max_episode_steps = 100
-run_loop.minibatch_size = 256
-run_loop.update_frequency = 1
-run_loop.num_minibatches = 1
-run_loop.warmup_steps = 1024
-run_loop.evaluate_every = 0
-run_loop.eval_episodes = 0
+TrainingConfig.train_episodes = 0
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 1_000_000
+TrainingConfig.max_episode_steps = 100
+TrainingConfig.minibatch_size = 65536
+TrainingConfig.update_frequency = 4
+TrainingConfig.num_minibatches = 16
+TrainingConfig.warmup_steps = 8192
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = 50_000

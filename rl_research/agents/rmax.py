@@ -25,7 +25,9 @@ class RMaxAgent:
         self,
         num_states: int,
         num_actions: int,
-        r_max: float = 6.0,
+        r_max: float = 1.0,
+        v_max: float = 1.0,
+        use_vmax: bool = True,
         discount: float = 0.9,
         known_threshold: int = 1,
         convergence_threshold: float = 1e-6,
@@ -36,7 +38,6 @@ class RMaxAgent:
         self.terminal_state = terminal_state
         self.num_states = num_states
         self.num_actions = num_actions
-        self.r_max = r_max
         self.discount = discount
         self.known_threshold = known_threshold
         self.convergence_threshold = convergence_threshold
@@ -44,7 +45,7 @@ class RMaxAgent:
             jnp.ceil(
                 jnp.log(1 / (convergence_threshold * (1 - discount))) / (1 - discount)
             )).astype(int)
-        self.optimistic_value = r_max / (1 - discount)
+        self.optimistic_value = v_max if use_vmax else (r_max / (1.0 - discount))
 
     def initial_state(self) -> RMaxState:
         """Initialize with optimistic Q-values."""

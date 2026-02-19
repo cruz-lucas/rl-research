@@ -31,6 +31,8 @@ class DRMAgent:
         learning_rate: float = 1e-3,
         discount: float = 0.99,
         r_max: float = 1.0,
+        v_max: float = 1.0,
+        use_vmax: bool = True,
         known_threshold: int = 1,
         target_update_freq: int = 1000,
         max_grad_norm: float = 1.0,
@@ -45,9 +47,8 @@ class DRMAgent:
         self.hidden_units = hidden_units
         self.learning_rate = learning_rate
         self.discount = discount
-        self.r_max = r_max
         self.known_threshold = int(known_threshold)
-        self.optimistic_value = r_max / (1.0 - discount)
+        self.optimistic_value = v_max if use_vmax else (r_max / (1.0 - discount))
         self.target_update_freq = int(target_update_freq)
         self.max_grad_norm = max_grad_norm
         self.seed = int(seed)
@@ -111,7 +112,7 @@ class DRMAgent:
         q_vals = state.online_network(obs.reshape(-1)).squeeze()
 
         obs_ids = self.get_obs_idx(obs.reshape(-1))
-        is_known = state.visit_counts[obs_ids] > self.known_threshold
+        is_known = state.visit_counts[obs_ids] >= self.known_threshold
 
         values = jnp.where(is_known, q_vals, self.optimistic_value)
 
@@ -148,7 +149,7 @@ class DRMAgent:
         total_loss = 0.0
         for _ in range(self.num_update_epochs):
             loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
-            state.optimizer.update(grads)
+            state.optimizer.update(state.online_network, grads)
             total_loss += loss
         
         avg_loss = total_loss / self.num_update_epochs

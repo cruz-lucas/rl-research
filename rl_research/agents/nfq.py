@@ -68,7 +68,7 @@ class NFQAgent:
             wrt=nnx.Param
         )
 
-        self.initial_network_state = nnx.split(online_network)[1]
+        _, self._initial_params = nnx.split(online_network)
         
         return NFQState(
             online_network=online_network,
@@ -94,24 +94,25 @@ class NFQAgent:
         return nnx.cond(is_training, eps_greedy, greedy)
 
     def update(self, state: NFQState, batch: Transition) -> tuple[NFQState, jax.Array]:
-        nnx.update(state.online_network, self.initial_network_state)
-        
-        def loss_fn(network: Network):
-            q_values = network(batch.observation)
-            q_sel = jnp.take_along_axis(q_values, batch.action[:, None], axis=1).squeeze()
+        # nnx.update(state.online_network, self._initial_params)
+        next_q = state.online_network(batch.next_observation)
+        max_next_q = jnp.max(next_q, axis=1)
 
-            next_q = state.target_network(batch.next_observation)
-            max_next_q = jnp.max(next_q, axis=1)
+        num_iters = 150
+        for i in range(num_iters):
+            def loss_fn(network: Network):
+                q_values = network(batch.observation)
+                q_sel = jnp.take_along_axis(q_values, batch.action[:, None], axis=1).squeeze()
 
-            target = batch.reward + self.discount * max_next_q * (1.0 - batch.terminal)
-            loss = jnp.mean((q_sel - jax.lax.stop_gradient(target)) ** 2)
-            return loss
+                target = batch.reward + self.discount * max_next_q * (1.0 - batch.terminal)
+                loss = jnp.mean((q_sel - jax.lax.stop_gradient(target)) ** 2)
+                return loss
+            
+            loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
+            state.optimizer.update(state.online_network, grads)
 
-        loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
-        state.optimizer.update(state.online_network, grads)
-
-        _, _state = nnx.split(state.online_network)
-        nnx.update(state.target_network, _state)
+        # _, _state = nnx.split(state.online_network)
+        # nnx.update(state.target_network, _state)
 
         return state, loss
 

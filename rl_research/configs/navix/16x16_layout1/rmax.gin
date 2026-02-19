@@ -1,25 +1,27 @@
 setup_mlflow.experiment_name = "navix_16x16_layout1"
 setup_mlflow.experiment_group = "rmax"
 
-run_single_seed.agent_cls = @RMaxAgent
-run_single_seed.env_cls = @NavixWrapper
-run_single_seed.buffer_cls = @ReplayBuffer
+run_loop.agent_cls = @RMaxAgent
+run_loop.env_cls = @NavixWrapper
+run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 1
 
-RMaxAgent.r_max = 0.01
+RMaxAgent.r_max = 1.0
+RMaxAgent.v_max = 1.0
+RMaxAgent.use_vmax = True
 RMaxAgent.discount = 0.99
 RMaxAgent.known_threshold = 1
 RMaxAgent.convergence_threshold = 1e-8
 
 NavixWrapper.env_id = "TabularGridDoorKey-16x16-layout1-v0"
 
-run_loop.train_episodes = 0
-run_loop.use_steps = True
-run_loop.train_steps = 1_000_000
-run_loop.max_episode_steps = 2048
-run_loop.minibatch_size = 1
-run_loop.update_frequency = 1
-run_loop.num_minibatches = 1
-run_loop.warmup_steps = 0
-run_loop.evaluate_every = 0
-run_loop.eval_episodes = 0
+TrainingConfig.train_episodes = 0
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 1_000_000
+TrainingConfig.max_episode_steps = 2048
+TrainingConfig.minibatch_size = 1
+TrainingConfig.update_frequency = 1
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 0
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
