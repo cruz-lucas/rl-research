@@ -36,6 +36,23 @@ def tabular_obs_fn(state: State) -> Array:
     return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)[0]
 
 
+def onehot_tabular_obs_fn(state: State) -> Array:
+    H, W = state.grid.shape
+
+    prow, pcol = state.get_player().position
+    player_pos = (prow - 1) * (W - 2) + (pcol - 1)
+
+    door_open = state.get_doors().open
+
+    # check pocket != -1 might be a better solution
+    krow, _ = state.get_keys().position[0]
+    kpicked = krow == 0
+
+    direction = state.get_player().direction
+    idx = jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)[0]
+    return jnp.eye(H * W * 2 * 2 * 4)[idx]
+
+
 class FixedGridDoorKey(nx.environments.DoorKey):
     door_row: int = struct.field(pytree_node=False, default=1)
     door_col: int = struct.field(pytree_node=False, default=2)
@@ -410,6 +427,23 @@ nx.register_env(
     goal_row=1,
     goal_col=14,
     max_steps=2048,
+    random_start=False,
+    # **kwargs,
+    )
+)
+
+nx.register_env(
+    "OneHotTabularGridDoorKey-5x5-layout1-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=tabular_obs_fn,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=5,
+    width=5,
+    door_row=1,
+    goal_row=1,
+    goal_col=3,
+    max_steps=100,
     random_start=False,
     # **kwargs,
     )
