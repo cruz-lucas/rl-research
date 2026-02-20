@@ -12,21 +12,23 @@ from rl_research.buffers import Transition
 
 class Network(nnx.Module):
     def __init__(self, in_features: int , out_features: int, rngs: nnx.Rngs, hidden_features: int = 64):
-        self.in_layer = nnx.Linear(in_features=in_features, out_features=hidden_features, rngs=rngs)
-        self.hidden_layer = nnx.Linear(in_features=hidden_features, out_features=hidden_features, rngs=rngs)
-        self.out_layer = nnx.Linear(in_features=hidden_features, out_features=out_features, rngs=rngs)
+        self.in_layer = nnx.Linear(in_features=in_features, out_features=out_features, rngs=rngs)        
+        
+        # self.in_layer = nnx.Linear(in_features=in_features, out_features=hidden_features, rngs=rngs)
+        # self.hidden_layer = nnx.Linear(in_features=hidden_features, out_features=hidden_features, rngs=rngs)
+        # self.out_layer = nnx.Linear(in_features=hidden_features, out_features=out_features, rngs=rngs)
     
     def __call__(self, x):
         x = self.in_layer(x)
-        x = nnx.relu(x)
-        x = self.hidden_layer(x)
-        x = nnx.relu(x)
-        x = self.out_layer(x)
+        # x = nnx.relu(x)
+        # x = self.hidden_layer(x)
+        # x = nnx.relu(x)
+        # x = self.out_layer(x)
         return x
 
 class NFQState(struct.PyTreeNode):
     online_network: Network
-    target_network: Network
+    # target_network: Network
     optimizer: nnx.Optimizer
     step: int
 
@@ -37,6 +39,7 @@ class NFQAgent:
         self,
         num_states: int, # this is the input size
         num_actions: int,
+        num_iters: int = 10,
         hidden_units: int = 64,
         learning_rate: float = 1e-3,
         discount: float = 0.99,
@@ -48,6 +51,7 @@ class NFQAgent:
     ):
         self.num_states = int(num_states)
         self.num_actions = int(num_actions)
+        self.num_iters = int(num_iters)
         self.hidden_units = hidden_units
         self.learning_rate = learning_rate
         self.discount = discount
@@ -61,23 +65,27 @@ class NFQAgent:
         rng = jax.random.PRNGKey(self.seed)
         rng_online, rng_target = jax.random.split(rng)
         online_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng_online), hidden_features=self.hidden_units)
-        target_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng_target), hidden_features=self.hidden_units)
+        # target_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng_target), hidden_features=self.hidden_units)
         optimizer = nnx.Optimizer(
             online_network,
-            optax.chain(optax.clip_by_global_norm(self.max_grad_norm), optax.adam(self.learning_rate)),
+            # optax.chain(
+            #     optax.clip_by_global_norm(self.max_grad_norm),
+                optax.adam(self.learning_rate),
+            # ),
             wrt=nnx.Param
         )
 
-        _, self._initial_params = nnx.split(online_network)
+        # _, self._initial_params = nnx.split(online_network)
         
         return NFQState(
             online_network=online_network,
-            target_network=target_network,
+            # target_network=target_network,
             optimizer=optimizer,
             step=0,
         )
 
     def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
+
         q_vals = state.online_network(obs.reshape(-1))
 
         def greedy():
@@ -98,8 +106,7 @@ class NFQAgent:
         next_q = state.online_network(batch.next_observation)
         max_next_q = jnp.max(next_q, axis=1)
 
-        num_iters = 150
-        for i in range(num_iters):
+        for i in range(self.num_iters):
             def loss_fn(network: Network):
                 q_values = network(batch.observation)
                 q_sel = jnp.take_along_axis(q_values, batch.action[:, None], axis=1).squeeze()

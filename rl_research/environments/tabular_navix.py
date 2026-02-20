@@ -194,6 +194,12 @@ class FixedGridDoorKey(nx.environments.DoorKey):
                 shape=(1,),
                 dtype=jnp.uint8,
             )
+        elif observation_fn == onehot_tabular_obs_fn:
+            return Discrete.create(
+                n_elements=2,
+                shape=(height * width * 2 * 2 * 4,),
+                dtype=jnp.uint8,
+            )
         else:
             raise NotImplementedError(
                 "Unknown observation space for observation function {}".format(
@@ -435,7 +441,7 @@ nx.register_env(
 nx.register_env(
     "OneHotTabularGridDoorKey-5x5-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
-    observation_fn=tabular_obs_fn,
+    observation_fn=onehot_tabular_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
