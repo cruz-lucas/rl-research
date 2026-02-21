@@ -53,6 +53,29 @@ def onehot_tabular_obs_fn(state: State) -> Array:
     return jnp.eye(H * W * 2 * 2 * 4)[idx]
 
 
+def onehot_obs_fn(state: State) -> Array:
+    H, W = state.grid.shape
+
+    prow, pcol = state.get_player().position
+    player_pos = (prow - 1) * (W - 2) + (pcol - 1)
+
+    onehot_player_pos = jnp.eye(H * W)[player_pos]
+
+    door_open = (state.get_doors().open) * 1
+
+    onehot_door_open = jnp.eye(2)[door_open].reshape(-1)
+
+    # check pocket != -1 might be a better solution
+    krow, _ = state.get_keys().position[0]
+    kpicked = (krow == 0) * 1
+
+    onehot_key = jnp.eye(2)[kpicked]
+
+    direction = state.get_player().direction
+    onehot_direction = jnp.eye(4)[direction]
+    return jnp.concatenate([onehot_player_pos, onehot_door_open, onehot_key, onehot_direction])
+
+
 class FixedGridDoorKey(nx.environments.DoorKey):
     door_row: int = struct.field(pytree_node=False, default=1)
     door_col: int = struct.field(pytree_node=False, default=2)
@@ -198,6 +221,12 @@ class FixedGridDoorKey(nx.environments.DoorKey):
             return Discrete.create(
                 n_elements=2,
                 shape=(height * width * 2 * 2 * 4,),
+                dtype=jnp.uint8,
+            )
+        elif observation_fn == onehot_obs_fn:
+            return Discrete.create(
+                n_elements=2,
+                shape=(height * width + 2 + 2 + 4,),
                 dtype=jnp.uint8,
             )
         else:
@@ -442,6 +471,24 @@ nx.register_env(
     "OneHotTabularGridDoorKey-5x5-layout1-v0",
     lambda *args, **kwargs: FixedGridDoorKey.create(
     observation_fn=onehot_tabular_obs_fn,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=5,
+    width=5,
+    door_row=1,
+    goal_row=1,
+    goal_col=3,
+    max_steps=100,
+    random_start=False,
+    # **kwargs,
+    )
+)
+
+
+nx.register_env(
+    "OneHotGridDoorKey-5x5-layout1-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=onehot_obs_fn,
     reward_fn=nx.rewards.on_goal_reached,
     termination_fn=nx.terminations.on_goal_reached,
     height=5,
