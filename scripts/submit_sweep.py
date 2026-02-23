@@ -59,6 +59,12 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 15.0},
         "num_iters": {"type": "int", "min": 1, "max": 300},
     },
+    "RMaxNFQAgent": {
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
+        "min_visits": {"type": "int", "min": 0, "max": 100},
+        "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 15.0},
+        "num_iters": {"type": "int", "min": 1, "max": 300},
+    },
     "DRMAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
         "num_update_epochs": {"type": "int", "min": 1, "max": 1},
