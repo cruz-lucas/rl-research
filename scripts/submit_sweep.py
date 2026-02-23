@@ -19,7 +19,8 @@ from typing import Annotated, Any, Dict, List, Sequence
 import gin
 import tyro
 
-from rl_research.main import run_single_seed, setup_mlflow
+from rl_research.main import setup_mlflow
+from rl_research.experiment import run_loop, TrainingConfig
 
 
 # Default space is a starting point; override with --space-file.
@@ -50,6 +51,14 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
     },
+    "NFQAgent": {
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
+        "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
+        "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
+        "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
+        "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 15.0},
+        "num_iters": {"type": "int", "min": 1, "max": 300},
+    },
     "DRMAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
         "num_update_epochs": {"type": "int", "min": 1, "max": 1},
@@ -72,11 +81,11 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "params": {
         # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
-        # "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(10, 18)])},
-        # "run_loop.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])},
-        # "run_loop.update_frequency": {"type": "int", "min": 1, "max": 50},
-        # "run_loop.num_minibatches": {"type": "int", "min": 1, "max": 1},
-        # "run_loop.warmup_steps": {"type": "choice", "values": list([2**i for i in range(1, 14)])},
+        "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(10, 16)])},
+        "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])},
+        "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 10)])},
+        "TrainingConfig.num_minibatches": {"type": "int", "min": 1, "max": 1},
+        "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
     },
 }
 
@@ -206,12 +215,12 @@ def infer_algorithm_from_config(config_path: Path) -> str:
         bindings=None,
         skip_unknown=True,
     )
-    run_bindings = gin.get_bindings("run_single_seed")
+    run_bindings = gin.get_bindings("run_loop")
     agent_cls = run_bindings.get("agent_cls")
     gin.clear_config()
 
     if agent_cls is None:
-        raise ValueError(f"run_single_seed.agent_cls not set in config {config_path}")
+        raise ValueError(f"run_loop.agent_cls not set in config {config_path}")
 
     return getattr(agent_cls, "__name__", str(agent_cls))
 
