@@ -133,6 +133,8 @@ class DRMAgent:
             q_sel = jnp.take_along_axis(q_values, batch.action[:, None], axis=1).squeeze()
 
             next_q = state.target_network(batch.next_observation)
+            
+            # TODO: THIS IS WRONG!!! we should check any action for the next state
             max_next_q = jnp.where(
                 new_visit_counts[next_obs_ids, batch.action] >= self.known_threshold,
                 jnp.max(next_q, axis=1),
