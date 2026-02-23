@@ -86,27 +86,35 @@ class DRMAgent:
         )
     
     def get_obs_idx(self, obs: jax.Array) -> jax.Array:
-        obs = obs.reshape((-1, self.grid_size, self.grid_size, 3))
-        B, G, _, _ = obs.shape
+        # obs = obs.reshape((-1, self.grid_size, self.grid_size, 3))
+        # B, G, _, _ = obs.shape
 
-        player_mask = obs[:, :, :, 0] == 10
-        _, prow, pcol = jnp.where(player_mask, size=B, fill_value=0)
+        # player_mask = obs[:, :, :, 0] == 10
+        # _, prow, pcol = jnp.where(player_mask, size=B, fill_value=0)
 
-        player_pos = (prow - 1) * (G - 2) + (pcol - 1)
+        # player_pos = (prow - 1) * (G - 2) + (pcol - 1)
 
-        door_mask = obs[:, :, :, 0] == 4
-        dbatch, drow, dcol = jnp.where(door_mask, size=B, fill_value=0)
+        # door_mask = obs[:, :, :, 0] == 4
+        # dbatch, drow, dcol = jnp.where(door_mask, size=B, fill_value=0)
 
-        door_open = obs[dbatch, drow, dcol, -1] == 2
+        # door_open = obs[dbatch, drow, dcol, -1] == 2
 
-        key_mask = obs[:, :, :, 0] == 5
-        _, krow, _ = jnp.where(key_mask, size=B, fill_value=0)
+        # key_mask = obs[:, :, :, 0] == 5
+        # _, krow, _ = jnp.where(key_mask, size=B, fill_value=0)
 
-        kpicked = krow == 0
+        # kpicked = krow == 0
 
-        direction = obs[jnp.arange(B), prow, pcol, -1]
+        # direction = obs[jnp.arange(B), prow, pcol, -1]
 
-        return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)
+        # return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)
+        obs = obs.reshape((-1, 33))
+
+        f1 = jnp.argmax(obs[:, :25], axis=1)
+        f2 = jnp.argmax(obs[:, 25:27], axis=1)
+        f3 = jnp.argmax(obs[:, 27:29], axis=1)
+        f4 = jnp.argmax(obs[:, 29:33], axis=1)
+
+        return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
 
     def select_action(self, state: DRMState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
         q_vals = state.online_network(obs.reshape(-1)).squeeze()
@@ -134,11 +142,10 @@ class DRMAgent:
 
             next_q = state.target_network(batch.next_observation)
             
-            # TODO: THIS IS WRONG!!! we should check any action for the next state
             max_next_q = jnp.where(
-                new_visit_counts[next_obs_ids, batch.action] >= self.known_threshold,
+                jnp.any(new_visit_counts[next_obs_ids, :] < self.known_threshold),
+                self.optimistic_value,
                 jnp.max(next_q, axis=1),
-                self.optimistic_value
             )
 
             target = batch.reward + self.discount * max_next_q * (1.0 - batch.terminal)
