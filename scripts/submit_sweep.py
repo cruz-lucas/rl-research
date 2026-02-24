@@ -87,8 +87,8 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "params": {
         # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
-        "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(10, 16)])},
-        "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])},
+        "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(10, 18)])},
+        "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 10)])}, # minibatch must not be bigger than buffer size
         "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 10)])},
         "TrainingConfig.num_minibatches": {"type": "int", "min": 1, "max": 1},
         "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
