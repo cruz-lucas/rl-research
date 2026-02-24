@@ -77,7 +77,7 @@ class RMaxNFQAgent:
 
 
     def obs_to_index(self, obs: jnp.ndarray) -> jnp.ndarray:
-        obs = obs.reshape((-1, self.num_obs_ids))
+        obs = obs.reshape((-1, self.num_states))
 
         pos_ids = self.grid_size ** 2
         f1 = jnp.argmax(obs[:, :pos_ids], axis=1)

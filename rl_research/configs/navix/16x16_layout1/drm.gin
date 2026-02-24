@@ -7,9 +7,8 @@ run_loop.buffer_cls = @FlatteningReplayBuffer
 FlatteningReplayBuffer.buffer_size = 131_072
 FlatteningReplayBuffer.obs_shape = (264,)
 
-DRMAgent.grid_size = 5
+DRMAgent.grid_size = 16
 DRMAgent.r_max = 0.01
-DRMAgent.num_update_epochs = 1
 DRMAgent.known_threshold = 0
 DRMAgent.discount = 0.99
 DRMAgent.learning_rate = 1e-3
