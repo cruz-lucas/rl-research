@@ -31,6 +31,7 @@ class RMaxNFQAgent:
         self,
         num_states: int,
         num_actions: int,
+        grid_size: int = 5,
         num_iters: int = 10,
         hidden_units: int = 64,
         learning_rate: float = 1e-3,
@@ -43,6 +44,8 @@ class RMaxNFQAgent:
         self.num_states = int(num_states)
         self.num_actions = int(num_actions)
         self.num_iters = int(num_iters)
+        self.grid_size = int(grid_size)
+        self.num_obs_ids = (grid_size ** 2) * 2 * 2 * 4
         self.hidden_units = hidden_units
         self.learning_rate = learning_rate
         self.discount = discount
@@ -63,11 +66,7 @@ class RMaxNFQAgent:
             ),
             wrt=nnx.Param
         )
-
-        # TODO: the obs is shape (33,), but we actually have 400 states, more than one feature can be active.
-        # I'm going to hard code this for now but we should have a more general solution for this.
-        assert self.num_states == 400
-        visitation_counts = jnp.zeros((400, self.num_actions), dtype=jnp.int32)
+        visitation_counts = jnp.zeros((self.num_obs_ids, self.num_actions), dtype=jnp.int32)
         
         return NFQState(
             online_network=online_network,
@@ -78,16 +77,15 @@ class RMaxNFQAgent:
 
 
     def obs_to_index(self, obs: jnp.ndarray) -> jnp.ndarray:
-        obs = obs.reshape((-1, 400))
-        return jnp.argmax(obs, axis=1)
-        # obs = obs.reshape((-1, 33))
+        obs = obs.reshape((-1, self.num_obs_ids))
 
-        # f1 = jnp.argmax(obs[:, :25], axis=1)
-        # f2 = jnp.argmax(obs[:, 25:27], axis=1)
-        # f3 = jnp.argmax(obs[:, 27:29], axis=1)
-        # f4 = jnp.argmax(obs[:, 29:33], axis=1)
+        pos_ids = self.grid_size ** 2
+        f1 = jnp.argmax(obs[:, :pos_ids], axis=1)
+        f2 = jnp.argmax(obs[:, (pos_ids+2):(pos_ids+4)], axis=1)
+        f3 = jnp.argmax(obs[:, (pos_ids+4):(pos_ids+6)], axis=1)
+        f4 = jnp.argmax(obs[:, -4:], axis=1)
 
-        # return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
+        return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
 
 
     def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:

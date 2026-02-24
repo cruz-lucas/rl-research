@@ -1,0 +1,30 @@
+setup_mlflow.experiment_name = "navix_16x16_layout1"
+setup_mlflow.experiment_group = "nfq_onehot"
+
+run_loop.agent_cls = @NFQAgent
+run_loop.env_cls = @NavixWrapper
+run_loop.buffer_cls = @FlatteningReplayBuffer
+FlatteningReplayBuffer.buffer_size = 1024
+FlatteningReplayBuffer.obs_shape = (264,)
+
+NFQAgent.discount = 0.99
+NFQAgent.learning_rate = 3e-6
+NFQAgent.eps_start = 0.9
+NFQAgent.eps_end = 0.01
+NFQAgent.eps_decay_steps = 120_000
+NFQAgent.max_grad_norm = 2.0
+NFQAgent.num_iters = 150
+
+NavixWrapper.env_id = "OneHotGridDoorKey-16x16-layout1-v0"
+
+TrainingConfig.train_episodes = 0
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 1_000_000
+TrainingConfig.max_episode_steps = 100
+TrainingConfig.minibatch_size = 128
+TrainingConfig.update_frequency = 32
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 4096
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = None

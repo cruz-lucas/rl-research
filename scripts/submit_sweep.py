@@ -67,7 +67,6 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "DRMAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
-        "num_update_epochs": {"type": "int", "min": 1, "max": 1},
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
