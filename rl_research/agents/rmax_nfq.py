@@ -110,8 +110,8 @@ class RMaxNFQAgent:
             visitation_counts=state.visitation_counts.at[obs_idx, batch.action].add(1)
         )
 
-        batch_counts = jnp.array([state.visitation_counts[next_obs_idx[j], :] for j in range(batch.observation.shape[0])])
-        max_next_q = jnp.where(jnp.any(batch_counts < self.min_visits), self.vmax, max_next_q)
+        batch_counts_minimum = jnp.array([state.visitation_counts[next_obs_idx[j], :].min() for j in range(batch.observation.shape[0])])
+        max_next_q = jnp.where(batch_counts_minimum < self.min_visits, self.vmax, max_next_q)
 
         for i in range(self.num_iters):
             def loss_fn(network: Network):
