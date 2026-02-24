@@ -26,7 +26,6 @@ class DRMAgent:
         num_states: int,
         num_actions: int,
         grid_size: int,
-        num_update_epochs: int = 1,
         hidden_units: int = 64,
         learning_rate: float = 1e-3,
         discount: float = 0.99,
@@ -41,7 +40,6 @@ class DRMAgent:
         self.num_states = int(num_states)
         self.num_actions = int(num_actions)
         self.grid_size = int(grid_size)
-        self.num_update_epochs = int(num_update_epochs)
         # Specific for Door Key environment, needs to change if get_obs_idx is modified
         self.num_obs_ids = (grid_size - 2) * (grid_size - 2) * 2 * 2 * 4
         self.hidden_units = hidden_units
@@ -155,13 +153,8 @@ class DRMAgent:
             mean_loss = jnp.sum(masked_loss) / denom
             return mean_loss
 
-        total_loss = 0.0
-        for _ in range(self.num_update_epochs):
-            loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
-            state.optimizer.update(state.online_network, grads)
-            total_loss += loss
-        
-        avg_loss = total_loss / self.num_update_epochs
+        loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
+        state.optimizer.update(state.online_network, grads)
 
         _graphdef, _state = nnx.cond(
             state.step % self.target_update_freq == 0,
@@ -175,7 +168,7 @@ class DRMAgent:
             visit_counts=new_visit_counts,
         )
 
-        return new_state, avg_loss
+        return new_state, loss
 
     def bootstrap_value(self, state: DRMState, next_observation: jnp.ndarray) -> jax.Array:
         # TODO: implement this properly.
