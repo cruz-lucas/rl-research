@@ -501,3 +501,22 @@ nx.register_env(
     # **kwargs,
     )
 )
+
+
+nx.register_env(
+    "OneHotGridDoorKey-16x16-layout1-v0",
+    lambda *args, **kwargs: FixedGridDoorKey.create(
+    observation_fn=onehot_obs_fn,
+    reward_fn=nx.rewards.on_goal_reached,
+    termination_fn=nx.terminations.on_goal_reached,
+    height=16,
+    width=16,
+    door_row=1,
+    door_col=13,
+    goal_row=1,
+    goal_col=14,
+    max_steps=2048,
+    random_start=False,
+    # **kwargs,
+    )
+)
