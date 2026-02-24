@@ -27,4 +27,4 @@ TrainingConfig.num_minibatches = 1
 TrainingConfig.warmup_steps = 8192
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
-TrainingConfig.checkpoint_freq = 50_000
+TrainingConfig.checkpoint_freq = None

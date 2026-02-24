@@ -18,7 +18,7 @@ import orbax.checkpoint as ocp
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-from rl_research.agents import NFQAgent, DQNAgent, DRMAgent
+from rl_research.agents import *
 from rl_research.environments.tabular_navix import NavixWrapper
 from navix.observations import rgb
 
@@ -65,11 +65,11 @@ def print_state_info(episode_length, episode_return):
 def main():
     # ==================== CONFIGURATION ====================
     
-    # NFQAgent, DQNAgent, DRMAgent
+    # NFQAgent, DQNAgent, DRMAgent, RMaxNFQAgent
 
-    CHECKPOINT_PATH = "./tmp/ckpt/NFQAgent/checkpoint_950000"
-    ENV_ID = "GridDoorKey-5x5-layout1-v0"
-    AGENT_CLASS = NFQAgent
+    CHECKPOINT_PATH = "./tmp/ckpt/RMaxNFQAgent/checkpoint_100000"
+    ENV_ID = "OneHotTabularGridDoorKey-5x5-layout1-v0"
+    AGENT_CLASS = RMaxNFQAgent
     SEED = 0
     
     # =======================================================

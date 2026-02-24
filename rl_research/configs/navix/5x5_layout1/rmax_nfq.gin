@@ -1,18 +1,18 @@
 setup_mlflow.experiment_name = "navix_5x5_layout1"
-setup_mlflow.experiment_group = "rmax_nfq_experiment1"
+setup_mlflow.experiment_group = "rmax_nfq_tabularonehot"
 
 run_loop.agent_cls = @RMaxNFQAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @FlatteningReplayBuffer
-FlatteningReplayBuffer.buffer_size = 10_000
+FlatteningReplayBuffer.buffer_size = 1024
 FlatteningReplayBuffer.obs_shape = (400,)
 
 RMaxNFQAgent.discount = 0.99
-RMaxNFQAgent.learning_rate = 3e-3
-RMaxNFQAgent.max_grad_norm = 1.0
-RMaxNFQAgent.num_iters = 50
+RMaxNFQAgent.learning_rate = 0.000957323
+RMaxNFQAgent.max_grad_norm = 7.78521
+RMaxNFQAgent.num_iters = 294
 RMaxNFQAgent.vmax = 1.0
-RMaxNFQAgent.min_visits = 50
+RMaxNFQAgent.min_visits = 67
 
 NavixWrapper.env_id = "OneHotTabularGridDoorKey-5x5-layout1-v0"
 
@@ -20,10 +20,10 @@ TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 10_000
-TrainingConfig.update_frequency = 1_000
+TrainingConfig.minibatch_size = 1024
+TrainingConfig.update_frequency = 64
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 50_000
+TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
-TrainingConfig.checkpoint_freq = 100_000
+TrainingConfig.checkpoint_freq = None
