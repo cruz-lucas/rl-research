@@ -1,11 +1,13 @@
 # RL Research (WIP)
 
-Tabular reinforcement-learning sandbox for ongoing research on exploration and planning. Experiments are expressed with Gin configs, run with JAX/Flax-based agents, and tracked with MLflow (including tabular agent-state artifacts for inspection).
+RL sandbox for ongoing research on exploration and planning. Experiments are expressed with Gin configs, run with JAX/Flax(nnx)-based agents, and tracked with MLflow (including tabular agent-state artifacts or neural net checkpoints for inspection).
 
 ## Highlights
 - JAX-first training loop with Gin-configurable agents, buffers, and environments.
 - Tabular agents (Q-learning, optimistic Monte Carlo and Q-learning, RMax, MCTS) plus optional empirical/hand-coded models.
+- DQN and NFQ agents.
 - Functional GoRight environment with precomputed transitions and optional `pygame` rendering.
+- Wrappers for Navix environments (JAX port of Minigrid environments).
 - MLflow logging backed by SQLite (`mlruns.db`) with agent-state artifacts per run.
 - Reproducible dependency management via `uv` and the committed `uv.lock`.
 
