@@ -1,11 +1,11 @@
 setup_mlflow.experiment_name = "navix_5x5_layout1"
-setup_mlflow.experiment_group = "dqn_onehot_linear"
+setup_mlflow.experiment_group = "dqn"
 
 run_loop.agent_cls = @DQNAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @FlatteningReplayBuffer
 FlatteningReplayBuffer.buffer_size = 131_072
-FlatteningReplayBuffer.obs_shape = (33,)
+FlatteningReplayBuffer.obs_shape = (5, 5, 3)
 
 DQNAgent.discount = 0.99
 DQNAgent.learning_rate = 1e-3
@@ -15,7 +15,7 @@ DQNAgent.eps_decay_steps = 300_000
 DQNAgent.target_update_freq = 2048
 DQNAgent.max_grad_norm = 1.0
 
-NavixWrapper.env_id = "OneHotGridDoorKey-5x5-layout1-v0"
+NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True

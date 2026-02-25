@@ -1,11 +1,11 @@
 setup_mlflow.experiment_name = "navix_5x5_layout1"
-setup_mlflow.experiment_group = "nfq_onehot"
+setup_mlflow.experiment_group = "nfq"
 
 run_loop.agent_cls = @NFQAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @FlatteningReplayBuffer
 FlatteningReplayBuffer.buffer_size = 1024
-FlatteningReplayBuffer.obs_shape = (33,)
+FlatteningReplayBuffer.obs_shape = (5, 5, 3)
 
 NFQAgent.discount = 0.99
 NFQAgent.learning_rate = 3e-6
@@ -15,7 +15,7 @@ NFQAgent.eps_decay_steps = 120_000
 NFQAgent.max_grad_norm = 2.0
 NFQAgent.num_iters = 150
 
-NavixWrapper.env_id = "OneHotGridDoorKey-5x5-layout1-v0"
+NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True

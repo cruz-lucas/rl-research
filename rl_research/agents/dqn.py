@@ -12,18 +12,20 @@ from rl_research.buffers import Transition
 
 class Network(nnx.Module):
     def __init__(self, in_features: int , out_features: int, rngs: nnx.Rngs, hidden_features: int = 64):
-        self.in_layer = nnx.Linear(in_features=in_features, out_features=out_features, rngs=rngs)
+        # self.in_layer = nnx.Linear(in_features=in_features, out_features=out_features, rngs=rngs)
         
-        # self.in_layer = nnx.Linear(in_features=in_features, out_features=hidden_features, rngs=rngs)
-        # self.hidden_layer = nnx.Linear(in_features=hidden_features, out_features=hidden_features, rngs=rngs)
-        # self.out_layer = nnx.Linear(in_features=hidden_features, out_features=out_features, rngs=rngs)
+        self.in_layer = nnx.Linear(in_features=in_features, out_features=hidden_features, rngs=rngs)
+        self.hidden_layer = nnx.Linear(in_features=hidden_features, out_features=hidden_features, rngs=rngs)
+        self.layernorm = nnx.LayerNorm(num_features=hidden_features, rngs=rngs)
+        self.out_layer = nnx.Linear(in_features=hidden_features, out_features=out_features, rngs=rngs)
     
     def __call__(self, x):
         x = self.in_layer(x)
-        # x = nnx.relu(x)
-        # x = self.hidden_layer(x)
-        # x = nnx.relu(x)
-        # x = self.out_layer(x)
+        x = nnx.relu(x)
+        x = self.hidden_layer(x)
+        x = self.layernorm(x)
+        x = nnx.relu(x)
+        x = self.out_layer(x)
         return x
 
 class DQNState(struct.PyTreeNode):

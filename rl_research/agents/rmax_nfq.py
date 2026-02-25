@@ -12,10 +12,20 @@ from rl_research.buffers import Transition
 
 class Network(nnx.Module):
     def __init__(self, in_features: int , out_features: int, rngs: nnx.Rngs, hidden_features: int = 64):
-        self.in_layer = nnx.Linear(in_features=in_features, out_features=out_features, rngs=rngs)
+        # self.in_layer = nnx.Linear(in_features=in_features, out_features=out_features, rngs=rngs)
+    
+        self.in_layer = nnx.Linear(in_features=in_features, out_features=hidden_features, rngs=rngs)
+        self.hidden_layer = nnx.Linear(in_features=hidden_features, out_features=hidden_features, rngs=rngs)
+        self.layernorm = nnx.LayerNorm(num_features=hidden_features, rngs=rngs)
+        self.out_layer = nnx.Linear(in_features=hidden_features, out_features=out_features, rngs=rngs)
     
     def __call__(self, x):
         x = self.in_layer(x)
+        x = nnx.relu(x)
+        x = self.hidden_layer(x)
+        x = self.layernorm(x)
+        x = nnx.relu(x)
+        x = self.out_layer(x)
         return x
 
 class NFQState(struct.PyTreeNode):
@@ -31,7 +41,7 @@ class RMaxNFQAgent:
         self,
         num_states: int,
         num_actions: int,
-        grid_size: int = 5,
+        grid_size: int,
         num_iters: int = 10,
         hidden_units: int = 64,
         learning_rate: float = 1e-3,
@@ -76,16 +86,39 @@ class RMaxNFQAgent:
         )
 
 
-    def obs_to_index(self, obs: jnp.ndarray) -> jnp.ndarray:
-        obs = obs.reshape((-1, self.num_states))
+    # def obs_to_index(self, obs: jnp.ndarray) -> jnp.ndarray:
+    #     obs = obs.reshape((-1, self.num_states))
 
-        pos_ids = self.grid_size ** 2
-        f1 = jnp.argmax(obs[:, :pos_ids], axis=1)
-        f2 = jnp.argmax(obs[:, (pos_ids+2):(pos_ids+4)], axis=1)
-        f3 = jnp.argmax(obs[:, (pos_ids+4):(pos_ids+6)], axis=1)
-        f4 = jnp.argmax(obs[:, -4:], axis=1)
+    #     pos_ids = self.grid_size ** 2
+    #     f1 = jnp.argmax(obs[:, :pos_ids], axis=1)
+    #     f2 = jnp.argmax(obs[:, (pos_ids+2):(pos_ids+4)], axis=1)
+    #     f3 = jnp.argmax(obs[:, (pos_ids+4):(pos_ids+6)], axis=1)
+    #     f4 = jnp.argmax(obs[:, -4:], axis=1)
 
-        return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
+    #     return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
+
+    def get_obs_idx(self, obs: jax.Array) -> jax.Array:
+        obs = obs.reshape((-1, self.grid_size, self.grid_size, 3))
+        B, G, _, _ = obs.shape
+
+        player_mask = obs[:, :, :, 0] == 10
+        _, prow, pcol = jnp.where(player_mask, size=B, fill_value=0)
+
+        player_pos = (prow - 1) * (G - 2) + (pcol - 1)
+
+        door_mask = obs[:, :, :, 0] == 4
+        dbatch, drow, dcol = jnp.where(door_mask, size=B, fill_value=0)
+
+        door_open = obs[dbatch, drow, dcol, -1] == 2
+
+        key_mask = obs[:, :, :, 0] == 5
+        _, krow, _ = jnp.where(key_mask, size=B, fill_value=0)
+
+        kpicked = krow == 0
+
+        direction = obs[jnp.arange(B), prow, pcol, -1]
+
+        return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)
 
 
     def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
