@@ -97,7 +97,7 @@ class RMaxNFQAgent:
 
     #     return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
 
-    def get_obs_idx(self, obs: jax.Array) -> jax.Array:
+    def obs_to_index(self, obs: jax.Array) -> jax.Array:
         obs = obs.reshape((-1, self.grid_size, self.grid_size, 3))
         B, G, _, _ = obs.shape
 

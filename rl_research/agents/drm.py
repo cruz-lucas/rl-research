@@ -56,7 +56,7 @@ class DRMAgent:
         self.num_states = int(num_states)
         self.num_actions = int(num_actions)
         self.grid_size = int(grid_size)
-        # Specific for Door Key environment, needs to change if get_obs_idx is modified
+        # Specific for Door Key environment, needs to change if obs_to_index is modified
         self.num_obs_ids = (grid_size ** 2) * 2 * 2 * 4
         self.hidden_units = hidden_units
         self.learning_rate = learning_rate
@@ -99,7 +99,7 @@ class DRMAgent:
             step=0,
         )
     
-    # def get_obs_idx(self, obs: jax.Array) -> jax.Array:
+    # def obs_to_index(self, obs: jax.Array) -> jax.Array:
     #     obs = obs.reshape((-1, self.num_states))
 
     #     pos_ids = self.grid_size ** 2
@@ -110,7 +110,7 @@ class DRMAgent:
 
     #     return f1 + 25 * (f2 + 2 * (f3 + 2 * f4))
     
-    def get_obs_idx(self, obs: jax.Array) -> jax.Array:
+    def obs_to_index(self, obs: jax.Array) -> jax.Array:
         obs = obs.reshape((-1, self.grid_size, self.grid_size, 3))
         B, G, _, _ = obs.shape
 
@@ -136,7 +136,7 @@ class DRMAgent:
     def select_action(self, state: DRMState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
         q_vals = state.online_network(obs.reshape(-1)).squeeze()
 
-        obs_ids = self.get_obs_idx(obs.reshape(-1))
+        obs_ids = self.obs_to_index(obs.reshape(-1))
         is_known = state.visit_counts[obs_ids] >= self.known_threshold
 
         values = jnp.where(is_known, q_vals, self.optimistic_value)
@@ -145,8 +145,8 @@ class DRMAgent:
         return action_dist.sample(seed=key)[0]
 
     def update(self, state: DRMState, batch: Transition) -> tuple[DRMState, jax.Array]:
-        obs_ids = self.get_obs_idx(batch.observation)
-        next_obs_ids = self.get_obs_idx(batch.next_observation)
+        obs_ids = self.obs_to_index(batch.observation)
+        next_obs_ids = self.obs_to_index(batch.next_observation)
         new_visit_counts = state.visit_counts.at[obs_ids, batch.action].add(1)
 
         known_mask = new_visit_counts[obs_ids, batch.action] >= self.known_threshold
