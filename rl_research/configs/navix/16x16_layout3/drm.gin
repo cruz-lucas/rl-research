@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "navix_16x16_layout1"
+setup_mlflow.experiment_name = "navix_16x16_layout3"
 setup_mlflow.experiment_group = "rmax_dqn_originalobs"
 
 run_loop.agent_cls = @DRMAgent
@@ -17,7 +17,7 @@ DRMAgent.learning_rate = 2e-4
 DRMAgent.target_update_freq = 2_048
 DRMAgent.max_grad_norm = 1.0
 
-NavixWrapper.env_id = "GridDoorKey-16x16-layout1-v0"
+NavixWrapper.env_id = "GridDoorKey-16x16-layout3-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True

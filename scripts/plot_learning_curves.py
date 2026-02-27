@@ -43,6 +43,16 @@ DEFAULT_GROUP_COLORS = {
     "rmax": "#2ca02c",
     "replaybased_rmax": "#d62728",
     "batch_modelfree_rmax": "#d62728",
+
+    "rmax_nfq_onehot_linear": "#d62728",
+    "rmax_dqn_onehot_linear": "#ff7f0e",
+    "nfq_onehot": "#1f77b4",
+    "dqn_onehot_linear": "#9467bd",
+
+    "dqn_originalobs": "#d62728",
+    "nfq_originalobs": "#ff7f0e",
+    "rmax_nfq_originalobs": "#1f77b4",
+    "rmax_dqn_originalobs": "#9467bd",
 }
 
 DEFAULT_GROUP_LABELS = {
@@ -52,15 +62,35 @@ DEFAULT_GROUP_LABELS = {
     "rmax": "R-Max",
     "replaybased_rmax": "Replay-based R-Max",
     "batch_modelfree_rmax": "Replay-based R-Max",
+
+    "rmax_nfq_onehot_linear": "NFQ + R-max",
+    "rmax_dqn_onehot_linear": "DQN + R-max",
+    "nfq_onehot": "NFQ",
+    "dqn_onehot_linear": "DQN",
+
+    "dqn_originalobs": "DQN",
+    "nfq_originalobs": "NFQ",
+    "rmax_nfq_originalobs": "NFQ + R-max",
+    "rmax_dqn_originalobs": "DQN + R-max",
 }
 
 DEFAULT_GROUP_ORDER = [
-    "dqn",
-    "drm",
-    "qlearning_epsgreedy",
-    "rmax",
-    "replaybased_rmax",
-    "batch_modelfree_rmax"
+    # "dqn",
+    # "drm",
+    # "qlearning_epsgreedy",
+    # "rmax",
+    # "replaybased_rmax",
+    # "batch_modelfree_rmax"
+
+    # "dqn_onehot_linear",
+    # "nfq_onehot",
+    # "rmax_nfq_onehot_linear",
+    # "rmax_dqn_onehot_linear",
+
+    "dqn_originalobs",
+    "nfq_originalobs",
+    "rmax_nfq_originalobs",
+    "rmax_dqn_originalobs",
 ]
 
 def parse_mlflow_run(run_dir: Path):
@@ -558,7 +588,7 @@ Examples:
                        help='Metric name to plot (default: train/discounted_return)')
     parser.add_argument('--groups', nargs='+',
                        help='Groups to plot (default: all in GROUP_ORDER)')
-    parser.add_argument('--num-points', type=int, default=1000,
+    parser.add_argument('--num-points', type=int, default=500,
                        help='Number of interpolation points (default: 1000)')
     parser.add_argument('--n-bootstrap', type=int, default=10000,
                        help='Number of bootstrap samples (default: 10000)')

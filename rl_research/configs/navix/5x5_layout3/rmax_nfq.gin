@@ -1,19 +1,19 @@
 setup_mlflow.experiment_name = "navix_5x5_layout2"
-setup_mlflow.experiment_group = "dqn_originalobs"
+setup_mlflow.experiment_group = "rmax_nfq_originalobs"
 
-run_loop.agent_cls = @DQNAgent
+run_loop.agent_cls = @RMaxNFQAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @FlatteningReplayBuffer
-FlatteningReplayBuffer.buffer_size = 65_536
+FlatteningReplayBuffer.buffer_size = 8192
 FlatteningReplayBuffer.obs_shape = (5, 5, 3)
 
-DQNAgent.discount = 0.99
-DQNAgent.learning_rate = 4e-4
-DQNAgent.eps_start = 0.8
-DQNAgent.eps_end = 0.01
-DQNAgent.eps_decay_steps = 300_000
-DQNAgent.target_update_freq = 2048
-DQNAgent.max_grad_norm = 10.0
+RMaxNFQAgent.grid_size = 5
+RMaxNFQAgent.discount = 0.99
+RMaxNFQAgent.learning_rate = 1e-4
+RMaxNFQAgent.max_grad_norm = 5.0
+RMaxNFQAgent.num_iters = 10
+RMaxNFQAgent.vmax = 1.0
+RMaxNFQAgent.min_visits = 80
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout2-v0"
 
@@ -21,8 +21,8 @@ TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 512
-TrainingConfig.update_frequency = 2
+TrainingConfig.minibatch_size = 256
+TrainingConfig.update_frequency = 4
 TrainingConfig.num_minibatches = 1
 TrainingConfig.warmup_steps = 8192
 TrainingConfig.evaluate_every = 0

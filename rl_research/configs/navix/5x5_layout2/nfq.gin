@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "navix_5x5_layout1"
+setup_mlflow.experiment_name = "navix_5x5_layout3"
 setup_mlflow.experiment_group = "nfq_originalobs"
 
 run_loop.agent_cls = @NFQAgent
@@ -15,7 +15,7 @@ NFQAgent.eps_decay_steps = 200_000
 NFQAgent.max_grad_norm = 5.0
 NFQAgent.num_iters = 6
 
-NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
+NavixWrapper.env_id = "GridDoorKey-5x5-layout3-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
