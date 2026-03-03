@@ -1,15 +1,15 @@
 #!/bin/bash
 #SBATCH --job-name=rl_experiment
 #SBATCH --account=aip-machado
-#SBATCH --time=1:00:00
-#SBATCH --cpus-per-task=30
-#SBATCH --mem=24G
-#SBATCH --output=/home/%u/logs/job_%A_%a.out
-#SBATCH --error=/home/%u/logs/job_%A_%a.err
+#SBATCH --time=4:00:00
+#SBATCH --cpus-per-task=50
+#SBATCH --mem=64G
+#SBATCH --output=/home/%u/scratch/logs/job_%A_%a_%x.out
+#SBATCH --error=/home/%u/scratch/logs/job_%A_%a_%x.err
 
 set -euo pipefail
 
-LOG_DIR="$HOME/logs"
+LOG_DIR="$SCRATCH/logs"
 mkdir -p "$LOG_DIR"
 
 module load python/3.11 gcc arrow
@@ -36,7 +36,7 @@ CONFIG_PATH="$1"
 shift
 BINDINGS=("$@")
 
-export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$HOME/mlruns}"
+export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/mlruns_final_results}"
 
 cmd=(uv run --active --offline python scripts/run_parallel_seeds.py --config "$CONFIG_PATH")
 

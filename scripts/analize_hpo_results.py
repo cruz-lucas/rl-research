@@ -313,9 +313,10 @@ class HyperparameterAnalyzer:
 
 
 if __name__ == "__main__":
-    analyzer = HyperparameterAnalyzer("./hpo_originalobs.csv")
-    analyzer.filter_experiment('navix_5x5_layout1')
-    stats = analyzer.analyze('metric_train_return_mean', higher_is_better=True)
+    results_name = "hpo_results_16x16_l3"
+    analyzer = HyperparameterAnalyzer(f"./{results_name}.csv")
+    analyzer.filter_experiment('navix_16x16_layout3')
+    stats = analyzer.analyze('metric_train_disc_return_mean', higher_is_better=True)
 
     analyzer.summary_report(top_n=10)
 
@@ -324,7 +325,7 @@ if __name__ == "__main__":
 
     boundaries = analyzer.check_boundaries(top_n=10)
 
-    analyzer.plot_performance_distribution('NFQAgent')
+    # analyzer.plot_performance_distribution('NFQAgent')
     # analyzer.plot_param_importance('buffer_buffer_size', 'NFQAgent')
     # analyzer.plot_param_importance('minibatch_size', 'NFQAgent')
     # analyzer.plot_param_importance('update_frequency', 'NFQAgent')
@@ -336,5 +337,5 @@ if __name__ == "__main__":
     # analyzer.plot_param_importance('agent_eps_decay_steps', 'NFQAgent')
     # analyzer.plot_param_importance('agent_learning_rate', 'NFQAgent')
 
-    stats.to_csv('hyperparameter_stats.csv', index=False)
-    best.to_csv('best_configs.csv', index=False)
+    stats.to_csv(f'{results_name}__hyperparameter_stats.csv', index=False)
+    best.to_csv(f'{results_name}__best_configs.csv', index=False)

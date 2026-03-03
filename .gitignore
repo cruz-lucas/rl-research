@@ -172,6 +172,7 @@ cython_debug/
 .pypirc
 
 **/mlruns/
+**/mlruns_final/
 **/mlruns_test/
 **/mlruns_sweep/
 **/mlruns_sqlite_artifacts/

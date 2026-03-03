@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=rl_experiment
+#SBATCH --job-name=hpo_16x16_l3_algos_w_rmax
 #SBATCH --account=aip-machado
 #SBATCH --time=12:00:00
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=2
 #SBATCH --mem=12G
 #SBATCH --array=0-0               # Override with --array on sbatch command line
-#SBATCH --output=/home/%u/logs/job_%A_%a.out
-#SBATCH --error=/home/%u/logs/job_%A_%a.err
+#SBATCH --output=/home/%u/scratch/logs/job_%A_%a_%x.out
+#SBATCH --error=/home/%u/scratch/logs/job_%A_%a_%x.err
 
 set -euo pipefail
 
@@ -15,7 +15,7 @@ mkdir -p "$LOG_DIR"
 
 module load python/3.11 gcc arrow
 
-VENV_DIR="$SCRATCH/.venv/"
+VENV_DIR="$HOME/.venv/"
 source "${VENV_DIR}/bin/activate"
 
 echo "Job ID: ${SLURM_JOB_ID:-local}"
@@ -37,7 +37,7 @@ CONFIG_PATH="$1"
 shift
 BINDINGS=("$@")
 
-export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/mlruns_5x5_layout1}"
+export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/hpo_16x16_l3_algos_w_rmax}"
 
 SEED="${SLURM_ARRAY_TASK_ID:-0}"
 
