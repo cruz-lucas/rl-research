@@ -24,33 +24,25 @@ def tabular_obs_fn(state: State) -> Array:
     H, W = state.grid.shape
 
     prow, pcol = state.get_player().position
-    player_pos = (prow - 1) * (W - 2) + (pcol - 1)
+    player_pos = (prow - 1) * (W - 2) + (pcol - 1) # (W-2) * (H-2) possible positions
 
     door_open = state.get_doors().open
 
-    # check pocket != -1 might be a better solution
-    krow, _ = state.get_keys().position[0]
-    kpicked = krow == 0
+    krow, kcol = state.get_keys().position[0]
+    key_picked = kcol == -1
+    key_pos = 1 + (krow - 1) * (W - 2) + (kcol - 1) # (W-2) * (H-2) + 1 possible positions
+    key_pos = jnp.where(key_picked, 0, key_pos)
 
     direction = state.get_player().direction
-    return jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)[0]
+    return jnp.int16(
+        ((key_pos * (W - 2) * (H - 2) + player_pos) * 2 + door_open) * 4 + direction
+    )[0]
 
 
 def onehot_tabular_obs_fn(state: State) -> Array:
     H, W = state.grid.shape
-
-    prow, pcol = state.get_player().position
-    player_pos = (prow - 1) * (W - 2) + (pcol - 1)
-
-    door_open = state.get_doors().open
-
-    # check pocket != -1 might be a better solution
-    krow, _ = state.get_keys().position[0]
-    kpicked = krow == 0
-
-    direction = state.get_player().direction
-    idx = jnp.int16(((player_pos * 2 + door_open) * 2 + kpicked) * 4 + direction)[0]
-    return jnp.eye(H * W * 2 * 2 * 4)[idx]
+    idx = tabular_obs_fn(state)
+    return jnp.eye(((W - 2) * (H - 2) + 1) * (W - 2) * (H - 2) * 2 * 4)[idx]
 
 
 def onehot_obs_fn(state: State) -> Array:
@@ -59,21 +51,22 @@ def onehot_obs_fn(state: State) -> Array:
     prow, pcol = state.get_player().position
     player_pos = (prow - 1) * (W - 2) + (pcol - 1)
 
-    onehot_player_pos = jnp.eye(H * W)[player_pos]
+    onehot_player_pos = jnp.eye((H-2) * (W-2))[player_pos]
 
     door_open = (state.get_doors().open) * 1
 
     onehot_door_open = jnp.eye(2)[door_open].reshape(-1)
 
-    # check pocket != -1 might be a better solution
-    krow, _ = state.get_keys().position[0]
-    kpicked = (krow == 0) * 1
+    krow, kcol = state.get_keys().position[0]
+    key_picked = kcol == -1
+    key_pos = 1 + (krow - 1) * (W - 2) + (kcol - 1)
+    key_pos = jnp.where(key_picked, 0, key_pos)
 
-    onehot_key = jnp.eye(2)[kpicked]
+    onehot_key = jnp.eye((H-2) * (W-2) + 1)[key_pos]
 
     direction = state.get_player().direction
     onehot_direction = jnp.eye(4)[direction]
-    return jnp.concatenate([onehot_player_pos, onehot_door_open, onehot_key, onehot_direction])
+    return jnp.concatenate([onehot_player_pos, onehot_key, onehot_door_open, onehot_direction])
 
 
 class FixedGridDoorKey(nx.environments.DoorKey):
@@ -317,7 +310,7 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
@@ -335,7 +328,7 @@ nx.register_env(
     door_col=13,
     goal_row=14,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
@@ -353,7 +346,7 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
@@ -425,7 +418,7 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
@@ -443,7 +436,7 @@ nx.register_env(
     door_col=13,
     goal_row=14,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
@@ -461,7 +454,7 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
@@ -515,7 +508,7 @@ nx.register_env(
     door_col=13,
     goal_row=1,
     goal_col=14,
-    max_steps=2048,
+    max_steps=1024,
     random_start=False,
     # **kwargs,
     )
