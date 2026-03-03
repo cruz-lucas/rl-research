@@ -44,32 +44,32 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "anneal_steps": {"type": "int", "min": 1_000, "max": 500_000},
     },
     "DQNAgent": {
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
         "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
         "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
         "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
-        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
+        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
     },
     "NFQAgent": {
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
         "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
         "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
         "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
-        "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 15.0},
+        "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 20.0},
         "num_iters": {"type": "int", "min": 1, "max": 300},
     },
     "RMaxNFQAgent": {
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
-        "min_visits": {"type": "int", "min": 0, "max": 100},
-        "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 15.0},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
+        "min_visits": {"type": "int", "min": 0, "max": 500},
+        "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 20.0},
         "num_iters": {"type": "int", "min": 1, "max": 300},
     },
     "DRMAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.8},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
-        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 15.0},
+        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
     },
     "MCTSAgent": {
         "num_simulations": {"type": "int", "min": 1, "max": 500},
@@ -86,10 +86,10 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "params": {
         # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
-        "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(10, 18)])},
-        "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 10)])}, # minibatch must not be bigger than buffer size
-        "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 10)])},
-        "TrainingConfig.num_minibatches": {"type": "int", "min": 1, "max": 1},
+        "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(12, 18)])},
+        "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 12)])}, # minibatch must not be bigger than buffer size
+        "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
+        "TrainingConfig.num_minibatches": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
         "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
     },
 }
@@ -105,11 +105,11 @@ class Args:
     ]
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 100
+    ] = 200
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination (drives --array size)."),
-    ] = 10
+    ] = 5
     space_file: Annotated[
         Path | None,
         tyro.conf.arg(
