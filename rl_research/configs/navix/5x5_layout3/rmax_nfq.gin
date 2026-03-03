@@ -1,4 +1,4 @@
-setup_mlflow.experiment_name = "navix_5x5_layout2"
+setup_mlflow.experiment_name = "navix_5x5_layout3"
 setup_mlflow.experiment_group = "rmax_nfq_originalobs"
 
 run_loop.agent_cls = @RMaxNFQAgent
@@ -15,7 +15,7 @@ RMaxNFQAgent.num_iters = 10
 RMaxNFQAgent.vmax = 1.0
 RMaxNFQAgent.min_visits = 80
 
-NavixWrapper.env_id = "GridDoorKey-5x5-layout2-v0"
+NavixWrapper.env_id = "GridDoorKey-5x5-layout3-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
