@@ -25,6 +25,6 @@ def obs_to_index(obs: jax.Array, grid_size: int) -> jax.Array:
 
     direction = obs[jnp.arange(B), prow, pcol, -1]
 
-    return jnp.int16(
+    return jnp.int32(
         ((key_pos * (W - 2) * (H - 2) + player_pos) * 2 + door_open) * 4 + direction
     )
