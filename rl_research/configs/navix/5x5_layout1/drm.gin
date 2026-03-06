@@ -4,18 +4,18 @@ setup_mlflow.experiment_group = "rmax_dqn_originalobs"
 run_loop.agent_cls = @DRMAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @FlatteningReplayBuffer
-FlatteningReplayBuffer.buffer_size = 4096
+FlatteningReplayBuffer.buffer_size = 131072
 FlatteningReplayBuffer.obs_shape = (5, 5, 3)
 
 DRMAgent.grid_size = 5
 DRMAgent.r_max = 1.0
 DRMAgent.v_max = 1.0
 DRMAgent.use_vmax = True
-DRMAgent.known_threshold = 239
+DRMAgent.known_threshold = 275
 DRMAgent.discount = 0.99
-DRMAgent.learning_rate = 2e-4
+DRMAgent.learning_rate = 0.000864137
 DRMAgent.target_update_freq = 64
-DRMAgent.max_grad_norm = 1.6
+DRMAgent.max_grad_norm = 2.5237
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
@@ -23,10 +23,10 @@ TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 16
+TrainingConfig.minibatch_size = 64
 TrainingConfig.update_frequency = 1
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 1024
+TrainingConfig.warmup_steps = 2048
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
