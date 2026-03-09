@@ -7,7 +7,7 @@ from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
 
 
-class RMaxState(struct.PyTreeNode):
+class MBIEEBState(struct.PyTreeNode):
     """State for R-Max agent."""
 
     q_table: jnp.ndarray
@@ -18,25 +18,27 @@ class RMaxState(struct.PyTreeNode):
 
 
 @gin.configurable
-class RMaxAgent:
+class MBIEEBAgent:
     """R-Max agent with known model."""
 
     def __init__(
         self,
         num_states: int,
         num_actions: int,
+        exploration_bonus: float,
         r_max: float = 1.0,
         v_max: float = 1.0,
         use_vmax: bool = False,
         discount: float = 0.9,
-        known_threshold: int = 1,
+        known_threshold: int | None = None,
         convergence_threshold: float = 1e-6,
     ):
         self.terminal_state = num_states
         self.num_states = num_states + 1
         self.num_actions = num_actions
         self.discount = discount
-        self.known_threshold = known_threshold
+        self.exploration_bonus = exploration_bonus * r_max
+        self.known_threshold = jnp.inf if known_threshold is None else known_threshold
         self.convergence_threshold = convergence_threshold
         self.vi_iterations = (
             jnp.ceil(
@@ -44,7 +46,7 @@ class RMaxAgent:
             )).astype(int)
         self.optimistic_value = v_max if use_vmax else (r_max / (1.0 - discount))
 
-    def initial_state(self) -> RMaxState:
+    def initial_state(self) -> MBIEEBState:
         """Initialize with optimistic Q-values."""
         q_table = jnp.full(
             (self.num_states, self.num_actions), self.optimistic_value
@@ -52,7 +54,7 @@ class RMaxAgent:
         q_table = q_table.at[self.terminal_state].set(0.0)
 
 
-        return RMaxState(
+        return MBIEEBState(
             q_table=q_table,
             transition_counts=jnp.zeros(
                 (self.num_states, self.num_actions, self.num_states)
@@ -63,7 +65,7 @@ class RMaxAgent:
         )
 
     def select_action(
-        self, state: RMaxState, obs: jnp.ndarray, key: jax.Array, is_training: bool
+        self, state: MBIEEBState, obs: jnp.ndarray, key: jax.Array, is_training: bool
     ) -> jnp.ndarray:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
@@ -71,8 +73,8 @@ class RMaxAgent:
         return _select_greedy(q_values, key)
 
     def update(
-        self, state: RMaxState, batch: Transition
-    ) -> tuple[RMaxState, jax.Array]:
+        self, state: MBIEEBState, batch: Transition
+    ) -> tuple[MBIEEBState, jax.Array]:
         """Update model and recompute Q-values."""
         s = batch.observation.astype(jnp.int32)
         a = batch.action.astype(jnp.int32)
@@ -82,7 +84,7 @@ class RMaxAgent:
 
         s_next = jnp.where(terminal, self.terminal_state, s_next)
         
-        def update_model(state: RMaxState) -> RMaxState:
+        def update_model(state: MBIEEBState) -> MBIEEBState:
             return state.replace(
                 transition_counts=state.transition_counts.at[s, a, s_next].add(1.0),
                 reward_sums=state.reward_sums.at[s, a].add(r),
@@ -97,7 +99,7 @@ class RMaxAgent:
             state
         )
 
-        def run_value_iteration(state: RMaxState):
+        def run_value_iteration(state: MBIEEBState):
             safe_counts = jnp.maximum(state.visit_counts, 1)
             avg_rewards = state.reward_sums / safe_counts
             transition_probs = state.transition_counts / safe_counts[:, :, None]
@@ -118,9 +120,15 @@ class RMaxAgent:
                     v_table
                 )
 
-                q_known = avg_rewards + self.discount * expected_next_v
+                bonus = jnp.where(
+                    state.visit_counts > 0,
+                    self.exploration_bonus / jnp.sqrt(state.visit_counts),
+                    0.0
+                )
+
+                q_known = avg_rewards + self.discount * expected_next_v + bonus
                 new_q = jnp.where(
-                    state.visit_counts >= self.known_threshold,
+                    state.visit_counts > 0,
                     q_known,
                     self.optimistic_value
                 )
@@ -133,17 +141,10 @@ class RMaxAgent:
                 q_table=q_final
             ), final_delta
 
-        became_known = jnp.logical_and(state.visit_counts[s, a] >= self.known_threshold, is_unknown).squeeze()
-        state, final_delta = jax.lax.cond(
-            became_known,
-            lambda st: run_value_iteration(st),
-            lambda st: (st, 0.0),
-            state
-        )
-        return state, final_delta
+        return run_value_iteration(state)
 
     def bootstrap_value(
-        self, state: RMaxState, next_observation: jnp.ndarray
+        self, state: MBIEEBState, next_observation: jnp.ndarray
     ) -> jax.Array:
         s_next = next_observation.astype(jnp.int32).squeeze()
         return jnp.max(state.q_table[s_next])

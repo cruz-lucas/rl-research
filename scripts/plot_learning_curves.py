@@ -44,7 +44,9 @@ plt.rcParams.update({
 DEFAULT_GROUP_COLORS = {
     "dqn": "#1f77b4",
     "drm": "#9467bd",
+
     "qlearning_epsgreedy": "#ff7f0e",
+    "mbieeb": "#9467bd",
     "rmax": "#2ca02c",
     "replaybased_rmax": "#d62728",
     "replaybased_rmax_uniquevisitationincrement": "#1f77b4",
@@ -64,7 +66,9 @@ DEFAULT_GROUP_COLORS = {
 DEFAULT_GROUP_LABELS = {
     "dqn": "DQN",
     "drm": "DR-max",
+
     "qlearning_epsgreedy": "Q-learning (Epsilon-Greedy)",
+    "mbieeb": "MBIE-EB",
     "rmax": "R-Max",
     "replaybased_rmax": "Replay-based R-Max",
     "replaybased_rmax_uniquevisitationincrement": "Replay-based R-Max (visitation inc at DT)",
@@ -85,6 +89,7 @@ DEFAULT_GROUP_ORDER = [
     # "dqn",
     # "drm",
     # "qlearning_epsgreedy",
+    "mbieeb",
     "rmax",
     "replaybased_rmax",
     "replaybased_rmax_uniquevisitationincrement",
