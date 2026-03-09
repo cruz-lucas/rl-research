@@ -114,7 +114,13 @@ def run_loop(
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
 
         train_state = train_state.replace(
-            agent_state=train_state.agent_state.replace(step=train_state.agent_state.step + 1),
+            agent_state=train_state.agent_state.replace(
+                step=train_state.agent_state.step + 1,
+                # TODO: this is to update visitation count at decision time. We should update the agent state when selection an action instead -> modification in the API.
+                # visit_counts=train_state.agent_state.visit_counts.at[
+                #     obs, action
+                # ].add(1)
+            ),
         )
 
         transition = Transition(
@@ -205,7 +211,7 @@ def run_loop(
             train_losses=train_state.loss,
             episode_idx=train_state.episode_idx,
             global_steps=train_state.global_step,
-            dones=train_state.done,
+            dones=must_reset,
         )
 
         return nnx.cond(

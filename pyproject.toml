@@ -25,6 +25,7 @@ dependencies = [
     "chex==0.1.91",
     "jaxlib==0.9.0.1",
     "distrax==0.1.7",
+    "classic-pacmdp-envs @ git+https://github.com/cruz-lucas/classic_pacmdp_envs.git#e2e2d1125f940502427c80970b55e13b90e7d28d",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +70,7 @@ enableTypeIgnoreComments = true
 gymnasium = { git = "https://github.com/cruz-lucas/Gymnasium.git" }
 dopamine-rl = { git = "https://github.com/google/dopamine" }
 navix = { git = "https://github.com/epignatelli/navix" }
+classic-pacmdp-envs = { git = "https://github.com/cruz-lucas/classic_pacmdp_envs.git" }
 
 [dependency-groups]
 dev = [

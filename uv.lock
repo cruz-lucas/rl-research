@@ -373,6 +373,18 @@ wheels = [
 ]
 
 [[package]]
+name = "classic-pacmdp-envs"
+version = "0.0.0"
+source = { git = "https://github.com/cruz-lucas/classic_pacmdp_envs.git#e2e2d1125f940502427c80970b55e13b90e7d28d" }
+dependencies = [
+    { name = "flax" },
+    { name = "gymnasium" },
+    { name = "ipykernel" },
+    { name = "jax" },
+    { name = "numpy" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3333,6 +3345,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "chex" },
+    { name = "classic-pacmdp-envs" },
     { name = "distrax" },
     { name = "dopamine-rl" },
     { name = "flax" },
@@ -3365,6 +3378,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "chex", specifier = "==0.1.91" },
+    { name = "classic-pacmdp-envs", git = "https://github.com/cruz-lucas/classic_pacmdp_envs.git" },
     { name = "distrax", specifier = "==0.1.7" },
     { name = "dopamine-rl", git = "https://github.com/google/dopamine" },
     { name = "flax", specifier = "==0.12.4" },

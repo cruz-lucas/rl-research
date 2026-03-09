@@ -77,11 +77,12 @@ class RecordWriter:
     def flush_summary(self):
         self.__call__(None)  # flush last metrics
 
-        mlflow.log_metrics(
-            {
-                "summary/last100_train_disc_return_mean": float(np.mean(self.train_disc_returns[-100:])),
-                "summary/last100_train_return_mean": float(np.mean(self.train_returns[-100:])),
-                "summary/train_disc_return_mean": float(np.mean(self.train_disc_returns)),
-                "summary/train_return_mean": float(np.mean(self.train_returns)),
-            },
-        )
+        if len(self.train_disc_returns) >= 100:
+            mlflow.log_metrics(
+                {
+                    "summary/last100_train_disc_return_mean": float(np.mean(self.train_disc_returns[-100:])),
+                    "summary/last100_train_return_mean": float(np.mean(self.train_returns[-100:])),
+                    "summary/train_disc_return_mean": float(np.mean(self.train_disc_returns)),
+                    "summary/train_return_mean": float(np.mean(self.train_returns)),
+                },
+            )

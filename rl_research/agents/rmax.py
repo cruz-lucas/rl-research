@@ -27,7 +27,7 @@ class RMaxAgent:
         num_actions: int,
         r_max: float = 1.0,
         v_max: float = 1.0,
-        use_vmax: bool = True,
+        use_vmax: bool = False,
         discount: float = 0.9,
         known_threshold: int = 1,
         convergence_threshold: float = 1e-6,
