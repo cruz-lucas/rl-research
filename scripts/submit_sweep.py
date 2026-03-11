@@ -43,6 +43,13 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
         "anneal_steps": {"type": "int", "min": 1_000, "max": 500_000},
     },
+    "epsgreedy_intrinsicreward": {
+        "step_size": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
+        "initial_epsilon": {"type": "uniform", "min": 0.3, "max": 1.0},
+        "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
+        "anneal_steps": {"type": "int", "min": 0, "max": 5_000},
+        "intrinsic_reward_scale": {"type": "int", "min": 0, "max": 10_000},
+    },
     "DQNAgent": {
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
         "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
