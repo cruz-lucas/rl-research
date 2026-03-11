@@ -11,7 +11,9 @@ from rl_research.agents.factored_rmax import FactoredRMaxAgent
 from rl_research.agents.dqn import DQNAgent
 from rl_research.agents.drm import DRMAgent
 from rl_research.agents.nfq import NFQAgent
+
 from rl_research.agents.rmax_nfq import RMaxNFQAgent
+from rl_research.agents.annealing_epsgreedy_count import AnnealingEpsGreedyCountAgent
 
 
 __all__ = [
@@ -29,4 +31,5 @@ __all__ = [
     "DRMAgent",
     "NFQAgent",
     "RMaxNFQAgent",
+    "AnnealingEpsGreedyCountAgent",
 ]

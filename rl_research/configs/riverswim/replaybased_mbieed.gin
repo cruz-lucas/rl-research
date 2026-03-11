@@ -1,15 +1,15 @@
-setup_mlflow.experiment_name = "sixarms"
-setup_mlflow.experiment_group = "replaybased_rmax_uniquevisitationincrement"
+setup_mlflow.experiment_name = "riverswim"
+setup_mlflow.experiment_group = "replaybased_mbieeb"
 
-run_loop.agent_cls = @BMFRmaxAgent
-run_loop.env_cls = @SixArmsJaxEnv
+run_loop.agent_cls = @BMFMBIEEBAgent
+run_loop.env_cls = @RiverSwimJaxEnv
 run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 5_000
 
-BMFRmaxAgent.r_max = 6_000
-BMFRmaxAgent.discount = 0.95
-BMFRmaxAgent.step_size = 0.005
-BMFRmaxAgent.known_threshold = 6
+BMFMBIEEBAgent.r_max = 10_000
+BMFMBIEEBAgent.discount = 0.95
+BMFMBIEEBAgent.step_size = 0.005
+BMFMBIEEBAgent.beta = 4_000
 
 TrainingConfig.train_episodes = 1
 TrainingConfig.use_steps = True

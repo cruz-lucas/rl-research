@@ -50,7 +50,7 @@ DEFAULT_GROUP_COLORS = {
     "rmax": "#2ca02c",
     "replaybased_rmax": "#d62728",
     "replaybased_rmax_uniquevisitationincrement": "#1f77b4",
-    "batch_modelfree_rmax": "#d62728",
+    "replaybased_mbieeb": "#27d6a7",
 
     "rmax_nfq_onehot_linear": "#d62728",
     "rmax_dqn_onehot_linear": "#ff7f0e",
@@ -69,6 +69,7 @@ DEFAULT_GROUP_LABELS = {
 
     "qlearning_epsgreedy": "Q-learning (Epsilon-Greedy)",
     "mbieeb": "MBIE-EB",
+    "replaybased_mbieeb": "Replay-based MBIE-EB",
     "rmax": "R-Max",
     "replaybased_rmax": "Replay-based R-Max",
     "replaybased_rmax_uniquevisitationincrement": "Replay-based R-Max (visitation inc at DT)",
@@ -89,11 +90,11 @@ DEFAULT_GROUP_ORDER = [
     # "dqn",
     # "drm",
     # "qlearning_epsgreedy",
-    "mbieeb",
     "rmax",
     "replaybased_rmax",
     "replaybased_rmax_uniquevisitationincrement",
-    # "batch_modelfree_rmax"
+    "mbieeb",
+    "replaybased_mbieeb"
 
     # "dqn_onehot_linear",
     # "nfq_onehot",

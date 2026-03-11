@@ -61,7 +61,6 @@ class BMFRmaxAgent:
         values = jnp.where(is_known, q_values, self.optimistic_value)
 
         return _select_greedy(values, key)
-        # return _select_greedy(q_values, key)
 
     def update(
         self,
@@ -71,8 +70,12 @@ class BMFRmaxAgent:
         """Single-step optimistic Q-learning updates for each transition."""
         batch_size = batch.observation.shape[0]
 
+        # new_visit_counts = state.visit_counts.at[
+        #     batch.observation.astype(jnp.int32), batch.action.astype(jnp.int32)].add(1)
+        new_visit_counts = state.visit_counts
+
         def update_single(carry, i):
-            q_table, visit_counts = carry
+            q_table = carry
 
             s = batch.observation[i].astype(jnp.int32).squeeze()
             a = batch.action[i].astype(jnp.int32).squeeze()
@@ -80,11 +83,8 @@ class BMFRmaxAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
-            # The version 2 of this algo increments visit counts after checking knownness. This is version 3.
-            visit_counts = visit_counts.at[s, a].add(1)
-
-            is_unknown = visit_counts[s, a] < self.known_threshold
-            is_next_unknown = jnp.any(visit_counts[s_next] < self.known_threshold)
+            is_unknown = new_visit_counts[s, a] < self.known_threshold
+            is_next_unknown = jnp.any(new_visit_counts[s_next] < self.known_threshold)
 
             q_current = q_table[s, a]
             q_next_max = jax.lax.cond(
@@ -98,23 +98,22 @@ class BMFRmaxAgent:
             target = r + self.discount * q_next_max
 
             td_error = target - q_current
-            # new_q = q_current + self.step_size * td_error
             updated_q = q_current + self.step_size * td_error
-            # new_q = jnp.where(is_unknown, self.optimistic_value, updated_q)
             new_q = jnp.array(jnp.where(is_unknown, q_current, updated_q))[0]
 
             loss_val = jnp.abs(td_error)
-            return (q_table.at[s, a].set(new_q), visit_counts), loss_val
+            return q_table.at[s, a].set(new_q), loss_val
 
-        (new_q_table, new_visit_counts), losses = jax.lax.scan(
-            update_single, (state.q_table, state.visit_counts), jnp.arange(batch_size)
+        epochs = 200
+        new_q_table, losses = jax.lax.scan(
+            update_single, state.q_table, jnp.tile(jnp.arange(batch_size), epochs)
         )
 
-        mean_loss = jnp.sum(losses) / batch_size
+        mean_loss = jnp.mean(losses[-batch_size:])
 
         new_state = state.replace(
             q_table=new_q_table,
-            visit_counts=new_visit_counts,
+            # visit_counts=new_visit_counts,
         )
 
         return new_state, mean_loss
