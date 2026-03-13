@@ -63,8 +63,7 @@ class BufferState(struct.PyTreeNode):
     def sample(self, key: jax.Array, batch_size: int) -> Transition:
         """Sample batch from buffer. Returns transitions."""
         safe_size = jnp.maximum(self.size, 1)
-        indices = jax.random.randint(key, (batch_size,), 0, safe_size)
-
+        indices = jax.random.randint(key, (batch_size,), 0, safe_size) # with replacement
         transition = Transition(
             observation=self.observations[indices],
             action=self.actions[indices],
@@ -73,11 +72,27 @@ class BufferState(struct.PyTreeNode):
             next_observation=self.next_observations[indices],
             terminal=self.terminals[indices],
         )
+        
         return transition
 
 
-@struct.dataclass
-class MonteCarloBufferState:
+class EntireBufferState(BufferState):
+    def sample(self, key: jax.Array | None, batch_size: int | None) -> Transition:
+        """Sample entire buffer. Returns transitions."""
+
+        # TODO: implement sampling everything properly, randomizing samples
+        transition = Transition(
+            observation=self.observations,
+            action=self.actions,
+            reward=self.rewards,
+            discount=self.discounts,
+            next_observation=self.next_observations,
+            terminal=self.terminals,
+        )
+        return transition
+
+
+class MonteCarloBufferState(struct.PyTreeNode):
     """Buffer state that accumulates full episodes and stores Monte Carlo returns."""
 
     observations: jnp.ndarray
@@ -218,7 +233,7 @@ class BaseBuffer(Protocol):
 
 @gin.configurable
 class ReplayBuffer(BaseBuffer):
-    """Uniform replay buffer with optional deduplication and full-buffer training."""
+    """Uniform replay buffer."""
 
     def __init__(
         self,
@@ -305,4 +320,27 @@ class FlatteningReplayBuffer(BaseBuffer):
             size=0,
         )
     
+    
+@gin.configurable
+class EntireReplayBuffer(BaseBuffer):
+    """Returns every sample in the replay buffer."""
+
+    def __init__(
+        self,
+        buffer_size: int = 1,
+    ):
+        self.buffer_size = buffer_size
+
+    def initial_state(self) -> EntireBufferState:
+        zeros = lambda: jnp.zeros((self.buffer_size, 1))
+        return EntireBufferState(
+            observations=zeros(),
+            actions=zeros(),
+            rewards=zeros(),
+            discounts=zeros(),
+            next_observations=zeros(),
+            terminals=jnp.zeros((self.buffer_size,), dtype=bool),
+            position=0,
+            size=0,
+        )
     
