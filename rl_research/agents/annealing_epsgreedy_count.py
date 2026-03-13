@@ -1,6 +1,7 @@
 import gin
 import jax
 import jax.numpy as jnp
+from typing import Tuple
 from flax import struct
 from rl_research.buffers import Transition
 from rl_research.agents.base import BaseAgent
@@ -42,7 +43,7 @@ class AnnealingEpsGreedyCountAgent(BaseAgent):
             step=0
         )
 
-    def select_action(self, state: AnnealingEpsGreedyCountState, obs: jax.Array, key: jax.Array, is_training: bool=True):
+    def select_action(self, state: AnnealingEpsGreedyCountState, obs: jax.Array, key: jax.Array, is_training: bool=True) -> Tuple[AnnealingEpsGreedyCountState, jnp.ndarray]:
         q_values = state.q_table[obs]
 
         def greedy():
@@ -55,15 +56,18 @@ class AnnealingEpsGreedyCountAgent(BaseAgent):
 
             action_dist = distrax.EpsilonGreedy(q_values, epsilon=eps)
             return action_dist.sample(seed=key)
+        
+        action = jax.lax.cond(is_training, eps_greedy, greedy)
+        
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
 
-        return jax.lax.cond(is_training, eps_greedy, greedy)
+        return new_state, action
 
     def update(self, state: AnnealingEpsGreedyCountState, batch: Transition):
         batch_size = batch.observation.shape[0]
-
-        # new_visit_counts = state.visit_counts.at[
-        #     batch.observation.astype(jnp.int32), batch.action.astype(jnp.int32)].add(1)
-        new_visit_counts = state.visit_counts
 
         def update_single(carry, i):
             q_table = carry
@@ -74,7 +78,7 @@ class AnnealingEpsGreedyCountAgent(BaseAgent):
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
-            intrinsic_reward = self.intrinsic_reward_scale / jnp.sqrt(new_visit_counts[s, a])
+            intrinsic_reward = self.intrinsic_reward_scale / (jnp.sqrt(state.visit_counts[s, a]) + 0.02)
             total_reward = r + intrinsic_reward
 
             q_next = jnp.max(q_table[s_next], axis=-1)
@@ -87,7 +91,7 @@ class AnnealingEpsGreedyCountAgent(BaseAgent):
             loss_val = jnp.abs(td_error)
             return new_q_table, loss_val
 
-        epochs = 200
+        epochs = 100
         new_q_table, losses = jax.lax.scan(
             update_single, state.q_table, jnp.tile(jnp.arange(batch_size), epochs)
         )
@@ -96,8 +100,6 @@ class AnnealingEpsGreedyCountAgent(BaseAgent):
 
         new_state = state.replace(
             q_table=new_q_table,
-            # visit_counts=new_visit_counts,
-            # step=step
         )
         return new_state, mean_loss
 

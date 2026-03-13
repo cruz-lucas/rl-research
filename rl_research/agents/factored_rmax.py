@@ -2,13 +2,13 @@ import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
 
 
-@struct.dataclass
-class FactoredRMaxState:
+class FactoredRMaxState(struct.PyTreeNode):
     """State for Factored R-Max agent."""
 
     q_table: jnp.ndarray
@@ -85,10 +85,17 @@ class FactoredRMaxAgent:
 
     def select_action(
         self, state: FactoredRMaxState, obs: jnp.ndarray, key: jax.Array, is_training: bool
-    ) -> jnp.ndarray:
+    ) -> Tuple[FactoredRMaxState, jnp.ndarray]:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
-        return _select_greedy(q_values, key)
+        action = _select_greedy(q_values, key)
+
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
     
     def _compute_marginal_probs(self, marginal_counts):
         marginal_probs = []

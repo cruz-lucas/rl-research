@@ -110,18 +110,8 @@ def run_loop(
         next_key, action_key = jax.random.split(train_state.key)
         obs = train_state.env_obs
 
-        action = agent.select_action(train_state.agent_state, obs, action_key, is_training=True)
+        new_agent_state, action = agent.select_action(train_state.agent_state, obs, action_key, is_training=True)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
-
-        train_state = train_state.replace(
-            agent_state=train_state.agent_state.replace(
-                step=train_state.agent_state.step + 1,
-                # TODO: this is to update visitation count at decision time. We should update the agent state when selection an action instead -> modification in the API.
-                # visit_counts=train_state.agent_state.visit_counts.at[
-                #     obs, action
-                # ].add(1)
-            ),
-        )
 
         transition = Transition(
             observation=obs,
@@ -140,6 +130,7 @@ def run_loop(
         new_buff_st = train_state.buffer_state.push(transition, bootstrap_value=bootstrap_value)
 
         train_state = train_state.replace(
+            agent_state=new_agent_state,
             buffer_state=new_buff_st,
             key=next_key,
             env_state=next_env_st,

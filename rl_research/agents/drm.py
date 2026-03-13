@@ -6,6 +6,7 @@ import optax
 from flax import nnx
 from flax import struct
 import distrax
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.agents.utils import obs_to_index
@@ -100,7 +101,7 @@ class DRMAgent:
             step=0,
         )
 
-    def select_action(self, state: DRMState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
+    def select_action(self, state: DRMState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DRMState, jnp.ndarray]:
         q_vals = state.online_network(obs.reshape(-1)).squeeze()
 
         obs_ids = obs_to_index(obs.reshape(-1), grid_size=self.grid_size)
@@ -109,7 +110,14 @@ class DRMAgent:
         values = jnp.where(is_known, q_vals, self.optimistic_value)
 
         action_dist = distrax.Greedy(values)
-        return action_dist.sample(seed=key)[0]
+        action = action_dist.sample(seed=key)[0]
+
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
 
     def update(self, state: DRMState, batch: Transition) -> tuple[DRMState, jax.Array]:
         obs_ids = obs_to_index(batch.observation, grid_size=self.grid_size)

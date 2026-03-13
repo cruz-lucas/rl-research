@@ -4,6 +4,7 @@ import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.policies import (
@@ -65,7 +66,7 @@ class QLearningAgent:
 
     def select_action(
         self, state: QLearningState, obs: jnp.ndarray, key: jax.Array, is_training: bool
-    ) -> jnp.ndarray:
+    ) -> Tuple[QLearningState, jnp.ndarray]:
         """Select action based on policy."""
         q_values = state.q_table[obs]
 
@@ -92,7 +93,15 @@ class QLearningAgent:
                 lambda: jax.lax.cond(self.policy == "ucb", ucb, random),
             )
 
-        return jax.lax.cond(is_training, train_action, eval_action)
+        action = jax.lax.cond(is_training, train_action, eval_action)
+
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
+
 
     def update(
         self,

@@ -103,7 +103,7 @@ class MCTSAgent:
 
     def select_action(
         self, state: MCTSState, obs: jnp.ndarray, key: jax.Array, is_training: bool
-    ) -> jnp.ndarray:
+    ) -> Tuple[AgentState, jnp.ndarray]:
         """Plan with MCTS from current observation and pick highest-value action."""
         root_state = obs.astype(jnp.int32).squeeze()
 

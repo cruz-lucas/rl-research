@@ -2,13 +2,13 @@ import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
 
 
-@struct.dataclass
-class BMFRmaxState:
+class BMFRmaxState(struct.PyTreeNode):
     """State for optimistic Q-learning agent."""
 
     q_table: jnp.ndarray
@@ -53,14 +53,21 @@ class BMFRmaxAgent:
         obs: jnp.ndarray,
         key: jax.Array,
         is_training: bool,
-    ) -> jnp.ndarray:
+    ) -> Tuple[BMFRmaxState, jnp.ndarray]:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
 
         is_known = state.visit_counts[obs] > self.known_threshold
         values = jnp.where(is_known, q_values, self.optimistic_value)
 
-        return _select_greedy(values, key)
+        action = _select_greedy(values, key)
+
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
 
     def update(
         self,
@@ -69,10 +76,6 @@ class BMFRmaxAgent:
     ) -> tuple[BMFRmaxState, jax.Array]:
         """Single-step optimistic Q-learning updates for each transition."""
         batch_size = batch.observation.shape[0]
-
-        # new_visit_counts = state.visit_counts.at[
-        #     batch.observation.astype(jnp.int32), batch.action.astype(jnp.int32)].add(1)
-        new_visit_counts = state.visit_counts
 
         def update_single(carry, i):
             q_table = carry
@@ -83,8 +86,8 @@ class BMFRmaxAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i]
 
-            is_unknown = new_visit_counts[s, a] < self.known_threshold
-            is_next_unknown = jnp.any(new_visit_counts[s_next] < self.known_threshold)
+            is_unknown = state.visit_counts[s, a] < self.known_threshold
+            is_next_unknown = jnp.any(state.visit_counts[s_next] < self.known_threshold)
 
             q_current = q_table[s, a]
             q_next_max = jax.lax.cond(

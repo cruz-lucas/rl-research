@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Protocol
+from typing import Protocol, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -25,7 +25,7 @@ class BaseAgent:
     @abstractmethod
     def select_action(
         self, state: AgentState, obs: jnp.ndarray, key: jax.Array, is_training: bool
-    ) -> jnp.ndarray: ...
+    ) -> Tuple[AgentState, jnp.ndarray]: ...
 
     @abstractmethod
     def update(

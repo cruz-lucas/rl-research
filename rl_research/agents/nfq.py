@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import optax
 from flax import nnx
 from flax import struct
-from flax.training.train_state import TrainState
 import distrax
+from typing import Tuple
 
 from rl_research.buffers import Transition
 
@@ -86,7 +86,7 @@ class NFQAgent:
             step=0,
         )
 
-    def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
+    def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[NFQState, jnp.ndarray]:
 
         q_vals = state.online_network(obs.reshape(-1))
 
@@ -101,7 +101,13 @@ class NFQAgent:
             action_dist = distrax.EpsilonGreedy(q_vals, epsilon=eps)
             return action_dist.sample(seed=key)
 
-        return nnx.cond(is_training, eps_greedy, greedy)
+        action = nnx.cond(is_training, eps_greedy, greedy)
+
+        new_state = state.replace(
+            step=state.step + 1,
+        )
+
+        return new_state, action
 
     def update(self, state: NFQState, batch: Transition) -> tuple[NFQState, jax.Array]:
         # nnx.update(state.online_network, self._initial_params)

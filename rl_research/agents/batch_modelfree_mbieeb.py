@@ -2,13 +2,13 @@ import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
 
 
-@struct.dataclass
-class BMFMBIEEBState:
+class BMFMBIEEBState(struct.PyTreeNode):
     """State for Batch Model-free MBIE-EB."""
 
     q_table: jnp.ndarray
@@ -53,12 +53,18 @@ class BMFMBIEEBAgent:
         obs: jnp.ndarray,
         key: jax.Array,
         is_training: bool,
-    ) -> jnp.ndarray:
+    ) -> Tuple[BMFMBIEEBState, jnp.ndarray]:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
         values = q_values# + self.beta / (jnp.sqrt(state.visit_counts[obs]) + 0.02)
+        action = _select_greedy(values, key)
 
-        return _select_greedy(values, key)
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
 
     def update(
         self,
@@ -67,10 +73,6 @@ class BMFMBIEEBAgent:
     ) -> tuple[BMFMBIEEBState, jax.Array]:
         """Single-step optimistic Q-learning updates for each transition."""
         batch_size = batch.observation.shape[0]
-
-        # new_visit_counts = state.visit_counts.at[
-        #     batch.observation.astype(jnp.int32), batch.action.astype(jnp.int32)].add(1)
-        new_visit_counts = state.visit_counts
 
         def update_single(carry, i):
             q_table = carry
@@ -81,7 +83,7 @@ class BMFMBIEEBAgent:
             s_next = batch.next_observation[i].astype(jnp.int32).squeeze()
             terminal = batch.terminal[i].astype(jnp.int32).squeeze()
 
-            exploration_bonus = self.beta / (jnp.sqrt(new_visit_counts[s, a]) + 0.02)
+            exploration_bonus = self.beta / (jnp.sqrt(state.visit_counts[s, a]) + 0.02)
             # next_state_bonus = self.beta / (jnp.sqrt(new_visit_counts[s_next]) + 0.02)
 
             q_current = q_table[s, a]
@@ -105,7 +107,6 @@ class BMFMBIEEBAgent:
 
         new_state = state.replace(
             q_table=new_q_table,
-            # visit_counts=new_visit_counts
         )
 
         return new_state, mean_loss

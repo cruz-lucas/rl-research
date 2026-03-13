@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import optax
 from flax import nnx
 from flax import struct
-from flax.training.train_state import TrainState
 import distrax
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.agents.utils import obs_to_index
@@ -32,7 +32,7 @@ class Network(nnx.Module):
 class NFQState(struct.PyTreeNode):
     online_network: Network
     optimizer: nnx.Optimizer
-    visitation_counts: jnp.ndarray
+    visit_counts: jnp.ndarray
     step: int
 
 
@@ -82,17 +82,24 @@ class RMaxNFQAgent:
         return NFQState(
             online_network=online_network,
             optimizer=optimizer,
-            visitation_counts=visitation_counts,
+            visit_counts=visitation_counts,
             step=0,
         )
 
-    def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> jnp.ndarray:
+    def select_action(self, state: NFQState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[NFQState, jnp.ndarray]:
         obs_idx = obs_to_index(obs.reshape(-1), grid_size=self.grid_size)
         q_vals = state.online_network(obs.reshape(-1))
-        counts = state.visitation_counts[obs_idx]
+        counts = state.visit_counts[obs_idx]
         q_vals = jnp.where(counts < self.min_visits, self.vmax, q_vals)
         action_dist = distrax.Greedy(q_vals)
-        return action_dist.sample(seed=key)[0]
+        action = action_dist.sample(seed=key)[0]
+
+        new_state = state.replace(
+            step=state.step + 1,
+            visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
 
 
     def update(self, state: NFQState, batch: Transition) -> tuple[NFQState, jax.Array]:
@@ -103,10 +110,10 @@ class RMaxNFQAgent:
         next_obs_idx = obs_to_index(batch.next_observation, grid_size=self.grid_size)
         
         state = state.replace(
-            visitation_counts=state.visitation_counts.at[obs_idx, batch.action].add(1)
+            visitation_counts=state.visit_counts.at[obs_idx, batch.action].add(1)
         )
 
-        batch_counts_minimum = jnp.array([state.visitation_counts[next_obs_idx[j], :].min() for j in range(batch.observation.shape[0])])
+        batch_counts_minimum = jnp.array([state.visit_counts[next_obs_idx[j], :].min() for j in range(batch.observation.shape[0])])
         max_next_q = jnp.where(batch_counts_minimum < self.min_visits, self.vmax, max_next_q)
 
         for i in range(self.num_iters):
@@ -116,7 +123,7 @@ class RMaxNFQAgent:
                 target = batch.reward + self.discount * max_next_q * (1.0 - batch.terminal)
 
                 # Note: maybe we do want to regress Q to Vmax if the current state-action pair is unknown
-                known_mask = state.visitation_counts[obs_idx, batch.action] >= self.min_visits
+                known_mask = state.visit_counts[obs_idx, batch.action] >= self.min_visits
                 loss = jnp.sum(jnp.where(known_mask, (q_sel - jax.lax.stop_gradient(target)) ** 2, 0.0))/ jnp.sum(known_mask)
 
                 # target = jnp.where(known_mask, target, self.vmax)

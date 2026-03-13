@@ -2,13 +2,13 @@ import gin
 import jax
 import jax.numpy as jnp
 from flax import struct
+from typing import Tuple
 
 from rl_research.buffers import Transition
 from rl_research.policies import _select_greedy
 
 
-@struct.dataclass
-class DelayedQLearningState:
+class DelayedQLearningState(struct.PyTreeNode):
     """State for delayed Q-learning."""
 
     q_table: jnp.ndarray
@@ -59,10 +59,18 @@ class DelayedQLearningAgent:
         obs: jnp.ndarray,
         key: jax.Array,
         is_training: bool,
-    ) -> jnp.ndarray:
+    ) -> Tuple[DelayedQLearningState, jnp.ndarray]:
         """Greedy selection with optimistic Q-values."""
         q_values = state.q_table[obs]
-        return _select_greedy(q_values, key)
+        action = _select_greedy(q_values, key)
+
+        new_state = state.replace(
+            step=state.step + 1,
+            # visit_counts=state.visit_counts.at[obs, action].add(1)
+        )
+
+        return new_state, action
+        
 
     def update(
         self,
