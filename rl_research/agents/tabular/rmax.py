@@ -3,9 +3,9 @@ import jax
 import jax.numpy as jnp
 from flax import struct
 from typing import Tuple
+import distrax
 
 from rl_research.buffers import Transition
-from rl_research.policies import _select_greedy
 
 
 class RMaxState(struct.PyTreeNode):
@@ -20,7 +20,7 @@ class RMaxState(struct.PyTreeNode):
 
 @gin.configurable
 class RMaxAgent:
-    """R-Max agent with known model."""
+    """R-Max agent."""
 
     def __init__(
         self,
@@ -69,14 +69,14 @@ class RMaxAgent:
         """Select greedy action with random tie-breaking."""
         q_values = state.q_table[obs]
 
-        action = _select_greedy(q_values, key)
+        action = distrax.Greedy(q_values).sample(seed=key)
 
-        new_state = state.replace(
-            step=state.step + 1,
-            visit_counts=state.visit_counts.at[obs, action].add(1)
-        )
+        if is_training:
+            state = state.replace(
+                step=state.step + 1
+            )
 
-        return new_state, action
+        return state, action
 
     def update(
         self, state: RMaxState, batch: Transition
@@ -86,7 +86,7 @@ class RMaxAgent:
         a = batch.action.astype(jnp.int32)
         r = batch.reward
         s_next = batch.next_observation.astype(jnp.int32)
-        terminal = batch.terminal.astype(jnp.bool)
+        terminal = batch.terminal.astype(jnp.bool_)
 
         s_next = jnp.where(terminal, self.terminal_state, s_next)
         
@@ -153,5 +153,5 @@ class RMaxAgent:
     def bootstrap_value(
         self, state: RMaxState, next_observation: jnp.ndarray
     ) -> jax.Array:
-        s_next = next_observation.astype(jnp.int32).squeeze()
-        return jnp.max(state.q_table[s_next])
+        s_next = next_observation.astype(jnp.int32).reshape(-1)
+        return jnp.max(state.q_table[s_next], axis=-1)

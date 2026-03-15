@@ -3,24 +3,15 @@ import jax
 import jax.numpy as jnp
 from flax import struct
 from typing import Tuple
+import distrax
 
 from rl_research.buffers import Transition
-from rl_research.policies import _select_greedy
-
-
-class MBIEEBState(struct.PyTreeNode):
-    """State for R-Max agent."""
-
-    q_table: jnp.ndarray
-    transition_counts: jnp.ndarray
-    reward_sums: jnp.ndarray
-    visit_counts: jnp.ndarray
-    step: int
+from rl_research.agents.tabular.rmax import RMaxAgent, RMaxState
 
 
 @gin.configurable
-class MBIEEBAgent:
-    """R-Max agent with known model."""
+class MBIEEBAgent(RMaxAgent):
+    """MBIE-EB agent."""
 
     def __init__(
         self,
@@ -47,42 +38,10 @@ class MBIEEBAgent:
             )).astype(int)
         self.optimistic_value = v_max if use_vmax else (r_max / (1.0 - discount))
 
-    def initial_state(self) -> MBIEEBState:
-        """Initialize with optimistic Q-values."""
-        q_table = jnp.full(
-            (self.num_states, self.num_actions), self.optimistic_value
-        )
-        q_table = q_table.at[self.terminal_state].set(0.0)
-
-
-        return MBIEEBState(
-            q_table=q_table,
-            transition_counts=jnp.zeros(
-                (self.num_states, self.num_actions, self.num_states)
-            ),
-            reward_sums=jnp.zeros((self.num_states, self.num_actions)),
-            visit_counts=jnp.zeros((self.num_states, self.num_actions)),
-            step=0,
-        )
-
-    def select_action(
-        self, state: MBIEEBState, obs: jnp.ndarray, key: jax.Array, is_training: bool
-    ) -> Tuple[MBIEEBState, jnp.ndarray]:
-        """Select greedy action with random tie-breaking."""
-        q_values = state.q_table[obs]
-
-        action = _select_greedy(q_values, key)
-
-        new_state = state.replace(
-            step=state.step + 1,
-            visit_counts=state.visit_counts.at[obs, action].add(1)
-        )
-
-        return new_state, action
 
     def update(
-        self, state: MBIEEBState, batch: Transition
-    ) -> tuple[MBIEEBState, jax.Array]:
+        self, state: RMaxState, batch: Transition
+    ) -> tuple[RMaxState, jax.Array]:
         """Update model and recompute Q-values."""
         s = batch.observation.astype(jnp.int32)
         a = batch.action.astype(jnp.int32)
@@ -92,7 +51,7 @@ class MBIEEBAgent:
 
         s_next = jnp.where(terminal, self.terminal_state, s_next)
         
-        def update_model(state: MBIEEBState) -> MBIEEBState:
+        def update_model(state: RMaxState) -> RMaxState:
             return state.replace(
                 transition_counts=state.transition_counts.at[s, a, s_next].add(1.0),
                 reward_sums=state.reward_sums.at[s, a].add(r),
@@ -107,7 +66,7 @@ class MBIEEBAgent:
             state
         )
 
-        def run_value_iteration(state: MBIEEBState):
+        def run_value_iteration(state: RMaxState):
             safe_counts = jnp.maximum(state.visit_counts, 1)
             avg_rewards = state.reward_sums / safe_counts
             transition_probs = state.transition_counts / safe_counts[:, :, None]
@@ -150,9 +109,3 @@ class MBIEEBAgent:
             ), final_delta
 
         return run_value_iteration(state)
-
-    def bootstrap_value(
-        self, state: MBIEEBState, next_observation: jnp.ndarray
-    ) -> jax.Array:
-        s_next = next_observation.astype(jnp.int32).squeeze()
-        return jnp.max(state.q_table[s_next])

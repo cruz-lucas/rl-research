@@ -113,21 +113,20 @@ def run_loop(
         new_agent_state, action = agent.select_action(train_state.agent_state, obs, action_key, is_training=True)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
 
-        transition = Transition(
+        bootstrap_value = jnp.where(
+            terminal, 
+            jnp.asarray(0.0, dtype=jnp.float32), 
+            agent.bootstrap_value(train_state.agent_state, next_obs)
+        )
+        new_buff_st = train_state.buffer_state.push(
             observation=obs,
             action=action,
             reward=reward,
             discount=agent.discount,
             next_observation=next_obs,
             terminal=terminal,
+            bootstrap_value=bootstrap_value
         )
-
-        bootstrap_value = jnp.where(
-            transition.terminal, 
-            jnp.asarray(0.0, dtype=jnp.float32), 
-            agent.bootstrap_value(train_state.agent_state, transition.next_observation)
-        )
-        new_buff_st = train_state.buffer_state.push(transition, bootstrap_value=bootstrap_value)
 
         train_state = train_state.replace(
             agent_state=new_agent_state,
@@ -166,7 +165,8 @@ def run_loop(
 
         has_updates = train_state.global_step % config.update_frequency == 0
         should_train = jnp.logical_and(
-            train_state.buffer_state.is_ready(config.minibatch_size), train_state.global_step >= config.warmup_steps
+            train_state.buffer_state.is_ready(config.minibatch_size),
+            train_state.global_step >= config.warmup_steps
         )
         must_train = jnp.logical_and(should_train, jnp.asarray(has_updates))
 
