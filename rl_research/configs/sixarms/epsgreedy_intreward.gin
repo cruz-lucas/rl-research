@@ -4,14 +4,14 @@ setup_mlflow.experiment_group = "epsgreedy_intrinsicreward"
 run_loop.agent_cls = @AnnealingEpsGreedyCountAgent
 run_loop.env_cls = @SixArmsJaxEnv
 run_loop.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 1
+ReplayBuffer.buffer_size = 5_000
 
 AnnealingEpsGreedyCountAgent.discount = 0.95
-AnnealingEpsGreedyCountAgent.step_size = 0.465
-AnnealingEpsGreedyCountAgent.intrinsic_reward_scale = 4800
-AnnealingEpsGreedyCountAgent.initial_epsilon = 1.0
-AnnealingEpsGreedyCountAgent.final_epsilon = 0.03
-AnnealingEpsGreedyCountAgent.anneal_steps = 500
+AnnealingEpsGreedyCountAgent.step_size = 0.001
+AnnealingEpsGreedyCountAgent.intrinsic_reward_scale = 7800
+AnnealingEpsGreedyCountAgent.initial_epsilon = 0.9
+AnnealingEpsGreedyCountAgent.final_epsilon = 0.01
+AnnealingEpsGreedyCountAgent.anneal_steps = 300
 
 TrainingConfig.train_episodes = 1
 TrainingConfig.use_steps = True

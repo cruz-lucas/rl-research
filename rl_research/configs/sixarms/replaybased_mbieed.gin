@@ -1,18 +1,15 @@
-setup_mlflow.experiment_name = "riverswim"
-setup_mlflow.experiment_group = "replaybased_mbieeb_refact"
+setup_mlflow.experiment_name = "sixarms"
+setup_mlflow.experiment_group = "replaybased_mbieeb"
 
-run_loop.agent_cls = @ReplaybasedMBIEEB
-run_loop.env_cls = @RiverSwimJaxEnv
+run_loop.agent_cls = @BMFMBIEEBAgent
+run_loop.env_cls = @SixArmsJaxEnv
 run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 5_000
 
-ReplaybasedMBIEEB.r_max = 10_000
-ReplaybasedMBIEEB.discount = 0.95
-ReplaybasedMBIEEB.step_size = 0.005
-ReplaybasedMBIEEB.exploration_bonus = 4_000
-ReplaybasedMBIEEB.num_epochs = 100
-ReplaybasedMBIEEB.stability_coeff = 0.02
-ReplaybasedMBIEEB.initial_q_value = 0.0
+BMFMBIEEBAgent.r_max = 6_000
+BMFMBIEEBAgent.discount = 0.95
+BMFMBIEEBAgent.step_size = 0.005
+BMFMBIEEBAgent.beta = 4_800
 
 TrainingConfig.train_episodes = 1
 TrainingConfig.use_steps = True

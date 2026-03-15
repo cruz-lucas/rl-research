@@ -3,9 +3,9 @@ setup_mlflow.experiment_group = "nfq_originalobs"
 
 run_loop.agent_cls = @NFQAgent
 run_loop.env_cls = @NavixWrapper
-run_loop.buffer_cls = @FlatteningReplayBuffer
-FlatteningReplayBuffer.buffer_size = 4096
-FlatteningReplayBuffer.obs_shape = (5, 5, 3)
+run_loop.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 4096
+ReplayBuffer.obs_shape = (5, 5, 3)
 
 NFQAgent.discount = 0.99
 NFQAgent.learning_rate = 8e-6

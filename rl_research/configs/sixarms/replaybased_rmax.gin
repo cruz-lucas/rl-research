@@ -1,5 +1,5 @@
 setup_mlflow.experiment_name = "sixarms"
-setup_mlflow.experiment_group = "replaybased_rmax_uniquevisitationincrement"
+setup_mlflow.experiment_group = "replaybased_rmax_test"
 
 run_loop.agent_cls = @BMFRmaxAgent
 run_loop.env_cls = @SixArmsJaxEnv
@@ -8,7 +8,7 @@ ReplayBuffer.buffer_size = 5_000
 
 BMFRmaxAgent.r_max = 6_000
 BMFRmaxAgent.discount = 0.95
-BMFRmaxAgent.step_size = 0.005
+BMFRmaxAgent.step_size = 0.01
 BMFRmaxAgent.known_threshold = 6
 
 TrainingConfig.train_episodes = 1

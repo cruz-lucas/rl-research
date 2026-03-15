@@ -7,6 +7,9 @@ run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 1
 
 RMaxAgent.r_max = 10_000
+RMaxAgent.use_vmax = False
+RMaxAgent.v_max = 10_000
+
 RMaxAgent.discount = 0.95
 RMaxAgent.known_threshold = 16
 RMaxAgent.convergence_threshold = 1e-6
