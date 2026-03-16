@@ -114,11 +114,13 @@ def run_loop(
         new_agent_state, action = agent.select_action(train_state.agent_state, obs, action_key, is_training=True)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
 
-        bootstrap_value = jax.lax.cond(
-            terminal, 
-            lambda: jnp.asarray(0.0, dtype=jnp.float32), 
-            lambda: agent.bootstrap_value(train_state.agent_state, next_obs)
-        )
+        # TODO: fix this later, not using MC returns now. Also, wouldn't it be better to query this with the current target net?
+        bootstrap_value = 0.0
+        # bootstrap_value = jax.lax.cond(
+        #     terminal, 
+        #     lambda: jnp.asarray(0.0, dtype=jnp.float32), 
+        #     lambda: agent.bootstrap_value(train_state.agent_state, next_obs)
+        # )
         new_buff_st = train_state.buffer_state.push(
             observation=obs,
             action=action,
