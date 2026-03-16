@@ -25,30 +25,19 @@ from rl_research.experiment import run_loop, TrainingConfig
 
 # Default space is a starting point; override with --space-file.
 DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
-    "BMFMBIEEBAgent": {
+    "ReplaybasedMBIEEB": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "beta": {"type": "uniform", "min": 0, "max": 100},
     },
-    "BMFRmaxAgent": {
+    "ReplaybasedRmax": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "known_threshold": {"type": "int", "min": 1, "max": 100},
-    },
-    "OptimisticMonteCarloAgent": {
-        "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
-        "known_threshold": {"type": "int", "min": 1, "max": 50},
     },
     "QLearningAgent": {
         "step_size": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
         "initial_epsilon": {"type": "uniform", "min": 0.3, "max": 1.0},
         "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
-        "anneal_steps": {"type": "int", "min": 1_000, "max": 500_000},
-    },
-    "AnnealingEpsGreedyCountAgent": {
-        "step_size": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
-        "initial_epsilon": {"type": "uniform", "min": 0.3, "max": 1.0},
-        "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
-        "anneal_steps": {"type": "int", "min": 0, "max": 5_000},
-        "intrinsic_reward_scale": {"type": "int", "min": 0, "max": 10_000},
+        "anneal_steps": {"type": "int", "min": 0, "max": 3_000},
     },
     "DQNAgent": {
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
@@ -78,23 +67,18 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
     },
-    "MCTSAgent": {
-        "num_simulations": {"type": "int", "min": 1, "max": 500},
-        "rollout_depth": {"type": "int", "min": 1, "max": 50},
-        "ucb_c": {"type": "uniform", "min": 0, "max": 100},
-    },
     "RMaxAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 1_000},
         "convergence_threshold": {"type": "log_uniform", "min": 1e-9, "max": 1e-4},
     },
-    "DelayedQLearningAgent": {
-        "update_threshold": {"type": "int", "min": 1, "max": 500},
-        "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
-    },
+    # "DelayedQLearningAgent": {
+    #     "update_threshold": {"type": "int", "min": 1, "max": 500},
+    #     "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
+    # },
     "params": {
         # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(6, 12)])},
         # "FlatteningReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(12, 18)])},
-        # "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(4, 10)])}, # minibatch must not be bigger than buffer size
+        # "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(0, 12)])}, # minibatch must not be bigger than buffer size
         # "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
         # "TrainingConfig.num_minibatches": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
         # "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
@@ -112,11 +96,11 @@ class Args:
     ]
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 100
+    ] = 1
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination (drives --array size)."),
-    ] = 5
+    ] = 1
     space_file: Annotated[
         Path | None,
         tyro.conf.arg(
