@@ -1,7 +1,10 @@
+import time
 from flax import nnx
 import numpy as np
 import gin
 import mlflow
+from mlflow.tracking import MlflowClient
+from mlflow.entities import Metric
 
 def extract_agent_ckpt(agent_state) -> dict:
     graphdef, state = nnx.split(agent_state.network)
@@ -51,31 +54,52 @@ def setup_mlflow(
 
 class RecordWriter:
     prev_metrics = None
+    metrics = []
     train_disc_returns = []
     train_returns = []
+    timestamp = int(time.time() * 1000)
+    batch_size = 100_000
 
-    def __call__(self, cur_metrics: dict | None):
-        self.prev_metrics, log_metrics = cur_metrics, self.prev_metrics
-        if log_metrics is None:
-            return
-        
+    def __call__(self, log_metrics: dict):
+        self.metrics.extend([
+            Metric(
+                key="train/return",
+                value=float(log_metrics["metrics"].train_returns),
+                step=int(log_metrics["step"]),
+                timestamp=self.timestamp,
+            ),
+            Metric(
+                key="train/discounted_return",
+                value=float(log_metrics["metrics"].train_discounted_returns),
+                step=int(log_metrics["step"]),
+                timestamp=self.timestamp,
+            ),
+            Metric(
+                key="train/loss",
+                value=float(log_metrics["metrics"].train_losses),
+                step=int(log_metrics["step"]),
+                timestamp=self.timestamp,
+            ),
+            Metric(
+                key="train/episode_length",
+                value=float(log_metrics["metrics"].train_lengths),
+                step=int(log_metrics["step"]),
+                timestamp=self.timestamp,
+            ),
+        ])
+
         self.train_disc_returns.append(log_metrics["metrics"].train_discounted_returns)
         self.train_returns.append(log_metrics["metrics"].train_returns)
-    
-        metrics = {
-            "train/return": float(log_metrics["metrics"].train_returns),
-            "train/discounted_return": float(log_metrics["metrics"].train_discounted_returns),
-            "train/loss": float(log_metrics["metrics"].train_losses),
-            "train/episode_length": float(log_metrics["metrics"].train_lengths),
-        }
-        
-        mlflow.log_metrics(
-            metrics,
-            step=int(log_metrics["step"]),
-        )
 
     def flush_summary(self):
-        self.__call__(None)  # flush last metrics
+        client = MlflowClient()
+        run_id = mlflow.active_run().info.run_id
+        
+        for i in range(0, len(self.metrics), self.batch_size):
+            client.log_batch(
+                run_id=run_id,
+                metrics=self.metrics[i:i + self.batch_size],
+            )
 
         if len(self.train_disc_returns) >= 100:
             mlflow.log_metrics(
