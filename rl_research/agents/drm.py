@@ -101,7 +101,7 @@ class DRMAgent:
         obs_ids = obs_to_index(obs.reshape(-1), grid_size=self.grid_size)
         is_known = state.visit_counts[obs_ids] >= self.known_threshold
 
-        values = jnp.where(is_known, q_vals, self.optimistic_value)
+        values = jnp.where(is_known, q_vals, self.optimistic_value)[0]
 
         action = distrax.Greedy(values).sample(seed=key)
 
