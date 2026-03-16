@@ -83,6 +83,7 @@ def run_loop(
     fresh_agent_state = agent.initial_state()
     empty_buffer_state = buffer.initial_state()
 
+    assert config.use_steps or config.train_episodes > 0, "Must set train_episodes or use_steps=True"
     num_iters = config.train_steps if config.use_steps else config.train_episodes * config.max_episode_steps
 
     key = jax.random.PRNGKey(seed)
@@ -105,7 +106,7 @@ def run_loop(
         done=jnp.asarray(False)
     )
 
-    @nnx.jit
+    # @nnx.jit
     def train_step(train_state: TrainingState) -> Tuple[TrainingState, History]:
         next_key, action_key = jax.random.split(train_state.key)
         obs = train_state.env_obs
@@ -113,10 +114,10 @@ def run_loop(
         new_agent_state, action = agent.select_action(train_state.agent_state, obs, action_key, is_training=True)
         next_env_st, next_obs, reward, terminal, truncation, info = environment.step(train_state.env_state, action)
 
-        bootstrap_value = jnp.where(
+        bootstrap_value = jax.lax.cond(
             terminal, 
-            jnp.asarray(0.0, dtype=jnp.float32), 
-            agent.bootstrap_value(train_state.agent_state, next_obs)
+            lambda: jnp.asarray(0.0, dtype=jnp.float32), 
+            lambda: agent.bootstrap_value(train_state.agent_state, next_obs)
         )
         new_buff_st = train_state.buffer_state.push(
             observation=obs,
@@ -185,12 +186,12 @@ def run_loop(
                 key=key,
                 env_state=env_state,
                 env_obs=env_obs,
-                episode_return=0.0,
-                episode_discounted_return=0.0,
-                discount_factor=1.0,
-                episode_length=0,
-                loss=0.0,
-                done=False,
+                episode_return=jnp.asarray(0.0, jnp.float32),
+                episode_discounted_return=jnp.asarray(0.0, jnp.float32),
+                discount_factor=jnp.asarray(1.0, jnp.float32),
+                episode_length=jnp.asarray(0, jnp.int32),
+                loss=jnp.asarray(0.0, jnp.float32),
+                done=jnp.asarray(False),
                 episode_idx=ts.episode_idx+1
             )
 
@@ -217,54 +218,29 @@ def run_loop(
     agent_cls = run_bindings.get("agent_cls", BaseAgent)
     agent_cls_name = agent_cls.__name__
     
-    for step in range(num_iters):
-        train_state, history = train_step(train_state)
+    train_state, history = nnx.scan(
+        train_step,
+        in_axes=nnx.Carry,
+        out_axes=(nnx.Carry, 0),
+        length=num_iters
+    )(train_state)
 
-        if history.dones:
-            record_writer({"step": step, "metrics": history})
-
-        if (config.checkpoint_freq is not None) and (step % config.checkpoint_freq == 0):
-            _, state = nnx.split(train_state.agent_state.online_network)
-            checkpointer.save(path / agent_cls_name / f"checkpoint_{step}", state)
-
-        # if step % config.evaluate_every == 0:
-        #     def run_one_episode(key, _):
-        #         key, k_reset = jax.random.split(key)
-        #         env_state, obs = environment.reset(k_reset)
-
-        #         def step_fn(step_carry):
-        #             env_state, obs, ret, done, key = step_carry
-        #             key, action_key = jax.random.split(key)
-        #             action = agent.select_action(train_state.agent_state, obs, action_key, is_training=False)
-        #             env_state, obs, reward, terminal, trunc, _ = environment.step(env_state, action)
-        #             done = jnp.logical_or(terminal, trunc)
-        #             ret = ret + reward * (1 - done)
-        #             return (env_state, obs, ret, done, key), None
-
-        #         (env_state, obs, ret, done, key), _ = nnx.scan(
-        #             step_fn,
-        #             in_axes=nnx.Carry,
-        #             out_axes=(nnx.Carry, 0),
-        #             length=config.max_episode_steps,
-        #         )((env_state, obs, 0.0, False, key))
-
-        #         return key, ret
-
-        #     _, eval_returns = nnx.vmap(run_one_episode, in_axes=(0, None))(
-        #         jax.random.split(train_state.key, config.eval_episodes), None
-        #     )
-
-        #     mean_return = float(np.mean(eval_returns))
-        #     all_eval_returns.append(mean_return)
-            
-        #     mlflow.log_metrics(
-        #         {
-        #             "eval/return_mean": mean_return,
-        #         },
-        #         step=int(step),
-        #     )
-
+    done_indices = jnp.where(history.dones)[0]
+    for idx in done_indices:
+        record_writer({"step": history.global_steps[idx], "metrics": jax.tree.map(lambda x: x[idx], history)})
     
+    # TODO: solve checkpointing
+    # for step in range(num_iters):
+    #     train_state, history = train_step(train_state)
+
+    #     if history.dones:
+    #         record_writer({"step": step, "metrics": history})
+
+    #     if (config.checkpoint_freq is not None) and (step % config.checkpoint_freq == 0):
+    #         if hasattr(train_state.agent_state, 'online_network'):
+    #             _, state = nnx.split(train_state.agent_state.online_network)
+    #             checkpointer.save(path / agent_cls_name / f"checkpoint_{step}", state)
+
     record_writer.flush_summary()
 
 
