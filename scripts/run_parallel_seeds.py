@@ -59,7 +59,7 @@ class Args:
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds to run (0-indexed)."),
-    ] = 30
+    ] = 100
     max_workers: Annotated[
         int,
         tyro.conf.arg(

@@ -4,9 +4,9 @@ import jax.numpy as jnp
 import optax
 from flax import nnx
 from flax import struct
-from flax.training.train_state import TrainState
 import distrax
 from typing import Tuple
+from dataclasses import dataclass
 
 from rl_research.buffers import Transition
 
@@ -66,9 +66,9 @@ class DQNAgent:
 
     def initial_state(self) -> DQNState:
         rng = jax.random.PRNGKey(self.seed)
-        rng_online, rng_target = jax.random.split(rng)
-        online_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng_online), hidden_features=self.hidden_units)
-        target_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng_target), hidden_features=self.hidden_units)
+        online_network = Network(in_features=self.num_states, out_features=self.num_actions, rngs=nnx.Rngs(rng), hidden_features=self.hidden_units)
+        graphdef, online_params = nnx.split(online_network)
+        target_network = nnx.merge(graphdef, online_params)
         optimizer = nnx.Optimizer(
             online_network,
             optax.chain(optax.clip_by_global_norm(self.max_grad_norm), optax.adam(self.learning_rate)),
@@ -85,24 +85,21 @@ class DQNAgent:
     def select_action(self, state: DQNState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DQNState, jnp.ndarray]:
         q_vals = state.online_network(obs.reshape(-1))
 
-        def greedy():
-            action_dist = distrax.Greedy(q_vals)
-            return action_dist.sample(seed=key)
-
-        def eps_greedy():
+        if is_training:
             frac = jnp.clip(state.step / max(1, self.eps_decay_steps), 0.0, 1.0)
             eps = self.eps_start + frac * (self.eps_end - self.eps_start)
 
-            action_dist = distrax.EpsilonGreedy(q_vals, epsilon=eps)
-            return action_dist.sample(seed=key)
+            action = distrax.EpsilonGreedy(q_vals, epsilon=eps).sample(seed=key)
 
-        action = nnx.cond(is_training, eps_greedy, greedy)
+            state = state.replace(
+                step = state.step + 1,
+         
+            )
 
-        new_state = state.replace(
-            step=state.step + 1,
-        )
+        else:
+            action = distrax.Greedy(q_vals).sample(seed=key)
 
-        return new_state, action
+        return state, action
 
     def update(self, state: DQNState, batch: Transition) -> tuple[DQNState, jax.Array]:
         def loss_fn(network: Network):
@@ -119,16 +116,20 @@ class DQNAgent:
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
         state.optimizer.update(state.online_network, grads)
 
-        _graphdef, _state = nnx.cond(
-            state.step % self.target_update_freq == 0,
-            lambda _: nnx.split(state.online_network),
-            lambda _: nnx.split(state.target_network),
-            None
+        _, online_params = nnx.split(state.online_network)
+        _, target_params = nnx.split(state.target_network)
+
+        should_update = state.step % self.target_update_freq == 0
+        new_target_params = jax.tree.map(
+            lambda o, t: jnp.where(should_update, o, t),
+            online_params,
+            target_params,
         )
-        nnx.update(state.target_network, _state)
+
+        nnx.update(state.target_network, new_target_params)
 
         return state, loss
 
     def bootstrap_value(self, state: DQNState, next_observation: jnp.ndarray) -> jax.Array:
-        # TODO: implement this properly.
-        return jnp.array(0.0)
+        q_vals = state.target_network(next_observation.reshape(1, -1))
+        return jnp.max(q_vals, axis=-1).squeeze()

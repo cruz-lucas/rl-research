@@ -3,8 +3,7 @@ import gin
 import jax
 import jax.numpy as jnp
 import optax
-from flax import nnx
-from flax import struct
+from flax import nnx, struct
 import distrax
 from typing import Tuple
 
@@ -71,19 +70,14 @@ class DRMAgent:
 
     def initial_state(self) -> DRMState:
         rng = jax.random.PRNGKey(self.seed)
-        rng_online, rng_target = jax.random.split(rng)
         online_network = Network(
             in_features=self.num_states,
             out_features=self.num_actions,
-            rngs=nnx.Rngs(rng_online),
+            rngs=nnx.Rngs(rng),
             hidden_features=self.hidden_units,
         )
-        target_network = Network(
-            in_features=self.num_states,
-            out_features=self.num_actions,
-            rngs=nnx.Rngs(rng_target),
-            hidden_features=self.hidden_units,
-        )
+        graphdef, online_params = nnx.split(online_network)
+        target_network = nnx.merge(graphdef, online_params)
 
         optimizer = nnx.Optimizer(
             online_network,
@@ -102,22 +96,22 @@ class DRMAgent:
         )
 
     def select_action(self, state: DRMState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DRMState, jnp.ndarray]:
-        q_vals = state.online_network(obs.reshape(-1)).squeeze()
+        q_vals = state.online_network(obs.reshape(-1))
 
         obs_ids = obs_to_index(obs.reshape(-1), grid_size=self.grid_size)
         is_known = state.visit_counts[obs_ids] >= self.known_threshold
 
         values = jnp.where(is_known, q_vals, self.optimistic_value)
 
-        action_dist = distrax.Greedy(values)
-        action = action_dist.sample(seed=key)[0]
+        action = distrax.Greedy(values).sample(seed=key)
 
-        new_state = state.replace(
-            step=state.step + 1,
-            visit_counts=state.visit_counts.at[obs, action].add(1)
-        )
+        if is_training:
+            state = state.replace(
+                step = state.step + 1,
+                visit_counts = state.visit_counts.at[obs_ids, action.astype(jnp.int32)].add(1)            
+            )
 
-        return new_state, action
+        return state, action
 
     def update(self, state: DRMState, batch: Transition) -> tuple[DRMState, jax.Array]:
         obs_ids = obs_to_index(batch.observation, grid_size=self.grid_size)
@@ -150,19 +144,19 @@ class DRMAgent:
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
         state.optimizer.update(state.online_network, grads)
 
-        _graphdef, _state = nnx.cond(
-            state.step % self.target_update_freq == 0,
-            lambda _: nnx.split(state.online_network),
-            lambda _: nnx.split(state.target_network),
-            None,
-        )
-        nnx.update(state.target_network, _state)
+        _, online_params = nnx.split(state.online_network)
+        _, target_params = nnx.split(state.target_network)
 
-        new_state = state.replace(
-            visit_counts=new_visit_counts,
+        should_update = state.step % self.target_update_freq == 0
+        new_target_params = jax.tree.map(
+            lambda o, t: jnp.where(should_update, o, t),
+            online_params,
+            target_params,
         )
 
-        return new_state, loss
+        nnx.update(state.target_network, new_target_params)
+
+        return state, loss
 
     def bootstrap_value(self, state: DRMState, next_observation: jnp.ndarray) -> jax.Array:
         # TODO: implement this properly.

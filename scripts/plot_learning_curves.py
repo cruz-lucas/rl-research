@@ -48,9 +48,12 @@ DEFAULT_GROUP_COLORS = {
     "qlearning_epsgreedy": "#ff7f0e",
     "mbieeb": "#9467bd",
     "rmax": "#2ca02c",
-    "replaybased_rmax": "#d62728",
+    "replaybased_rmax": "#1f77b4",
     "replaybased_rmax_uniquevisitationincrement": "#1f77b4",
-    "replaybased_mbieeb": "#27d6a7",
+    "replaybased_rmax_refact": "#1f77b4",
+    "replaybased_mbieeb": "#d62728",
+    "epsgreedy_intrinsicreward": "#999999",
+    "epsgreedy_intrinsicreward_optinit": "#27d6a7",
 
     "rmax_nfq_onehot_linear": "#d62728",
     "rmax_dqn_onehot_linear": "#ff7f0e",
@@ -72,8 +75,10 @@ DEFAULT_GROUP_LABELS = {
     "replaybased_mbieeb": "Replay-based MBIE-EB",
     "rmax": "R-Max",
     "replaybased_rmax": "Replay-based R-Max",
-    "replaybased_rmax_uniquevisitationincrement": "Replay-based R-Max (visitation inc at DT)",
-    "batch_modelfree_rmax": "Replay-based R-Max",
+    "replaybased_rmax_uniquevisitationincrement": "Replay-based R-Max",
+    "replaybased_rmax_refact": "Replay-based R-Max",
+    "epsgreedy_intrinsicreward": "Count-based Intrinsic Reward",
+    "epsgreedy_intrinsicreward_optinit": "Count-based Intrinsic Reward + Opt. Init.",
 
     "rmax_nfq_onehot_linear": "NFQ + R-max",
     "rmax_dqn_onehot_linear": "DQN + R-max",
@@ -91,10 +96,13 @@ DEFAULT_GROUP_ORDER = [
     # "drm",
     # "qlearning_epsgreedy",
     "rmax",
-    "replaybased_rmax",
-    "replaybased_rmax_uniquevisitationincrement",
+    # "replaybased_rmax",
+    "replaybased_rmax_refact",
+    # "replaybased_rmax_uniquevisitationincrement",
     "mbieeb",
-    "replaybased_mbieeb"
+    "replaybased_mbieeb",
+    "epsgreedy_intrinsicreward",
+    # "epsgreedy_intrinsicreward_optinit",
 
     # "dqn_onehot_linear",
     # "nfq_onehot",
@@ -714,6 +722,24 @@ class LearningCurvePlotter:
             patch.set_alpha(0.6)
             patch.set_linewidth(1.2)
 
+        # Draw mean as a horizontal line across each box and annotate value
+        box_width = 0.5
+        for vals, x, color in zip(group_values, x_positions, colors):
+            mean_val = vals.mean()
+            # ax.hlines(
+            #     mean_val,
+            #     x - box_width / 2, x + box_width / 2,
+            #     colors=color, linewidths=2.0, linestyles="--",
+            #     zorder=4, label="_nolegend_",
+            # )
+            ax.text(
+                x - 0.1, 3.9e6, #3.7e7,
+                f"{mean_val:.2e}",
+                va="center", ha="left",
+                fontsize=9, color=color,
+                zorder=5,
+            )
+
         if show_points:
             rng = np.random.default_rng(42)
             for vals, x, color in zip(group_values, x_positions, colors):
@@ -732,6 +758,7 @@ class LearningCurvePlotter:
         if grid:
             ax.yaxis.grid(True, alpha=0.3, linestyle="--", linewidth=0.8)
             ax.set_axisbelow(True)
+        # ax.set_yscale('log')
         plt.tight_layout()
 
         if save_path:
