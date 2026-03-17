@@ -1,5 +1,5 @@
-setup_mlflow.experiment_name = "navix_16x16_layout3"
-setup_mlflow.experiment_group = "rmax_dqn_originalobs"
+setup_mlflow.experiment_name = "navix_doorkey_16x16_layout3"
+setup_mlflow.experiment_group = "rmax_dqn"
 
 run_loop.agent_cls = @DRMAgent
 run_loop.env_cls = @NavixWrapper
