@@ -1,5 +1,5 @@
-setup_mlflow.experiment_name = "navix_5x5_layout3"
-setup_mlflow.experiment_group = "nfq_originalobs"
+setup_mlflow.experiment_name = "navix_doorkey_5x5_layout1"
+setup_mlflow.experiment_group = "nfq"
 
 run_loop.agent_cls = @NFQAgent
 run_loop.env_cls = @NavixWrapper
@@ -8,23 +8,23 @@ ReplayBuffer.buffer_size = 4096
 ReplayBuffer.obs_shape = (5, 5, 3)
 
 NFQAgent.discount = 0.99
-NFQAgent.learning_rate = 4e-6
-NFQAgent.eps_start = 0.8
+NFQAgent.learning_rate = 8e-6
+NFQAgent.eps_start = 0.7
 NFQAgent.eps_end = 0.01
 NFQAgent.eps_decay_steps = 200_000
-NFQAgent.max_grad_norm = 2.0
-NFQAgent.num_iters = 20
+NFQAgent.max_grad_norm = 12.0
+NFQAgent.num_iters = 1
 
-NavixWrapper.env_id = "GridDoorKey-5x5-layout3-v0"
+NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 256
+TrainingConfig.minibatch_size = 2048
 TrainingConfig.update_frequency = 4
-TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 0
+TrainingConfig.num_minibatches = 4
+TrainingConfig.warmup_steps = 8192
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None

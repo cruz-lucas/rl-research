@@ -1,30 +1,30 @@
-setup_mlflow.experiment_name = "navix_5x5_layout2"
-setup_mlflow.experiment_group = "dqn_originalobs"
+setup_mlflow.experiment_name = "navix_doorkey_16x16_layout1"
+setup_mlflow.experiment_group = "dqn"
 
 run_loop.agent_cls = @DQNAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 32_768
-ReplayBuffer.obs_shape = (5, 5, 3)
+ReplayBuffer.buffer_size = 8192
+ReplayBuffer.obs_shape = (16, 16, 3)
 
 DQNAgent.discount = 0.99
-DQNAgent.learning_rate = 0.00026155
+DQNAgent.learning_rate = 2.8e-5
 DQNAgent.eps_start = 0.8
 DQNAgent.eps_end = 0.01
-DQNAgent.eps_decay_steps = 140000
-DQNAgent.target_update_freq = 512
-DQNAgent.max_grad_norm = 10.0
+DQNAgent.eps_decay_steps = 340_000
+DQNAgent.target_update_freq = 2048
+DQNAgent.max_grad_norm = 2.4
 
-NavixWrapper.env_id = "GridDoorKey-5x5-layout2-v0"
+NavixWrapper.env_id = "GridDoorKey-16x16-layout1-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
-TrainingConfig.max_episode_steps = 100
+TrainingConfig.max_episode_steps = 1024
 TrainingConfig.minibatch_size = 256
 TrainingConfig.update_frequency = 1
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 256
+TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
