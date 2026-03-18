@@ -116,9 +116,8 @@ class DRMAgent:
     def update(self, state: DRMState, batch: Transition) -> tuple[DRMState, jax.Array]:
         obs_ids = obs_to_index(batch.observation, grid_size=self.grid_size)
         next_obs_ids = obs_to_index(batch.next_observation, grid_size=self.grid_size)
-        new_visit_counts = state.visit_counts.at[obs_ids, batch.action].add(1)
 
-        known_mask = new_visit_counts[obs_ids, batch.action] >= self.known_threshold
+        known_mask = state.visit_counts[obs_ids, batch.action] >= self.known_threshold
         known_mask_f = known_mask.astype(jnp.float32)
         denom = jnp.maximum(jnp.sum(known_mask_f), 1.0)
 
@@ -129,7 +128,7 @@ class DRMAgent:
             next_q = state.target_network(batch.next_observation)
             
             max_next_q = jnp.where(
-                jnp.any(new_visit_counts[next_obs_ids, :] < self.known_threshold, axis=-1),
+                jnp.any(state.visit_counts[next_obs_ids, :] < self.known_threshold, axis=-1),
                 self.optimistic_value,
                 jnp.max(next_q, axis=1),
             )

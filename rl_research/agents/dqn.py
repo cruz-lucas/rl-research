@@ -93,7 +93,6 @@ class DQNAgent:
 
             state = state.replace(
                 step = state.step + 1,
-         
             )
 
         else:

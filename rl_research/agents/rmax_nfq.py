@@ -94,12 +94,13 @@ class RMaxNFQAgent:
         action_dist = distrax.Greedy(q_vals)
         action = action_dist.sample(seed=key)[0]
 
-        new_state = state.replace(
-            step=state.step + 1,
-            visit_counts=state.visit_counts.at[obs, action].add(1)
-        )
+        if is_training:
+            state = state.replace(
+                step=state.step + 1,
+                visit_counts=state.visit_counts.at[obs, action].add(1)
+            )
 
-        return new_state, action
+        return state, action
 
 
     def update(self, state: NFQState, batch: Transition) -> tuple[NFQState, jax.Array]:
@@ -108,10 +109,6 @@ class RMaxNFQAgent:
 
         obs_idx = obs_to_index(batch.observation, grid_size=self.grid_size)
         next_obs_idx = obs_to_index(batch.next_observation, grid_size=self.grid_size)
-        
-        state = state.replace(
-            visitation_counts=state.visit_counts.at[obs_idx, batch.action].add(1)
-        )
 
         batch_counts_minimum = jnp.array([state.visit_counts[next_obs_idx[j], :].min() for j in range(batch.observation.shape[0])])
         max_next_q = jnp.where(batch_counts_minimum < self.min_visits, self.vmax, max_next_q)
