@@ -8,9 +8,9 @@ ReplayBuffer.buffer_size = 8192
 ReplayBuffer.obs_shape = (16, 16, 3)
 
 DQNAgent.discount = 0.99
-DQNAgent.learning_rate = 2.8e-5
+DQNAgent.learning_rate = 2.9e-5
 DQNAgent.eps_start = 0.8
-DQNAgent.eps_end = 0.01
+DQNAgent.eps_end = 0.1
 DQNAgent.eps_decay_steps = 340_000
 DQNAgent.target_update_freq = 2048
 DQNAgent.max_grad_norm = 2.4
