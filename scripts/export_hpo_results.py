@@ -66,7 +66,20 @@ def parse_mlflow_run(run_dir: Path) -> Dict[str, Any]:
                         # Metric files are in format: timestamp value step
                         last_line = lines[-1].strip().split()
                         if len(last_line) >= 2:
-                            run_data[f'metric_{metric_file.name}'] = float(last_line[1])
+                            run_data[f'metric_summary_{metric_file.name}'] = float(last_line[1])
+    
+    metrics_dir = run_dir / "metrics" / "train"
+    if metrics_dir.exists():
+        for metric_file in metrics_dir.iterdir():
+            if metric_file.is_file():
+                # Read the last line of the metric file (summary value)
+                with open(metric_file, 'r') as f:
+                    lines = f.readlines()
+                    if lines:
+                        # Metric files are in format: timestamp value step
+                        last_line = lines[-1].strip().split()
+                        if len(last_line) >= 2:
+                            run_data[f'metric_train_{metric_file.name}'] = float(last_line[1])
     
     return run_data
 
@@ -138,7 +151,6 @@ def parse_mlflow_experiment(mlruns_path: str = "mlruns") -> pd.DataFrame:
     
     # Other columns
     other_cols = [col for col in df.columns if col not in basic_cols + param_cols + tag_cols + metric_cols]
-    
     # Reorder
     column_order = basic_cols + param_cols + tag_cols + metric_cols + other_cols
     df = df[column_order]
@@ -151,7 +163,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Parse MLflow files into a pandas DataFrame')
-    parser.add_argument('--mlruns-path', default='/home/lcruz1/mlruns', 
+    parser.add_argument('--mlruns-path', default='/home/lcruz1/scratch/hpo_navix', 
                         help='Path to the mlruns directory (default: mlruns)')
     parser.add_argument('--output', '-o', help='Output CSV file path (optional)')
     parser.add_argument('--show', action='store_true', 
