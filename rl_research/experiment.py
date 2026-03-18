@@ -229,7 +229,7 @@ def run_loop(
 
     done_indices = jnp.where(history.dones)[0]
     for idx in done_indices:
-        record_writer({"step": history.global_steps[idx], "metrics": jax.tree.map(lambda x: x[idx], history)})
+        record_writer({"step": history.global_steps[idx]-1, "metrics": jax.tree.map(lambda x: x[idx], history)})
     
     # TODO: solve checkpointing
     # for step in range(num_iters):
