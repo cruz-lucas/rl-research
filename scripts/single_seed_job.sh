@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=hpo_16x16_l3_algos_w_rmax
+#SBATCH --job-name=best_drm_5x5l2
 #SBATCH --account=aip-machado
-#SBATCH --time=12:00:00
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=12G
+#SBATCH --time=3:00:00
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=16G
 #SBATCH --array=0-0               # Override with --array on sbatch command line
 #SBATCH --output=/home/%u/scratch/logs/job_%A_%a_%x.out
 #SBATCH --error=/home/%u/scratch/logs/job_%A_%a_%x.err
@@ -37,7 +37,8 @@ CONFIG_PATH="$1"
 shift
 BINDINGS=("$@")
 
-export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/hpo_16x16_l3_algos_w_rmax}"
+# export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/hpo_navix}"
+export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/navix_best}"
 
 SEED="${SLURM_ARRAY_TASK_ID:-0}"
 

@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=rl_experiment
+#SBATCH --job-name=rmax_nfq_5x5_l3
 #SBATCH --account=aip-machado
-#SBATCH --time=4:00:00
-#SBATCH --cpus-per-task=50
-#SBATCH --mem=64G
+#SBATCH --time=3:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
 #SBATCH --output=/home/%u/scratch/logs/job_%A_%a_%x.out
 #SBATCH --error=/home/%u/scratch/logs/job_%A_%a_%x.err
 
@@ -36,7 +36,7 @@ CONFIG_PATH="$1"
 shift
 BINDINGS=("$@")
 
-export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/mlruns_final_results}"
+export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/mlruns_final}"
 
 cmd=(uv run --active --offline python scripts/run_parallel_seeds.py --config "$CONFIG_PATH")
 
