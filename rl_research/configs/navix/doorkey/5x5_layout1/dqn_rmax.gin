@@ -11,11 +11,11 @@ DQNRmaxAgent.grid_size = 5
 DQNRmaxAgent.r_max = 1.0
 DQNRmaxAgent.v_max = 1.0
 DQNRmaxAgent.use_vmax = True
-DQNRmaxAgent.known_threshold = 261
+DQNRmaxAgent.known_threshold = 1
 DQNRmaxAgent.discount = 0.99
-DQNRmaxAgent.learning_rate = 2.42064e-05
+DQNRmaxAgent.learning_rate = 1e-04
 DQNRmaxAgent.target_update_freq = 1024
-DQNRmaxAgent.max_grad_norm = 5.89208
+DQNRmaxAgent.max_grad_norm = 5.0
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 

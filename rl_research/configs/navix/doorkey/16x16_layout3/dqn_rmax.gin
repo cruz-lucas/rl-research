@@ -1,21 +1,21 @@
 setup_mlflow.experiment_name = "navix_doorkey_16x16_layout3"
 setup_mlflow.experiment_group = "rmax_dqn"
 
-run_loop.agent_cls = @DRMAgent
+run_loop.agent_cls = @DQNRmaxAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 131_072
 ReplayBuffer.obs_shape = (16, 16, 3)
 
-DRMAgent.grid_size = 16
-DRMAgent.r_max = 0.01
-DRMAgent.v_max = 1.0
-DRMAgent.use_vmax = True
-DRMAgent.known_threshold = 239
-DRMAgent.discount = 0.99
-DRMAgent.learning_rate = 2e-4
-DRMAgent.target_update_freq = 2_048
-DRMAgent.max_grad_norm = 1.0
+DQNRmaxAgent.grid_size = 16
+DQNRmaxAgent.r_max = 0.01
+DQNRmaxAgent.v_max = 1.0
+DQNRmaxAgent.use_vmax = True
+DQNRmaxAgent.known_threshold = 239
+DQNRmaxAgent.discount = 0.99
+DQNRmaxAgent.learning_rate = 2e-4
+DQNRmaxAgent.target_update_freq = 2_048
+DQNRmaxAgent.max_grad_norm = 1.0
 
 NavixWrapper.env_id = "GridDoorKey-16x16-layout3-v0"
 
