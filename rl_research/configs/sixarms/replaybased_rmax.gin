@@ -8,10 +8,10 @@ EntireReplayBuffer.buffer_size = 5_000
 
 ReplaybasedRmax.r_max = 6_000
 ReplaybasedRmax.discount = 0.95
-ReplaybasedRmax.step_size = 0.01
+ReplaybasedRmax.step_size = 0.001
 ReplaybasedRmax.known_threshold = 6
 ReplaybasedRmax.initial_q_value = 0.0
-ReplaybasedRmax.num_epochs = 200
+ReplaybasedRmax.num_epochs = 100
 
 TrainingConfig.train_episodes = 1
 TrainingConfig.use_steps = True

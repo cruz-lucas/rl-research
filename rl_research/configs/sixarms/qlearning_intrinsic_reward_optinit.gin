@@ -1,22 +1,22 @@
-setup_mlflow.experiment_name = "riverswim"
-setup_mlflow.experiment_group = "intrinsicreward"
+setup_mlflow.experiment_name = "sixarms"
+setup_mlflow.experiment_group = "intrinsicreward_optinit"
 
 run_loop.agent_cls = @QLearningAgent
-run_loop.env_cls = @RiverSwimJaxEnv
+run_loop.env_cls = @SixArmsJaxEnv
 run_loop.buffer_cls = @EntireReplayBuffer
 EntireReplayBuffer.buffer_size = 5_000
 
 QLearningAgent.discount = 0.95
 QLearningAgent.step_size = 0.001
-QLearningAgent.initial_q_value = 0.0
+QLearningAgent.initial_q_value = 120_000
 
-QLearningAgent.initial_epsilon = 0.8
-QLearningAgent.final_epsilon = 0.01
-QLearningAgent.anneal_steps = 1300
-QLearningAgent.use_scheduler = True
+QLearningAgent.initial_epsilon = 0.0
+QLearningAgent.final_epsilon = 0.0
+QLearningAgent.anneal_steps = 1
+QLearningAgent.use_scheduler = False
 
-QLearningAgent.reward_bonus = 3600
-QLearningAgent.stability_coef = 0.02
+QLearningAgent.reward_bonus = 4800
+QLearningAgent.stability_coef = 0.04
 
 QLearningAgent.num_epochs = 200
 
