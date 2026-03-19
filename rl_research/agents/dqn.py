@@ -3,10 +3,8 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx
-from flax import struct
 import distrax
-from typing import Tuple
-from dataclasses import dataclass
+from typing import Tuple, NamedTuple
 
 from rl_research.buffers import Transition
 
@@ -29,11 +27,12 @@ class Network(nnx.Module):
         x = self.out_layer(x)
         return x
 
-class DQNState(struct.PyTreeNode):
+class DQNState(NamedTuple):
     online_network: Network
     target_network: Network
     optimizer: nnx.Optimizer
     step: int
+    gradient_steps: int
 
 
 @gin.configurable
@@ -80,6 +79,7 @@ class DQNAgent:
             target_network=target_network,
             optimizer=optimizer,
             step=0,
+            gradient_steps=0,
         )
 
     def select_action(self, state: DQNState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DQNState, jnp.ndarray]:
@@ -91,7 +91,7 @@ class DQNAgent:
 
             action = distrax.EpsilonGreedy(q_vals, epsilon=eps).sample(seed=key)
 
-            state = state.replace(
+            state = state._replace(
                 step = state.step + 1,
             )
 
@@ -118,7 +118,11 @@ class DQNAgent:
         _, online_params = nnx.split(state.online_network)
         _, target_params = nnx.split(state.target_network)
 
-        should_update = state.step % self.target_update_freq == 0
+        state = state._replace(
+            gradient_steps=state.gradient_steps + 1
+        )
+
+        should_update = state.gradient_steps % self.target_update_freq == 0
         new_target_params = jax.tree.map(
             lambda o, t: jnp.where(should_update, o, t),
             online_params,

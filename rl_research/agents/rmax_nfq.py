@@ -8,7 +8,7 @@ import distrax
 from typing import Tuple
 
 from rl_research.buffers import Transition
-from rl_research.agents.utils import obs_to_index
+from rl_research.environments.navix import obs_to_index
 
 
 class Network(nnx.Module):

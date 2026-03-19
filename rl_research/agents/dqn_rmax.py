@@ -5,10 +5,11 @@ import jax.numpy as jnp
 import optax
 from flax import nnx, struct
 import distrax
-from typing import Tuple
+from typing import Tuple, NamedTuple
 
 from rl_research.buffers import Transition
-from rl_research.agents.utils import obs_to_index
+from rl_research.environments.navix import obs_to_index
+
 
 class Network(nnx.Module):
     def __init__(self, in_features: int , out_features: int, rngs: nnx.Rngs, hidden_features: int = 64):
@@ -28,16 +29,17 @@ class Network(nnx.Module):
         x = self.out_layer(x)
         return x
 
-class DRMState(struct.PyTreeNode):
+class DQNRmaxState(NamedTuple):
     online_network: Network
     target_network: Network
     optimizer: nnx.Optimizer
-    visit_counts: jnp.ndarray
     step: int
+    gradient_steps: int
+    visit_counts: jnp.ndarray
 
 
 @gin.configurable
-class DRMAgent:
+class DQNRmaxAgent:
     def __init__(
         self,
         num_states: int,
@@ -68,7 +70,7 @@ class DRMAgent:
         self.max_grad_norm = max_grad_norm
         self.seed = int(seed)
 
-    def initial_state(self) -> DRMState:
+    def initial_state(self) -> DQNRmaxState:
         rng = jax.random.PRNGKey(self.seed)
         online_network = Network(
             in_features=self.num_states,
@@ -87,15 +89,16 @@ class DRMAgent:
 
         visit_counts = jnp.zeros((self.num_obs_ids, self.num_actions), dtype=jnp.int32)
 
-        return DRMState(
+        return DQNRmaxState(
             online_network=online_network,
             target_network=target_network,
             optimizer=optimizer,
             visit_counts=visit_counts,
             step=0,
+            gradient_steps=0,
         )
 
-    def select_action(self, state: DRMState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DRMState, jnp.ndarray]:
+    def select_action(self, state: DQNRmaxState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DQNRmaxState, jnp.ndarray]:
         q_vals = state.online_network(obs.reshape(-1))
 
         obs_ids = obs_to_index(obs.reshape(-1), grid_size=self.grid_size)
@@ -106,14 +109,14 @@ class DRMAgent:
         action = distrax.Greedy(values).sample(seed=key)
 
         if is_training:
-            state = state.replace(
+            state = state._replace(
                 step = state.step + 1,
                 visit_counts = state.visit_counts.at[obs_ids, action.astype(jnp.int32)].add(1)            
             )
 
         return state, action
 
-    def update(self, state: DRMState, batch: Transition) -> tuple[DRMState, jax.Array]:
+    def update(self, state: DQNRmaxState, batch: Transition) -> tuple[DQNRmaxState, jax.Array]:
         obs_ids = obs_to_index(batch.observation, grid_size=self.grid_size)
         next_obs_ids = obs_to_index(batch.next_observation, grid_size=self.grid_size)
 
@@ -146,7 +149,11 @@ class DRMAgent:
         _, online_params = nnx.split(state.online_network)
         _, target_params = nnx.split(state.target_network)
 
-        should_update = state.step % self.target_update_freq == 0
+        state = state._replace(
+            gradient_steps=state.gradient_steps + 1
+        )
+
+        should_update = state.gradient_steps % self.target_update_freq == 0
         new_target_params = jax.tree.map(
             lambda o, t: jnp.where(should_update, o, t),
             online_params,
@@ -157,6 +164,6 @@ class DRMAgent:
 
         return state, loss
 
-    def bootstrap_value(self, state: DRMState, next_observation: jnp.ndarray) -> jax.Array:
+    def bootstrap_value(self, state: DQNRmaxState, next_observation: jnp.ndarray) -> jax.Array:
         # TODO: implement this properly.
         return jnp.array(0.0)

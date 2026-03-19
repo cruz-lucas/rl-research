@@ -12,7 +12,7 @@ DQNAgent.learning_rate = 3e-06
 DQNAgent.eps_start = 0.9
 DQNAgent.eps_end = 0.01
 DQNAgent.eps_decay_steps = 120000
-DQNAgent.target_update_freq = 256
+DQNAgent.target_update_freq = 1024
 DQNAgent.max_grad_norm = 0.9
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"

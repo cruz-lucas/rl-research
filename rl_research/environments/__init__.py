@@ -1,6 +1,6 @@
 from rl_research.environments.base import BaseJaxEnv
 from rl_research.environments.goright import GoRight
-from rl_research.environments.tabular_navix import NavixWrapper
+from rl_research.environments.navix import NavixWrapper
 from classic_pacmdp_envs import RiverSwimJaxEnv, SixArmsJaxEnv
 import gin
 
