@@ -62,7 +62,7 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "max_grad_norm": {"type": "uniform", "min": 0.5, "max": 20.0},
         "num_iters": {"type": "int", "min": 1, "max": 300},
     },
-    "DRMAgent": {
+    "DQNRmaxAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
         "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
@@ -100,7 +100,7 @@ class Args:
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination (drives --array size)."),
-    ] = 5
+    ] = 10
     space_file: Annotated[
         Path | None,
         tyro.conf.arg(
