@@ -34,10 +34,10 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "known_threshold": {"type": "int", "min": 1, "max": 100},
     },
     "QLearningAgent": {
-        "step_size": {"type": "log_uniform", "min": 1e-4, "max": 1.0},
-        "initial_epsilon": {"type": "uniform", "min": 0.3, "max": 1.0},
-        "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
-        "anneal_steps": {"type": "int", "min": 0, "max": 3_000},
+        "step_size": {"type": "log_uniform", "min": 1e-4, "max": 5e-1},
+        # "initial_epsilon": {"type": "uniform", "min": 0.3, "max": 1.0},
+        # "final_epsilon": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
+        # "anneal_steps": {"type": "int", "min": 0, "max": 3_000},
         "reward_bonus": {"type": "int", "min": 0, "max": 10_000},
     },
     "DQNAgent": {
@@ -77,11 +77,11 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     #     "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
     # },
     "params": {
-        "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(12, 18)])},
-        "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(0, 12)])}, # minibatch must not be bigger than buffer size
-        "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
+        # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(12, 18)])},
+        # "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(0, 12)])}, # minibatch must not be bigger than buffer size
+        # "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
         # "TrainingConfig.num_minibatches": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
-        "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
+        # "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
     },
 }
 
@@ -96,11 +96,11 @@ class Args:
     ]
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 100
+    ] = 50
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination (drives --array size)."),
-    ] = 10
+    ] = 20
     space_file: Annotated[
         Path | None,
         tyro.conf.arg(
