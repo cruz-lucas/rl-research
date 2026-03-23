@@ -1,0 +1,33 @@
+setup_mlflow.experiment_name = "riverswim"
+setup_mlflow.experiment_group = "ratio100_capacity64"
+
+run_loop.agent_cls = @QLearningAgent
+run_loop.env_cls = @RiverSwimJaxEnv
+run_loop.buffer_cls = @EntireReplayBuffer
+EntireReplayBuffer.buffer_size = 64
+
+QLearningAgent.discount = 0.95
+QLearningAgent.step_size = 0.000126
+QLearningAgent.initial_q_value = 200_000
+
+QLearningAgent.initial_epsilon = 0.0
+QLearningAgent.final_epsilon = 0.0
+QLearningAgent.anneal_steps = 1
+QLearningAgent.use_scheduler = False
+
+QLearningAgent.reward_bonus = 4260
+QLearningAgent.stability_coef = 0.02
+
+QLearningAgent.num_epochs = 100
+
+TrainingConfig.train_episodes = 1
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 5_000
+TrainingConfig.max_episode_steps = 5_000
+TrainingConfig.minibatch_size = 1
+TrainingConfig.update_frequency = 1
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 0
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = None
