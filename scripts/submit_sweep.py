@@ -19,8 +19,8 @@ from typing import Annotated, Any, Dict, List, Sequence
 import gin
 import tyro
 
-from rl_research.main import setup_mlflow
-from rl_research.experiment import run_loop, TrainingConfig
+
+TARGET_UPDATE_CHOICES = [2**i for i in range(6, 16)]
 
 
 # Default space is a starting point; override with --space-file.
@@ -45,8 +45,32 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
         "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
         "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
-        "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
+        "target_update_freq": {
+            "type": "choice",
+            "values": TARGET_UPDATE_CHOICES,
+        },
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
+    },
+    "DQNRNDAgent": {
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
+        "rnd_learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
+        "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
+        "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
+        "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
+        "target_update_freq": {
+            "type": "choice",
+            "values": TARGET_UPDATE_CHOICES,
+        },
+        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
+        "intrinsic_reward_scale": {
+            "type": "log_uniform",
+            "min": 1e-3,
+            "max": 10.0,
+        },
+        "intrinsic_reward_clip": {
+            "type": "choice",
+            "values": [1.0, 5.0, 10.0, 20.0],
+        },
     },
     "NFQAgent": {
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
@@ -65,7 +89,10 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     "DQNRmaxAgent": {
         "known_threshold": {"type": "int", "min": 1, "max": 500},
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
-        "target_update_freq": {"type": "choice", "values": list([2**i for i in range(6, 16)])},
+        "target_update_freq": {
+            "type": "choice",
+            "values": TARGET_UPDATE_CHOICES,
+        },
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
     },
     "RMaxAgent": {
@@ -77,11 +104,27 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     #     "epsilon": {"type": "log_uniform", "min": 1e-5, "max": 20},
     # },
     "params": {
-        # "ReplayBuffer.buffer_size": {"type": "choice", "values": list([2**i for i in range(12, 18)])},
-        # "TrainingConfig.minibatch_size": {"type": "choice", "values": list([2**i for i in range(0, 12)])}, # minibatch must not be bigger than buffer size
-        # "TrainingConfig.update_frequency": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
-        # "TrainingConfig.num_minibatches": {"type": "choice", "values": list([2**i for i in range(0, 5)])},
-        # "TrainingConfig.warmup_steps": {"type": "choice", "values": list([2**i for i in range(0, 14)])},
+        # Example overrides:
+        # "ReplayBuffer.buffer_size": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(12, 18)],
+        # },
+        # "TrainingConfig.minibatch_size": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 12)],
+        # },
+        # "TrainingConfig.update_frequency": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 5)],
+        # },
+        # "TrainingConfig.num_minibatches": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 5)],
+        # },
+        # "TrainingConfig.warmup_steps": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 14)],
+        # },
     },
 }
 

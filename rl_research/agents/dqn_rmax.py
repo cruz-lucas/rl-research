@@ -1,37 +1,26 @@
 """Replay-based R-max + DQN agent."""
+
+from typing import Tuple
+
+import distrax
 import gin
 import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx, struct
-import distrax
-from typing import Tuple, NamedTuple
 
+from rl_research.agents._dqn_common import (
+    MLPNetwork,
+    clone_module,
+    hard_update_network,
+)
 from rl_research.buffers import Transition
 from rl_research.environments.navix import obs_to_index
 
 
-class Network(nnx.Module):
-    def __init__(self, in_features: int , out_features: int, rngs: nnx.Rngs, hidden_features: int = 64):
-        # self.in_layer = nnx.Linear(in_features=in_features, out_features=out_features, rngs=rngs)
-        
-        self.in_layer = nnx.Linear(in_features=in_features, out_features=hidden_features, rngs=rngs)
-        self.hidden_layer = nnx.Linear(in_features=hidden_features, out_features=hidden_features, rngs=rngs)
-        self.layernorm = nnx.LayerNorm(num_features=hidden_features, rngs=rngs)
-        self.out_layer = nnx.Linear(in_features=hidden_features, out_features=out_features, rngs=rngs)
-    
-    def __call__(self, x):
-        x = self.in_layer(x)
-        x = nnx.relu(x)
-        x = self.hidden_layer(x)
-        x = self.layernorm(x)
-        x = nnx.relu(x)
-        x = self.out_layer(x)
-        return x
-
-class DQNRmaxState(NamedTuple):
-    online_network: Network
-    target_network: Network
+class DQNRmaxState(struct.PyTreeNode):
+    online_network: MLPNetwork
+    target_network: MLPNetwork
     optimizer: nnx.Optimizer
     step: int
     gradient_steps: int
@@ -72,18 +61,20 @@ class DQNRmaxAgent:
 
     def initial_state(self) -> DQNRmaxState:
         rng = jax.random.PRNGKey(self.seed)
-        online_network = Network(
+        online_network = MLPNetwork(
             in_features=self.num_states,
             out_features=self.num_actions,
             rngs=nnx.Rngs(rng),
             hidden_features=self.hidden_units,
         )
-        graphdef, online_params = nnx.split(online_network)
-        target_network = nnx.merge(graphdef, online_params)
+        target_network = clone_module(online_network)
 
         optimizer = nnx.Optimizer(
             online_network,
-            optax.chain(optax.clip_by_global_norm(self.max_grad_norm), optax.adam(self.learning_rate)),
+            optax.chain(
+                optax.clip_by_global_norm(self.max_grad_norm),
+                optax.adam(self.learning_rate),
+            ),
             wrt=nnx.Param,
         )
 
@@ -98,46 +89,57 @@ class DQNRmaxAgent:
             gradient_steps=0,
         )
 
-    def select_action(self, state: DQNRmaxState, obs: jnp.ndarray, key: jax.Array, is_training: bool) -> Tuple[DQNRmaxState, jnp.ndarray]:
+    def select_action(
+        self, state: DQNRmaxState, obs: jnp.ndarray, key: jax.Array, is_training: bool
+    ) -> Tuple[DQNRmaxState, jnp.ndarray]:
         q_vals = state.online_network(obs.reshape(-1))
 
-        obs_ids = obs_to_index(obs.reshape(-1), grid_size=self.grid_size)
-        is_known = state.visit_counts[obs_ids] >= self.known_threshold
+        obs_id = jnp.squeeze(
+            obs_to_index(obs.reshape(-1), grid_size=self.grid_size), axis=0
+        )
+        is_known = state.visit_counts[obs_id] >= self.known_threshold
 
-        values = jnp.where(is_known, q_vals, self.optimistic_value)[0]
+        values = jnp.where(is_known, q_vals, self.optimistic_value)
 
         action = distrax.Greedy(values).sample(seed=key)
 
         if is_training:
-            state = state._replace(
-                step = state.step + 1,
-                visit_counts = state.visit_counts.at[obs_ids, action.astype(jnp.int32)].add(1)            
+            state = state.replace(
+                step=state.step + 1,
+                visit_counts=state.visit_counts.at[
+                    obs_id, action.astype(jnp.int32)
+                ].add(1),
             )
 
         return state, action
 
-    def update(self, state: DQNRmaxState, batch: Transition) -> tuple[DQNRmaxState, jax.Array]:
+    def update(
+        self, state: DQNRmaxState, batch: Transition
+    ) -> tuple[DQNRmaxState, jax.Array]:
         obs_ids = obs_to_index(batch.observation, grid_size=self.grid_size)
         next_obs_ids = obs_to_index(batch.next_observation, grid_size=self.grid_size)
+        action = batch.action.astype(jnp.int32)
+        terminal = batch.terminal.astype(jnp.float32)
 
-        known_mask = state.visit_counts[obs_ids, batch.action] >= self.known_threshold
+        known_mask = state.visit_counts[obs_ids, action] >= self.known_threshold
         known_mask_f = known_mask.astype(jnp.float32)
         denom = jnp.maximum(jnp.sum(known_mask_f), 1.0)
 
-        def loss_fn(network: Network):
+        def loss_fn(network: MLPNetwork):
             q_values = network(batch.observation)
-            q_sel = jnp.take_along_axis(q_values, batch.action[:, None], axis=1).squeeze()
+            q_sel = jnp.take_along_axis(q_values, action[:, None], axis=1).squeeze(-1)
 
             next_q = state.target_network(batch.next_observation)
-            
+
             max_next_q = jnp.where(
-                jnp.any(state.visit_counts[next_obs_ids, :] < self.known_threshold, axis=-1),
+                jnp.any(
+                    state.visit_counts[next_obs_ids, :] < self.known_threshold, axis=-1
+                ),
                 self.optimistic_value,
                 jnp.max(next_q, axis=1),
             )
 
-            target = batch.reward + self.discount * max_next_q * (1.0 - batch.terminal)
-            
+            target = batch.reward + batch.discount * max_next_q * (1.0 - terminal)
             per_sample_loss = (q_sel - jax.lax.stop_gradient(target)) ** 2
             masked_loss = per_sample_loss * known_mask_f
             mean_loss = jnp.sum(masked_loss) / denom
@@ -146,24 +148,23 @@ class DQNRmaxAgent:
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)
         state.optimizer.update(state.online_network, grads)
 
-        _, online_params = nnx.split(state.online_network)
-        _, target_params = nnx.split(state.target_network)
-
-        state = state._replace(
-            gradient_steps=state.gradient_steps + 1
-        )
+        state = state.replace(gradient_steps=state.gradient_steps + 1)
 
         should_update = state.gradient_steps % self.target_update_freq == 0
-        new_target_params = jax.tree.map(
-            lambda o, t: jnp.where(should_update, o, t),
-            online_params,
-            target_params,
+        hard_update_network(
+            source=state.online_network,
+            target=state.target_network,
+            should_update=should_update,
         )
-
-        nnx.update(state.target_network, new_target_params)
 
         return state, loss
 
-    def bootstrap_value(self, state: DQNRmaxState, next_observation: jnp.ndarray) -> jax.Array:
-        # TODO: implement this properly.
-        return jnp.array(0.0)
+    def bootstrap_value(
+        self, state: DQNRmaxState, next_observation: jnp.ndarray
+    ) -> jax.Array:
+        obs_id = jnp.squeeze(
+            obs_to_index(next_observation.reshape(-1), grid_size=self.grid_size), axis=0
+        )
+        q_vals = state.target_network(next_observation.reshape(1, -1)).squeeze(0)
+        has_unknown_action = jnp.any(state.visit_counts[obs_id] < self.known_threshold)
+        return jnp.where(has_unknown_action, self.optimistic_value, jnp.max(q_vals))
