@@ -1,5 +1,5 @@
 setup_mlflow.experiment_name = "riverswim"
-setup_mlflow.experiment_group = "ratio50_capacity5000"
+setup_mlflow.experiment_group = "ratio16_capacity5000"
 
 run_loop.agent_cls = @QLearningAgent
 run_loop.env_cls = @RiverSwimJaxEnv
@@ -7,7 +7,7 @@ run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 5000
 
 QLearningAgent.discount = 0.95
-QLearningAgent.step_size = 0.01291
+QLearningAgent.step_size = 0.013513
 QLearningAgent.initial_q_value = 200_000
 
 QLearningAgent.initial_epsilon = 0.0
@@ -26,7 +26,7 @@ TrainingConfig.train_steps = 5_000
 TrainingConfig.max_episode_steps = 5_000
 TrainingConfig.minibatch_size = 64
 TrainingConfig.update_frequency = 1
-TrainingConfig.num_minibatches = 50
+TrainingConfig.num_minibatches = 16
 TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
