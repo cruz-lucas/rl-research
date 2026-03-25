@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Sample hyperparameters and submit one sbatch array per combination.
+Sample hyperparameters and either submit Slurm arrays or generate local commands.
 
-Each array runs over seeds (0..seeds-1); bindings and config are forwarded to
-scripts/job.sh, which forwards them to rl_research.main.
+Each combination runs over seeds (0..seeds-1). In `sbatch` mode, bindings and
+config are forwarded to `scripts/single_seed_job.sh`. In `shell` mode, the
+script writes a bash launcher you can run inside an interactive allocation.
 """
 
 from __future__ import annotations
@@ -11,10 +12,11 @@ from __future__ import annotations
 import json
 import math
 import random
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Sequence
+from typing import Annotated, Any, Dict, List, Literal, Sequence
 
 import gin
 import tyro
@@ -131,7 +133,7 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
 
 @dataclass
 class Args:
-    """Arguments for submitting sbatch arrays for sampled hyperparameter combos."""
+    """Arguments for sampling hyperparameter combinations."""
 
     config: Annotated[
         Path,
@@ -142,7 +144,7 @@ class Args:
     ] = 50
     seeds: Annotated[
         int,
-        tyro.conf.arg(help="Number of seeds per combination (drives --array size)."),
+        tyro.conf.arg(help="Number of seeds per combination."),
     ] = 20
     space_file: Annotated[
         Path | None,
@@ -156,6 +158,15 @@ class Args:
     group_prefix: Annotated[
         str, tyro.conf.arg(help="Prefix for MLflow experiment_group binding.")
     ] = "sweep"
+    mode: Annotated[
+        Literal["sbatch", "shell"],
+        tyro.conf.arg(
+            help=(
+                "Execution mode: submit Slurm arrays with `sbatch`, or generate a "
+                "bash launcher for an interactive allocation."
+            )
+        ),
+    ] = "sbatch"
     job_script: Annotated[
         Path,
         tyro.conf.arg(help="Path to the sbatch script that calls rl_research.main."),
@@ -166,6 +177,21 @@ class Args:
     dry_run: Annotated[
         bool, tyro.conf.arg(help="Print sbatch commands without submitting.")
     ] = False
+    shell_script: Annotated[
+        Path | None,
+        tyro.conf.arg(
+            help=(
+                "Output path for the generated launcher when --mode shell. "
+                "Defaults to scripts/generated_sweep.sh."
+            )
+        ),
+    ] = None
+    shell_parallelism: Annotated[
+        int,
+        tyro.conf.arg(
+            help="Max concurrent runs in the generated launcher when --mode shell."
+        ),
+    ] = 1
 
 
 def _format_value(val: Any) -> str:
@@ -219,6 +245,30 @@ def sample_bindings(
     return bindings
 
 
+def build_group_name(group_prefix: str, combo_idx: int) -> str:
+    return f"{group_prefix}_c{combo_idx}"
+
+
+def build_sbatch_cmd(
+    combo_idx: int,
+    bindings: Sequence[str],
+    seeds: int,
+    config: Path,
+    group_prefix: str,
+    job_script: Path,
+    sbatch_opts: Sequence[str],
+) -> List[str]:
+    group_name = build_group_name(group_prefix, combo_idx)
+    array_flag = f"--array=0-{seeds - 1}"
+    cmd: List[str] = ["sbatch", array_flag]
+    cmd.extend(sbatch_opts)
+    cmd.append(str(job_script))
+    cmd.append(str(config))
+    cmd.extend(bindings)
+    cmd.append(f"setup_mlflow.experiment_group={_format_value(group_name)}")
+    return cmd
+
+
 def submit_combo(
     combo_idx: int,
     bindings: Sequence[str],
@@ -229,24 +279,98 @@ def submit_combo(
     sbatch_opts: Sequence[str],
     dry_run: bool,
 ) -> None:
-    group_name = f"{group_prefix}_c{combo_idx}"
-    array_flag = f"--array=0-{seeds - 1}"
-    cmd: List[str] = ["sbatch", array_flag]
-    cmd.extend(sbatch_opts)
-    cmd.append(str(job_script))
-    cmd.append(str(config))
-    cmd.extend(bindings)
-    cmd.append(f"setup_mlflow.experiment_group={_format_value(group_name)}")
-
-    print(" ".join(cmd))
+    cmd = build_sbatch_cmd(
+        combo_idx=combo_idx,
+        bindings=bindings,
+        seeds=seeds,
+        config=config,
+        group_prefix=group_prefix,
+        job_script=job_script,
+        sbatch_opts=sbatch_opts,
+    )
+    print(shlex.join(cmd))
     if not dry_run:
         subprocess.run(cmd, check=True)
+
+
+def build_local_cmd(
+    combo_idx: int,
+    seed: int,
+    bindings: Sequence[str],
+    config: Path,
+    group_prefix: str,
+) -> List[str]:
+    group_name = build_group_name(group_prefix, combo_idx)
+    cmd: List[str] = [
+        "uv",
+        "run",
+        "--active",
+        "--offline",
+        "python",
+        "-m",
+        "rl_research.main",
+        "--config",
+        str(config),
+        "--seed",
+        str(seed),
+    ]
+    for binding in bindings:
+        cmd.extend(["--binding", binding])
+    cmd.extend(
+        ["--binding", f"setup_mlflow.experiment_group={_format_value(group_name)}"]
+    )
+    return cmd
+
+
+def write_shell_script(
+    shell_script: Path,
+    commands: Sequence[Sequence[str]],
+    parallelism: int,
+) -> None:
+    if parallelism < 1:
+        raise ValueError("--shell-parallelism must be >= 1")
+
+    lines = [
+        "#!/bin/bash",
+        "set -euo pipefail",
+        "",
+        f"cd {shlex.quote(str(Path.cwd().resolve()))}",
+        "",
+        f"parallelism={parallelism}",
+        "",
+    ]
+
+    if parallelism == 1:
+        for cmd in commands:
+            lines.append(shlex.join(list(cmd)))
+    else:
+        lines.extend(["active_jobs=0", ""])
+        for cmd in commands:
+            lines.append(f"{shlex.join(list(cmd))} &")
+            lines.extend(
+                [
+                    "((active_jobs+=1))",
+                    "if (( active_jobs >= parallelism )); then",
+                    "  wait -n",
+                    "  ((active_jobs-=1))",
+                    "fi",
+                    "",
+                ]
+            )
+        lines.append("wait")
+
+    shell_script.parent.mkdir(parents=True, exist_ok=True)
+    shell_script.write_text("\n".join(lines) + "\n")
+    shell_script.chmod(0o755)
 
 
 def infer_algorithm_from_config(config_path: Path) -> str:
     """Return the agent class name configured in the gin file."""
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    # Import the experiment entrypoint so Gin registers `run_loop` and friends.
+    import rl_research.main  # noqa: F401
 
     gin.clear_config()
     gin.parse_config_files_and_bindings(
@@ -284,21 +408,47 @@ def main(args: Args) -> None:
 
     combos = sample_bindings(space, algorithm, args.samples, rng)
 
-    print(
-        f"# Submitting {len(combos)} combos for {algorithm} with "
-        f"{args.seeds} seeds each"
-    )
-    for idx, combo in enumerate(combos):
-        submit_combo(
-            combo_idx=idx,
-            bindings=combo,
-            seeds=args.seeds,
-            config=args.config,
-            group_prefix=args.group_prefix,
-            job_script=args.job_script,
-            sbatch_opts=args.sbatch_opt,
-            dry_run=args.dry_run,
+    if args.mode == "sbatch":
+        print(
+            f"# Submitting {len(combos)} combos for {algorithm} with "
+            f"{args.seeds} seeds each"
         )
+        for idx, combo in enumerate(combos):
+            submit_combo(
+                combo_idx=idx,
+                bindings=combo,
+                seeds=args.seeds,
+                config=args.config,
+                group_prefix=args.group_prefix,
+                job_script=args.job_script,
+                sbatch_opts=args.sbatch_opt,
+                dry_run=args.dry_run,
+            )
+        return
+
+    shell_script = args.shell_script or Path("scripts/generated_sweep.sh")
+    local_commands: List[List[str]] = []
+    for idx, combo in enumerate(combos):
+        for seed in range(args.seeds):
+            local_commands.append(
+                build_local_cmd(
+                    combo_idx=idx,
+                    seed=seed,
+                    bindings=combo,
+                    config=args.config,
+                    group_prefix=args.group_prefix,
+                )
+            )
+
+    write_shell_script(
+        shell_script=shell_script,
+        commands=local_commands,
+        parallelism=args.shell_parallelism,
+    )
+    print(
+        f"# Wrote {len(local_commands)} commands for {algorithm} "
+        f"to {shell_script} (parallelism={args.shell_parallelism})"
+    )
 
 
 if __name__ == "__main__":
