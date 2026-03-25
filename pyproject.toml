@@ -18,7 +18,6 @@ dependencies = [
     "nbformat==5.10.4",
     "tyro==0.9.35",
     "seaborn==0.13.2",
-    "dopamine-rl @ git+https://github.com/google/dopamine@bec5f4e108b0572e58fc1af73136e978237c8463",
     "navix @ git+https://github.com/epignatelli/navix@7c438e939dadcfde973f3fbc6869cfacc2bd6235",
     "jax==0.9.0.1",
     "optax==0.2.6",
@@ -26,7 +25,6 @@ dependencies = [
     "jaxlib==0.9.0.1",
     "distrax==0.1.7",
     "classic-pacmdp-envs @ git+https://github.com/cruz-lucas/classic_pacmdp_envs.git#e2e2d1125f940502427c80970b55e13b90e7d28d",
-    "tensorflow-probability>=0.25.0",
 ]
 
 [project.optional-dependencies]
