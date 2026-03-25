@@ -61,9 +61,9 @@ Notes:
 ### Utilities
 - `scripts/plot_agent_states.py` – Visualize tabular agent tensors from an MLflow run (supports PDF export).
 - `scripts/play_goright.py` – Interactive GoRight viewer (requires `--extra pygame`).
-- `scripts/submit_sweep.py` – Sample hyperparameters and submit Slurm arrays (wraps `scripts/job.sh`).
+- `scripts/submit_sweep.py` – Sample hyperparameters and either submit Slurm arrays or generate a bash launcher for an interactive allocation.
 - `scripts/migrate_mlflow_store.py` – Migrate file-backed MLflow runs into SQLite.
-- `scripts/job.sh` – Slurm job wrapper that executes `uv run python -m rl_research.main ...`.
+- `scripts/single_seed_job.sh` – Slurm job wrapper that executes `uv run python -m rl_research.main ...`.
 
 ## Development
 - Lint/format: `uv run ruff check .`
