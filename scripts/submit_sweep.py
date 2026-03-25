@@ -314,11 +314,13 @@ def build_local_cmd(
         "--seed",
         str(seed),
     ]
-    for binding in bindings:
-        cmd.extend(["--binding", binding])
+
     cmd.extend(
         ["--binding", f"setup_mlflow.experiment_group={_format_value(group_name)}"]
     )
+    for binding in bindings:
+        cmd.extend([binding])
+    
     return cmd
 
 
