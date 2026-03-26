@@ -56,6 +56,8 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
             "values": TARGET_UPDATE_CHOICES,
         },
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
+        "normalize_observations": {"type": "choice", "values": [False, True]},
+        "obs_normalization_clip": {"type": "int", "min": 3, "max": 10},
     },
     "DQNRNDAgent": {
         "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
@@ -68,6 +70,8 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
             "values": TARGET_UPDATE_CHOICES,
         },
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
+        "normalize_observations": {"type": "choice", "values": [False, True]},
+        "obs_normalization_clip": {"type": "int", "min": 3, "max": 10},
         "intrinsic_reward_scale": {
             "type": "log_uniform",
             "min": 1e-3,
@@ -565,7 +569,7 @@ def build_packed_sbatch_script(
     lines = [
         "#!/bin/bash",
         f"#SBATCH --job-name={job_name}",
-        "#SBATCH --account=aip-machado",
+        "#SBATCH --account=def-machado",
         f"#SBATCH --time={format_sbatch_time(time_limit_minutes)}",
         "#SBATCH --cpus-per-task=1",
         "#SBATCH --mem=16G",
