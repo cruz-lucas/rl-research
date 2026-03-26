@@ -258,9 +258,10 @@ class FixedGridDoorKey(nx.environments.DoorKey):
 
 @gin.configurable
 class NavixWrapper(BaseJaxEnv):
-    def __init__(self, env_id: str):
+    def __init__(self, env_id: str, max_steps: int = 100):
         self.env = nx.make(
             env_id,
+            max_steps=max_steps
         )
 
     def reset(self, key: Array):

@@ -20,11 +20,12 @@ DQNAgent.obs_normalization_epsilon = 1e-8
 DQNAgent.obs_normalization_clip = 5.0
 
 NavixWrapper.env_id = "Navix-DoorKey-8x8-v0"
+NavixWrapper.max_steps = 256
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
-TrainingConfig.max_episode_steps = 100
+TrainingConfig.max_episode_steps = 256
 TrainingConfig.minibatch_size = 2048
 TrainingConfig.update_frequency = 4
 TrainingConfig.num_minibatches = 1
