@@ -9,9 +9,13 @@ from flax import nnx, struct
 
 from rl_research.agents._dqn_common import (
     MLPNetwork,
+    ObservationNormalizerState,
     clone_module,
     hard_update_network,
+    init_observation_normalizer,
     linear_epsilon,
+    normalize_observation,
+    update_observation_normalizer,
 )
 from rl_research.buffers import Transition
 
@@ -23,6 +27,7 @@ class DQNRNDState(struct.PyTreeNode):
     rnd_target_network: MLPNetwork
     rnd_predictor_network: MLPNetwork
     rnd_optimizer: nnx.Optimizer
+    obs_normalizer: ObservationNormalizerState
     intrinsic_reward_mean: jax.Array
     intrinsic_reward_var: jax.Array
     step: int
@@ -50,6 +55,10 @@ class DQNRNDAgent:
         rnd_hidden_units: int | None = None,
         rnd_output_dim: int = 64,
         rnd_learning_rate: float | None = None,
+        rnd_include_action: bool = False,
+        normalize_observations: bool = False,
+        obs_normalization_epsilon: float = 1e-8,
+        obs_normalization_clip: float | None = 5.0,
         seed: int = 0,
     ):
         self.num_states = int(num_states)
@@ -75,11 +84,18 @@ class DQNRNDAgent:
             if rnd_learning_rate is None
             else float(rnd_learning_rate)
         )
+        self.rnd_include_action = bool(rnd_include_action)
+        self.normalize_observations = bool(normalize_observations)
+        self.obs_normalization_epsilon = float(obs_normalization_epsilon)
+        self.obs_normalization_clip = obs_normalization_clip
         self.seed = int(seed)
 
     def initial_state(self) -> DQNRNDState:
         rng = jax.random.PRNGKey(self.seed)
         q_rng, rnd_target_rng, rnd_predictor_rng = jax.random.split(rng, 3)
+        rnd_input_dim = self.num_states + (
+            self.num_actions if self.rnd_include_action else 0
+        )
 
         online_network = MLPNetwork(
             in_features=self.num_states,
@@ -98,13 +114,13 @@ class DQNRNDAgent:
         )
 
         rnd_target_network = MLPNetwork(
-            in_features=self.num_states,
+            in_features=rnd_input_dim,
             out_features=self.rnd_output_dim,
             rngs=nnx.Rngs(rnd_target_rng),
             hidden_features=self.rnd_hidden_units,
         )
         rnd_predictor_network = MLPNetwork(
-            in_features=self.num_states,
+            in_features=rnd_input_dim,
             out_features=self.rnd_output_dim,
             rngs=nnx.Rngs(rnd_predictor_rng),
             hidden_features=self.rnd_hidden_units,
@@ -125,11 +141,59 @@ class DQNRNDAgent:
             rnd_target_network=rnd_target_network,
             rnd_predictor_network=rnd_predictor_network,
             rnd_optimizer=rnd_optimizer,
+            obs_normalizer=init_observation_normalizer(self.num_states),
             intrinsic_reward_mean=jnp.asarray(0.0, dtype=jnp.float32),
             intrinsic_reward_var=jnp.asarray(1.0, dtype=jnp.float32),
             step=0,
             gradient_steps=0,
         )
+
+    def _maybe_update_obs_normalizer(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+    ) -> DQNRNDState:
+        if not self.normalize_observations:
+            return state
+        return state.replace(
+            obs_normalizer=update_observation_normalizer(
+                state.obs_normalizer, observation
+            )
+        )
+
+    def _normalize_observation(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+    ) -> jax.Array:
+        if not self.normalize_observations:
+            return jnp.asarray(observation, dtype=jnp.float32)
+        return normalize_observation(
+            observation,
+            state.obs_normalizer,
+            epsilon=self.obs_normalization_epsilon,
+            clip=self.obs_normalization_clip,
+        )
+
+    def _build_rnd_input(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+        action: jnp.ndarray | None = None,
+    ) -> jax.Array:
+        observation = self._normalize_observation(state, observation)
+        if not self.rnd_include_action:
+            return observation
+
+        if action is None:
+            raise ValueError("Action-conditioned RND requires an action input.")
+
+        action_features = jax.nn.one_hot(
+            action.astype(jnp.int32),
+            self.num_actions,
+            dtype=jnp.float32,
+        )
+        return jnp.concatenate((observation, action_features), axis=-1)
 
     def select_action(
         self,
@@ -138,6 +202,10 @@ class DQNRNDAgent:
         key: jax.Array,
         is_training: bool,
     ) -> Tuple[DQNRNDState, jnp.ndarray]:
+        if is_training:
+            state = self._maybe_update_obs_normalizer(state, obs.reshape(-1))
+
+        obs = self._normalize_observation(state, obs.reshape(-1))
         q_vals = state.online_network(obs.reshape(-1))
 
         if is_training:
@@ -199,11 +267,18 @@ class DQNRNDAgent:
     ) -> tuple[DQNRNDState, jax.Array]:
         action = batch.action.astype(jnp.int32)
         terminal = batch.terminal.astype(jnp.float32)
+        observation = self._normalize_observation(state, batch.observation)
+        next_observation = self._normalize_observation(state, batch.next_observation)
+        rnd_input = (
+            self._build_rnd_input(state, batch.observation, action)
+            if self.rnd_include_action
+            else next_observation
+        )
 
         rnd_target_features = jax.lax.stop_gradient(
-            state.rnd_target_network(batch.next_observation)
+            state.rnd_target_network(rnd_input)
         )
-        rnd_predictor_features = state.rnd_predictor_network(batch.next_observation)
+        rnd_predictor_features = state.rnd_predictor_network(rnd_input)
         prediction_error = jnp.mean(
             jnp.square(rnd_predictor_features - rnd_target_features),
             axis=-1,
@@ -218,10 +293,10 @@ class DQNRNDAgent:
         )
 
         def q_loss_fn(network: MLPNetwork):
-            q_values = network(batch.observation)
+            q_values = network(observation)
             q_sel = jnp.take_along_axis(q_values, action[:, None], axis=1).squeeze(-1)
 
-            next_q = state.target_network(batch.next_observation)
+            next_q = state.target_network(next_observation)
             max_next_q = jnp.max(next_q, axis=1)
 
             target = total_reward + batch.discount * max_next_q * (1.0 - terminal)
@@ -231,7 +306,7 @@ class DQNRNDAgent:
         state.optimizer.update(state.online_network, q_grads)
 
         def rnd_loss_fn(network: MLPNetwork):
-            predictor_features = network(batch.next_observation)
+            predictor_features = network(rnd_input)
             return jnp.mean(jnp.square(predictor_features - rnd_target_features))
 
         rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
@@ -257,5 +332,8 @@ class DQNRNDAgent:
         state: DQNRNDState,
         next_observation: jnp.ndarray,
     ) -> jax.Array:
+        next_observation = self._normalize_observation(
+            state, next_observation.reshape(1, -1)
+        )
         q_vals = state.target_network(next_observation.reshape(1, -1))
         return jnp.max(q_vals, axis=-1).squeeze()

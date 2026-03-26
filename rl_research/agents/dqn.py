@@ -9,9 +9,13 @@ from flax import nnx, struct
 
 from rl_research.agents._dqn_common import (
     MLPNetwork,
+    ObservationNormalizerState,
     clone_module,
     hard_update_network,
+    init_observation_normalizer,
     linear_epsilon,
+    normalize_observation,
+    update_observation_normalizer,
 )
 from rl_research.buffers import Transition
 
@@ -20,6 +24,7 @@ class DQNState(struct.PyTreeNode):
     online_network: MLPNetwork
     target_network: MLPNetwork
     optimizer: nnx.Optimizer
+    obs_normalizer: ObservationNormalizerState
     step: int
     gradient_steps: int
 
@@ -38,18 +43,24 @@ class DQNAgent:
         eps_decay_steps: int = 100_000,
         target_update_freq: int = 1000,
         max_grad_norm: float = 1.0,
+        normalize_observations: bool = False,
+        obs_normalization_epsilon: float = 1e-8,
+        obs_normalization_clip: float | None = 5.0,
         seed: int = 0,
     ):
         self.num_states = int(num_states)
         self.num_actions = int(num_actions)
-        self.hidden_units = hidden_units
-        self.learning_rate = learning_rate
-        self.discount = discount
-        self.eps_start = eps_start
-        self.eps_end = eps_end
-        self.eps_decay_steps = eps_decay_steps
+        self.hidden_units = int(hidden_units)
+        self.learning_rate = float(learning_rate)
+        self.discount = float(discount)
+        self.eps_start = float(eps_start)
+        self.eps_end = float(eps_end)
+        self.eps_decay_steps = int(eps_decay_steps)
         self.target_update_freq = int(target_update_freq)
-        self.max_grad_norm = max_grad_norm
+        self.max_grad_norm = float(max_grad_norm)
+        self.normalize_observations = bool(normalize_observations)
+        self.obs_normalization_epsilon = float(obs_normalization_epsilon)
+        self.obs_normalization_clip = obs_normalization_clip
         self.seed = int(seed)
 
     def initial_state(self) -> DQNState:
@@ -74,13 +85,45 @@ class DQNAgent:
             online_network=online_network,
             target_network=target_network,
             optimizer=optimizer,
+            obs_normalizer=init_observation_normalizer(self.num_states),
             step=0,
             gradient_steps=0,
+        )
+
+    def _maybe_update_obs_normalizer(
+        self,
+        state: DQNState,
+        observation: jnp.ndarray,
+    ) -> DQNState:
+        if not self.normalize_observations:
+            return state
+        return state.replace(
+            obs_normalizer=update_observation_normalizer(
+                state.obs_normalizer, observation
+            )
+        )
+
+    def _normalize_observation(
+        self,
+        state: DQNState,
+        observation: jnp.ndarray,
+    ) -> jax.Array:
+        if not self.normalize_observations:
+            return jnp.asarray(observation, dtype=jnp.float32)
+        return normalize_observation(
+            observation,
+            state.obs_normalizer,
+            epsilon=self.obs_normalization_epsilon,
+            clip=self.obs_normalization_clip,
         )
 
     def select_action(
         self, state: DQNState, obs: jnp.ndarray, key: jax.Array, is_training: bool
     ) -> Tuple[DQNState, jnp.ndarray]:
+        if is_training:
+            state = self._maybe_update_obs_normalizer(state, obs.reshape(-1))
+
+        obs = self._normalize_observation(state, obs.reshape(-1))
         q_vals = state.online_network(obs.reshape(-1))
 
         if is_training:
@@ -101,12 +144,14 @@ class DQNAgent:
     def update(self, state: DQNState, batch: Transition) -> tuple[DQNState, jax.Array]:
         action = batch.action.astype(jnp.int32)
         terminal = batch.terminal.astype(jnp.float32)
+        observation = self._normalize_observation(state, batch.observation)
+        next_observation = self._normalize_observation(state, batch.next_observation)
 
         def loss_fn(network: MLPNetwork):
-            q_values = network(batch.observation)
+            q_values = network(observation)
             q_sel = jnp.take_along_axis(q_values, action[:, None], axis=1).squeeze(-1)
 
-            next_q = state.target_network(batch.next_observation)
+            next_q = state.target_network(next_observation)
             max_next_q = jnp.max(next_q, axis=1)
 
             target = batch.reward + batch.discount * max_next_q * (1.0 - terminal)
@@ -130,5 +175,8 @@ class DQNAgent:
     def bootstrap_value(
         self, state: DQNState, next_observation: jnp.ndarray
     ) -> jax.Array:
+        next_observation = self._normalize_observation(
+            state, next_observation.reshape(1, -1)
+        )
         q_vals = state.target_network(next_observation.reshape(1, -1))
         return jnp.max(q_vals, axis=-1).squeeze()
