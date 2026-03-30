@@ -1,20 +1,20 @@
-setup_mlflow.experiment_name = "navix_doorkey_8x8"
-setup_mlflow.experiment_group = "dqn_rnd"
+setup_mlflow.experiment_name = "navix_doorkey_16x16_layout1"
+setup_mlflow.experiment_group = "dqn_rnd_withaction"
 
 run_loop.agent_cls = @DQNRNDAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 131072
-ReplayBuffer.obs_shape = (8, 8, 3)
+ReplayBuffer.buffer_size = 8192
+ReplayBuffer.obs_shape = (16, 16, 3)
 
 DQNRNDAgent.discount = 0.99
-DQNRNDAgent.learning_rate = 3e-06
-DQNRNDAgent.rnd_learning_rate = 3e-06
-DQNRNDAgent.eps_start = 0.9
-DQNRNDAgent.eps_end = 0.01
-DQNRNDAgent.eps_decay_steps = 120000
-DQNRNDAgent.target_update_freq = 1024
-DQNRNDAgent.max_grad_norm = 0.9
+DQNRNDAgent.learning_rate = 2.9e-5
+DQNRNDAgent.rnd_learning_rate = 2.9e-5
+DQNRNDAgent.eps_start = 0.8
+DQNRNDAgent.eps_end = 0.1
+DQNRNDAgent.eps_decay_steps = 340_000
+DQNRNDAgent.target_update_freq = 2048
+DQNRNDAgent.max_grad_norm = 2.4
 DQNRNDAgent.intrinsic_reward_scale = 0.1
 DQNRNDAgent.intrinsic_stats_decay = 0.99
 DQNRNDAgent.intrinsic_reward_clip = 10.0
@@ -27,17 +27,16 @@ DQNRNDAgent.normalize_observations = True
 DQNRNDAgent.obs_normalization_epsilon = 1e-8
 DQNRNDAgent.obs_normalization_clip = 5.0
 
-NavixWrapper.env_id = "Navix-DoorKey-8x8-v0"
-NavixWrapper.max_steps = 256
+NavixWrapper.env_id = "GridDoorKey-16x16-layout1-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
-TrainingConfig.max_episode_steps = 256
-TrainingConfig.minibatch_size = 2048
-TrainingConfig.update_frequency = 4
+TrainingConfig.max_episode_steps = 1024
+TrainingConfig.minibatch_size = 256
+TrainingConfig.update_frequency = 1
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 4096
+TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None

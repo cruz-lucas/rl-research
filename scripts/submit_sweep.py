@@ -115,26 +115,26 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
     # },
     "params": {
         # Example overrides:
-        # "ReplayBuffer.buffer_size": {
-        #     "type": "choice",
-        #     "values": [2**i for i in range(12, 18)],
-        # },
-        # "TrainingConfig.minibatch_size": {
-        #     "type": "choice",
-        #     "values": [2**i for i in range(0, 12)],
-        # },
-        # "TrainingConfig.update_frequency": {
-        #     "type": "choice",
-        #     "values": [2**i for i in range(0, 5)],
-        # },
-        # "TrainingConfig.num_minibatches": {
-        #     "type": "choice",
-        #     "values": [2**i for i in range(0, 5)],
-        # },
-        # "TrainingConfig.warmup_steps": {
-        #     "type": "choice",
-        #     "values": [2**i for i in range(0, 14)],
-        # },
+        "ReplayBuffer.buffer_size": {
+            "type": "choice",
+            "values": [2**i for i in range(12, 18)],
+        },
+        "TrainingConfig.minibatch_size": {
+            "type": "choice",
+            "values": [2**i for i in range(0, 12)],
+        },
+        "TrainingConfig.update_frequency": {
+            "type": "choice",
+            "values": [2**i for i in range(0, 5)],
+        },
+        "TrainingConfig.num_minibatches": {
+            "type": "choice",
+            "values": [1],#[2**i for i in range(0, 5)],
+        },
+        "TrainingConfig.warmup_steps": {
+            "type": "choice",
+            "values": [2**i for i in range(0, 14)],
+        },
     },
 }
 
@@ -154,11 +154,11 @@ class Args:
     ] = None
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 2
+    ] = 100
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination."),
-    ] = 2
+    ] = 5
     space_file: Annotated[
         Path | None,
         tyro.conf.arg(
@@ -571,8 +571,8 @@ def build_packed_sbatch_script(
         f"#SBATCH --job-name={job_name}",
         "#SBATCH --account=def-machado",
         f"#SBATCH --time={format_sbatch_time(time_limit_minutes)}",
-        "#SBATCH --cpus-per-task=1",
-        "#SBATCH --mem=16G",
+        "#SBATCH --cpus-per-task=2",
+        "#SBATCH --mem=8G",
         f"#SBATCH --output={log_out}",
         f"#SBATCH --error={log_err}",
         "",
