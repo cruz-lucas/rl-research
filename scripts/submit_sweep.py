@@ -75,11 +75,11 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "intrinsic_reward_scale": {
             "type": "log_uniform",
             "min": 1e-3,
-            "max": 10.0,
+            "max": 50.0,
         },
         "intrinsic_reward_clip": {
             "type": "choice",
-            "values": [1.0, 5.0, 10.0, 20.0],
+            "values": [1.0, 5.0, 10.0, 50.0],
         },
     },
     "NFQAgent": {
