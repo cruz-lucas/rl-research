@@ -26,8 +26,6 @@ if [ -n "${PROGRESS_FILE}" ]; then
   echo "Progress File: ${PROGRESS_FILE}"
 fi
 
-export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-$SCRATCH/navix_best}"
-
 cmd=(python scripts/run_packed_job.py "$MANIFEST_PATH")
 if [ -n "${PROGRESS_FILE}" ]; then
   cmd+=(--progress-file "$PROGRESS_FILE")

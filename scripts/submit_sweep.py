@@ -154,7 +154,7 @@ class Args:
     ] = None
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 100
+    ] = 200
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination."),
@@ -561,6 +561,7 @@ def build_packed_sbatch_script(
     progress_file: Path,
     log_out: Path,
     log_err: Path,
+    mlruns_dir: Path,
     batch_name: str,
     job_index: int,
     time_limit_minutes: int,
@@ -572,11 +573,13 @@ def build_packed_sbatch_script(
         "#SBATCH --account=def-machado",
         f"#SBATCH --time={format_sbatch_time(time_limit_minutes)}",
         "#SBATCH --cpus-per-task=2",
-        "#SBATCH --mem=8G",
+        "#SBATCH --mem=2G",
         f"#SBATCH --output={log_out}",
         f"#SBATCH --error={log_err}",
         "",
         "set -euo pipefail",
+        "",
+        f"export MLFLOW_TRACKING_URI=\"${{MLFLOW_TRACKING_URI:-{mlruns_dir}}}\"",
         "",
         f"cd {shlex.quote(str(repo_root))}",
         "",
@@ -665,11 +668,13 @@ def create_packed_batch(
     jobs_dir = batch_dir / "jobs"
     progress_dir = batch_dir / "progress"
     logs_dir = batch_dir / "logs"
+    mlruns_dir = batch_dir / "mlruns"
     batch_dir.mkdir(parents=True, exist_ok=False)
     manifests_dir.mkdir()
     jobs_dir.mkdir()
     progress_dir.mkdir()
     logs_dir.mkdir()
+    mlruns_dir.mkdir()
 
     if args.estimated_run_minutes is None:
         raise ValueError("--estimated-run-minutes is required for --mode packed_sbatch")
@@ -714,6 +719,7 @@ def create_packed_batch(
                 progress_file=progress_file,
                 log_out=log_out,
                 log_err=log_err,
+                mlruns_dir=mlruns_dir,
                 batch_name=batch_name,
                 job_index=job_index,
                 time_limit_minutes=args.time_limit_minutes,
