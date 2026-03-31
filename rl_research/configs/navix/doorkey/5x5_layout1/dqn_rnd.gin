@@ -19,7 +19,7 @@ DQNRNDAgent.intrinsic_reward_scale = 0.1
 DQNRNDAgent.intrinsic_stats_decay = 0.99
 DQNRNDAgent.intrinsic_reward_clip = 10.0
 
-DQNRNDAgent.rnd_output_dim = 64
+DQNRNDAgent.rnd_output_dim = 1
 DQNRNDAgent.rnd_hidden_units = 64
 DQNRNDAgent.rnd_include_action = False
 
@@ -35,7 +35,7 @@ TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
 TrainingConfig.minibatch_size = 2048
 TrainingConfig.update_frequency = 4
-TrainingConfig.num_minibatches = 2
+TrainingConfig.num_minibatches = 1
 TrainingConfig.warmup_steps = 4096
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0

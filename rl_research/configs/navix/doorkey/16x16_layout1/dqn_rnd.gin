@@ -19,7 +19,7 @@ DQNRNDAgent.intrinsic_reward_scale = 0.1
 DQNRNDAgent.intrinsic_stats_decay = 0.99
 DQNRNDAgent.intrinsic_reward_clip = 10.0
 
-DQNRNDAgent.rnd_output_dim = 64
+DQNRNDAgent.rnd_output_dim = 1
 DQNRNDAgent.rnd_hidden_units = 64
 DQNRNDAgent.rnd_include_action = False
 
