@@ -39,16 +39,19 @@ fi
 mkdir -p "$LOCAL_DIR"
 
 RSYNC_OPTS=(
-  -zavh
-  --progress
+  -avh
   --partial
   --no-perms
   --no-owner
-  --no-group
+  --whole-file
+  --info=progress2
 )
 
-# rsync will prompt for password + OTP via SSH.
-SSH_CMD=("ssh" "-o" "StrictHostKeyChecking=accept-new")
+SSH_CMD=(
+  ssh
+  -o StrictHostKeyChecking=accept-new
+  -c aes128-gcm@openssh.com
+)
 
-echo "Syncing mlruns from $REMOTE_HOST:${REMOTE_DIR%/}/ -> $LOCAL_DIR/"
-rsync "${RSYNC_OPTS[@]}" -e "${SSH_CMD[*]}" "$REMOTE_HOST:${REMOTE_DIR%/}/" "$LOCAL_DIR/"
+rsync "${RSYNC_OPTS[@]}" -e "${SSH_CMD[*]}" \
+  "$REMOTE_HOST:${REMOTE_DIR%/}/" "$LOCAL_DIR/"
