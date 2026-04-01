@@ -102,7 +102,7 @@ def build_run_command(task: dict[str, Any]) -> list[str]:
 
     bindings = task.get("bindings", None)
     if bindings is not None:
-        bindings.append("--binding")
+        cmd.append("--binding")
         cmd.extend(str(b) for b in bindings)
     return cmd
 
