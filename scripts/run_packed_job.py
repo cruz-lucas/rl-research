@@ -99,8 +99,11 @@ def build_run_command(task: dict[str, Any]) -> list[str]:
         "--seed",
         str(task["seed"]),
     ]
-    for binding in task.get("bindings", []):
-        cmd.extend(["--binding", str(binding)])
+
+    bindings = task.get("bindings", None)
+    if bindings is not None:
+        cmd.append("--binding")
+        cmd.extend(str(b) for b in bindings)
     return cmd
 
 
