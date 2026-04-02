@@ -8,16 +8,16 @@ ReplayBuffer.buffer_size = 4096
 ReplayBuffer.obs_shape = (5, 5, 3)
 
 DQNRNDAgent.discount = 0.99
-DQNRNDAgent.learning_rate = 3e-06
-DQNRNDAgent.rnd_learning_rate = 3e-06
+DQNRNDAgent.learning_rate = 4.76025e-06
+DQNRNDAgent.rnd_learning_rate = 0.00501354
 DQNRNDAgent.eps_start = 0.9
 DQNRNDAgent.eps_end = 0.01
 DQNRNDAgent.eps_decay_steps = 120000
-DQNRNDAgent.target_update_freq = 1024
-DQNRNDAgent.max_grad_norm = 0.9
-DQNRNDAgent.intrinsic_reward_scale = 0.1
+DQNRNDAgent.target_update_freq = 128
+DQNRNDAgent.max_grad_norm = 9.56455
+DQNRNDAgent.intrinsic_reward_scale = 0.00126663
 DQNRNDAgent.intrinsic_stats_decay = 0.99
-DQNRNDAgent.intrinsic_reward_clip = 10.0
+DQNRNDAgent.intrinsic_reward_clip = 50.0
 
 DQNRNDAgent.rnd_output_dim = 64
 DQNRNDAgent.rnd_hidden_units = 64
@@ -25,7 +25,7 @@ DQNRNDAgent.rnd_include_action = True
 
 DQNRNDAgent.normalize_observations = True
 DQNRNDAgent.obs_normalization_epsilon = 1e-8
-DQNRNDAgent.obs_normalization_clip = 5.0
+DQNRNDAgent.obs_normalization_clip = 4.0
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
@@ -33,10 +33,10 @@ TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 2048
-TrainingConfig.update_frequency = 4
-TrainingConfig.num_minibatches = 2
-TrainingConfig.warmup_steps = 4096
+TrainingConfig.minibatch_size = 16
+TrainingConfig.update_frequency = 2
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
