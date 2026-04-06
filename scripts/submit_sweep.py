@@ -129,7 +129,10 @@ DEFAULT_SPACE: Dict[str, Any] = {
         "rnd_normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
         "rnd_optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
         "rnd_output_dim": {"type": "choice", "values": [16, 32, 64, 128, 256]},
-        "rnd_include_action": {"type": "choice", "values": [False, True]},
+        "rnd_action_conditioning": {
+            "type": "choice",
+            "values": ["none", "input", "output"],
+        },
         "intrinsic_reward_scale": {
             "type": "log_uniform",
             "min": 1e-3,

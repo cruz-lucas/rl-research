@@ -38,6 +38,8 @@ class DQNRNDState(struct.PyTreeNode):
 
 @gin.configurable
 class DQNRNDAgent:
+    _RND_ACTION_CONDITIONING_MODES = ("none", "input", "output")
+
     def __init__(
         self,
         num_states: int,
@@ -75,7 +77,8 @@ class DQNRNDAgent:
         rnd_output_dim: int = 64,
         rnd_optimizer: str | None = None,
         rnd_learning_rate: float | None = None,
-        rnd_include_action: bool = False,
+        rnd_include_action: bool | None = None,
+        rnd_action_conditioning: str = "none",
         normalize_observations: bool = False,
         obs_normalization_epsilon: float = 1e-8,
         obs_normalization_clip: float | None = 5.0,
@@ -132,18 +135,74 @@ class DQNRNDAgent:
             if rnd_learning_rate is None
             else float(rnd_learning_rate)
         )
-        self.rnd_include_action = bool(rnd_include_action)
+        self.rnd_action_conditioning = self._resolve_rnd_action_conditioning(
+            rnd_include_action=rnd_include_action,
+            rnd_action_conditioning=rnd_action_conditioning,
+        )
+        self.rnd_include_action = self.rnd_action_conditioning == "input"
         self.normalize_observations = bool(normalize_observations)
         self.obs_normalization_epsilon = float(obs_normalization_epsilon)
         self.obs_normalization_clip = obs_normalization_clip
         self.seed = int(seed)
 
+    def _canonicalize_rnd_action_conditioning(self, mode: str | bool) -> str:
+        if isinstance(mode, bool):
+            return "input" if mode else "none"
+
+        normalized_mode = str(mode).strip().lower()
+        aliases = {
+            "none": "none",
+            "state": "none",
+            "observation": "none",
+            "input": "input",
+            "action_input": "input",
+            "include_action": "input",
+            "output": "output",
+            "action_output": "output",
+            "per_action": "output",
+        }
+        canonical_mode = aliases.get(normalized_mode)
+        if canonical_mode is None:
+            raise ValueError(
+                f"Unsupported rnd_action_conditioning {mode!r}. "
+                f"Choose from {', '.join(self._RND_ACTION_CONDITIONING_MODES)}."
+            )
+        return canonical_mode
+
+    def _resolve_rnd_action_conditioning(
+        self,
+        rnd_include_action: bool | None,
+        rnd_action_conditioning: str | bool,
+    ) -> str:
+        canonical_mode = self._canonicalize_rnd_action_conditioning(
+            rnd_action_conditioning
+        )
+        if rnd_include_action is None:
+            return canonical_mode
+
+        legacy_mode = self._canonicalize_rnd_action_conditioning(rnd_include_action)
+        if canonical_mode != "none" and canonical_mode != legacy_mode:
+            raise ValueError(
+                "rnd_include_action and rnd_action_conditioning disagree. "
+                f"Got {rnd_include_action!r} and {rnd_action_conditioning!r}."
+            )
+        return legacy_mode
+
+    def _rnd_input_dim(self) -> int:
+        return self.num_states + (
+            self.num_actions if self.rnd_action_conditioning == "input" else 0
+        )
+
+    def _rnd_network_output_dim(self) -> int:
+        if self.rnd_action_conditioning == "output":
+            return self.num_actions * self.rnd_output_dim
+        return self.rnd_output_dim
+
     def initial_state(self) -> DQNRNDState:
         rng = jax.random.PRNGKey(self.seed)
         q_rng, rnd_target_rng, rnd_predictor_rng = jax.random.split(rng, 3)
-        rnd_input_dim = self.num_states + (
-            self.num_actions if self.rnd_include_action else 0
-        )
+        rnd_input_dim = self._rnd_input_dim()
+        rnd_network_output_dim = self._rnd_network_output_dim()
 
         online_network = MLPNetwork(
             in_features=self.num_states,
@@ -174,7 +233,7 @@ class DQNRNDAgent:
 
         rnd_target_network = MLPNetwork(
             in_features=rnd_input_dim,
-            out_features=self.rnd_output_dim,
+            out_features=rnd_network_output_dim,
             rngs=nnx.Rngs(rnd_target_rng),
             hidden_features=self.rnd_hidden_units,
             hidden_dims=self.rnd_hidden_dims,
@@ -183,7 +242,7 @@ class DQNRNDAgent:
         )
         rnd_predictor_network = MLPNetwork(
             in_features=rnd_input_dim,
-            out_features=self.rnd_output_dim,
+            out_features=rnd_network_output_dim,
             rngs=nnx.Rngs(rnd_predictor_rng),
             hidden_features=self.rnd_hidden_units,
             hidden_dims=self.rnd_hidden_dims,
@@ -255,7 +314,7 @@ class DQNRNDAgent:
         action: jnp.ndarray | None = None,
     ) -> jax.Array:
         observation = self._normalize_observation(state, observation)
-        if not self.rnd_include_action:
+        if self.rnd_action_conditioning != "input":
             return observation
 
         if action is None:
@@ -267,6 +326,31 @@ class DQNRNDAgent:
             dtype=jnp.float32,
         )
         return jnp.concatenate((observation, action_features), axis=-1)
+
+    def _select_rnd_features(
+        self,
+        features: jax.Array,
+        action: jnp.ndarray | None = None,
+    ) -> jax.Array:
+        if self.rnd_action_conditioning != "output":
+            return features
+
+        reshaped_features = features.reshape(
+            *features.shape[:-1], self.num_actions, self.rnd_output_dim
+        )
+        if action is None:
+            return reshaped_features
+
+        action = action.astype(jnp.int32)
+        if action.ndim == 0:
+            return reshaped_features[action]
+
+        gather_indices = action[..., None, None]
+        return jnp.take_along_axis(
+            reshaped_features,
+            gather_indices,
+            axis=-2,
+        ).squeeze(axis=-2)
 
     def select_action(
         self,
@@ -342,14 +426,23 @@ class DQNRNDAgent:
         terminal = batch.terminal.astype(jnp.float32)
         observation = self._normalize_observation(state, batch.observation)
         next_observation = self._normalize_observation(state, batch.next_observation)
-        rnd_input = (
-            self._build_rnd_input(state, batch.observation, action)
-            if self.rnd_include_action
-            else next_observation
+        rnd_observation = (
+            batch.next_observation
+            if self.rnd_action_conditioning == "none"
+            else batch.observation
+        )
+        rnd_input = self._build_rnd_input(
+            state,
+            rnd_observation,
+            action if self.rnd_action_conditioning == "input" else None,
         )
 
         rnd_target_features = jax.lax.stop_gradient(state.rnd_target_network(rnd_input))
         rnd_predictor_features = state.rnd_predictor_network(rnd_input)
+        rnd_target_features = self._select_rnd_features(rnd_target_features, action)
+        rnd_predictor_features = self._select_rnd_features(
+            rnd_predictor_features, action
+        )
         prediction_error = jnp.mean(
             jnp.square(rnd_predictor_features - rnd_target_features),
             axis=-1,
@@ -392,7 +485,7 @@ class DQNRNDAgent:
         state.optimizer.update(state.online_network, q_grads)
 
         def rnd_loss_fn(network: MLPNetwork):
-            predictor_features = network(rnd_input)
+            predictor_features = self._select_rnd_features(network(rnd_input), action)
             return jnp.mean(jnp.square(predictor_features - rnd_target_features))
 
         rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
