@@ -1,20 +1,22 @@
+from collections.abc import Sequence
 from typing import Tuple
 
 import distrax
 import gin
 import jax
 import jax.numpy as jnp
-import optax
 from flax import nnx, struct
 
 from rl_research.agents._dqn_common import (
     MLPNetwork,
     ObservationNormalizerState,
+    build_optimizer_transform,
     clone_module,
     hard_update_network,
     init_observation_normalizer,
     linear_epsilon,
     normalize_observation,
+    temporal_difference_loss,
     update_observation_normalizer,
 )
 from rl_research.buffers import Transition
@@ -36,6 +38,9 @@ class DQNAgent:
         num_states: int,  # this is the input size
         num_actions: int,
         hidden_units: int = 64,
+        hidden_dims: Sequence[int] | None = None,
+        activation: str = "relu",
+        normalization: str = "last",
         learning_rate: float = 1e-3,
         discount: float = 0.99,
         eps_start: float = 1.0,
@@ -43,6 +48,17 @@ class DQNAgent:
         eps_decay_steps: int = 100_000,
         target_update_freq: int = 1000,
         max_grad_norm: float = 1.0,
+        optimizer: str = "adam",
+        optimizer_beta1: float = 0.9,
+        optimizer_beta2: float = 0.999,
+        optimizer_epsilon: float = 1e-8,
+        optimizer_weight_decay: float = 0.0,
+        optimizer_momentum: float = 0.0,
+        optimizer_decay: float = 0.95,
+        optimizer_centered: bool = False,
+        loss_type: str = "mse",
+        huber_delta: float = 1.0,
+        double_q: bool = False,
         normalize_observations: bool = False,
         obs_normalization_epsilon: float = 1e-8,
         obs_normalization_clip: float | None = 5.0,
@@ -51,6 +67,11 @@ class DQNAgent:
         self.num_states = int(num_states)
         self.num_actions = int(num_actions)
         self.hidden_units = int(hidden_units)
+        self.hidden_dims = (
+            None if hidden_dims is None else tuple(int(dim) for dim in hidden_dims)
+        )
+        self.activation = activation
+        self.normalization = normalization
         self.learning_rate = float(learning_rate)
         self.discount = float(discount)
         self.eps_start = float(eps_start)
@@ -58,6 +79,17 @@ class DQNAgent:
         self.eps_decay_steps = int(eps_decay_steps)
         self.target_update_freq = int(target_update_freq)
         self.max_grad_norm = float(max_grad_norm)
+        self.optimizer = optimizer
+        self.optimizer_beta1 = float(optimizer_beta1)
+        self.optimizer_beta2 = float(optimizer_beta2)
+        self.optimizer_epsilon = float(optimizer_epsilon)
+        self.optimizer_weight_decay = float(optimizer_weight_decay)
+        self.optimizer_momentum = float(optimizer_momentum)
+        self.optimizer_decay = float(optimizer_decay)
+        self.optimizer_centered = bool(optimizer_centered)
+        self.loss_type = loss_type
+        self.huber_delta = float(huber_delta)
+        self.double_q = bool(double_q)
         self.normalize_observations = bool(normalize_observations)
         self.obs_normalization_epsilon = float(obs_normalization_epsilon)
         self.obs_normalization_clip = obs_normalization_clip
@@ -70,13 +102,24 @@ class DQNAgent:
             out_features=self.num_actions,
             rngs=nnx.Rngs(rng),
             hidden_features=self.hidden_units,
+            hidden_dims=self.hidden_dims,
+            activation=self.activation,
+            normalization=self.normalization,
         )
         target_network = clone_module(online_network)
         optimizer = nnx.Optimizer(
             online_network,
-            optax.chain(
-                optax.clip_by_global_norm(self.max_grad_norm),
-                optax.adam(self.learning_rate),
+            build_optimizer_transform(
+                learning_rate=self.learning_rate,
+                max_grad_norm=self.max_grad_norm,
+                optimizer=self.optimizer,
+                optimizer_beta1=self.optimizer_beta1,
+                optimizer_beta2=self.optimizer_beta2,
+                optimizer_epsilon=self.optimizer_epsilon,
+                optimizer_weight_decay=self.optimizer_weight_decay,
+                optimizer_momentum=self.optimizer_momentum,
+                optimizer_decay=self.optimizer_decay,
+                optimizer_centered=self.optimizer_centered,
             ),
             wrt=nnx.Param,
         )
@@ -151,11 +194,26 @@ class DQNAgent:
             q_values = network(observation)
             q_sel = jnp.take_along_axis(q_values, action[:, None], axis=1).squeeze(-1)
 
-            next_q = state.target_network(next_observation)
-            max_next_q = jnp.max(next_q, axis=1)
+            if self.double_q:
+                next_online_q = jax.lax.stop_gradient(network(next_observation))
+                next_action = jnp.argmax(next_online_q, axis=1, keepdims=True)
+                next_target_q = state.target_network(next_observation)
+                max_next_q = jnp.take_along_axis(
+                    next_target_q, next_action, axis=1
+                ).squeeze(-1)
+            else:
+                next_q = state.target_network(next_observation)
+                max_next_q = jnp.max(next_q, axis=1)
 
             target = batch.reward + batch.discount * max_next_q * (1.0 - terminal)
-            loss = jnp.mean((q_sel - jax.lax.stop_gradient(target)) ** 2)
+            td_error = q_sel - jax.lax.stop_gradient(target)
+            loss = jnp.mean(
+                temporal_difference_loss(
+                    td_error,
+                    loss_type=self.loss_type,
+                    huber_delta=self.huber_delta,
+                )
+            )
             return loss
 
         loss, grads = nnx.value_and_grad(loss_fn)(state.online_network)

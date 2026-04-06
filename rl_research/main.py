@@ -9,9 +9,28 @@ import tyro
 
 from rl_research.agents import BaseAgent
 from rl_research.buffers import ReplayBuffer
-from rl_research.environments import *
 from rl_research.experiment import run_loop
 from rl_research.utils import setup_mlflow
+
+
+def _serialize_param(value: object) -> object:
+    if value is None:
+        return "None"
+    if isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, type):
+        return value.__name__
+    if isinstance(value, (list, tuple, set)):
+        return repr(tuple(value) if not isinstance(value, tuple) else value)
+    if isinstance(value, dict):
+        return repr(value)
+    return str(value)
+
+
+def _serialize_params(params: dict[str, object]) -> dict[str, object]:
+    return {key: _serialize_param(value) for key, value in params.items()}
 
 
 @dataclass
@@ -42,11 +61,8 @@ def main(args: Args) -> None:
     else:
         seed = args.seed
 
-    mlflow.set_tracking_uri("./mlruns_test/")
-    # mlflow.set_tracking_uri("./mlruns/")
-    # mlflow.set_tracking_uri("sqlite:///mlruns.db")
 
-    with setup_mlflow(seed=seed) as run:
+    with setup_mlflow(seed=seed):
         run_bindings = gin.get_bindings("run_loop")
         agent_cls = run_bindings.get("agent_cls", BaseAgent)
         agent_cls_name = agent_cls.__name__
@@ -61,9 +77,12 @@ def main(args: Args) -> None:
                 "seed": seed,
                 "agent_class": agent_cls_name,
                 "buffer_class": buffer_cls_name,
-                **{f"agent_{k}": v for k, v in agent_params.items()},
-                **{f"buffer_{k}": v for k, v in buffer_params.items()},
-                **{k: v for k, v in train_params.items()},
+                **{f"agent_{k}": v for k, v in _serialize_params(agent_params).items()},
+                **{
+                    f"buffer_{k}": v
+                    for k, v in _serialize_params(buffer_params).items()
+                },
+                **_serialize_params(train_params),
             }
         )
 

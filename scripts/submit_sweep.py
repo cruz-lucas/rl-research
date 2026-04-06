@@ -27,10 +27,32 @@ import tyro
 
 
 TARGET_UPDATE_CHOICES = [2**i for i in range(6, 16)]
+DQN_HIDDEN_DIMS_CHOICES = [
+    [64, 64],
+    [128, 128],
+    [256, 256],
+    [256, 256, 256],
+    [512, 256],
+    [512, 512, 256],
+]
+RND_HIDDEN_DIMS_CHOICES = [
+    [64, 64],
+    [128, 128],
+    [256, 128],
+    [256, 256],
+    [512, 256],
+]
+ACTIVATION_CHOICES = ["relu", "gelu", "silu"]
+NORMALIZATION_CHOICES = ["none", "last", "all"]
+OPTIMIZER_CHOICES = ["adam", "adamw", "rmsprop"]
+DQN_BUFFER_SIZE_CHOICES = [2**i for i in range(15, 21)]
+DQN_MINIBATCH_SIZE_CHOICES = [2**i for i in range(6, 12)]
+DQN_WARMUP_CHOICES = [0] + [2**i for i in range(8, 16)]
+DQN_NUM_MINIBATCH_CHOICES = [1, 2, 4, 8]
 
 
 # Default space is a starting point; override with --space-file.
-DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
+DEFAULT_SPACE: Dict[str, Any] = {
     "ReplaybasedMBIEEB": {
         "step_size": {"type": "log_uniform", "min": 1e-3, "max": 1},
         "beta": {"type": "uniform", "min": 0, "max": 100},
@@ -47,39 +69,79 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         "reward_bonus": {"type": "int", "min": 0, "max": 10_000},
     },
     "DQNAgent": {
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
-        "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
-        "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
-        "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
+        "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
+        "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        "normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
+        "optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
+        "optimizer_weight_decay": {
+            "type": "choice",
+            "values": [0.0, 1e-6, 1e-5, 1e-4, 1e-3],
+        },
+        "optimizer_momentum": {"type": "choice", "values": [0.0, 0.9, 0.95]},
+        "optimizer_decay": {"type": "choice", "values": [0.9, 0.95, 0.99]},
+        "optimizer_centered": {"type": "choice", "values": [False, True]},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-2},
+        "discount": {"type": "choice", "values": [0.99, 0.995, 0.999]},
+        "eps_start": {"type": "uniform", "min": 0.5, "max": 1.0},
+        "eps_end": {"type": "log_uniform", "min": 1e-3, "max": 0.3},
+        "eps_decay_steps": {"type": "int", "min": 10_000, "max": 1_000_000},
         "target_update_freq": {
             "type": "choice",
             "values": TARGET_UPDATE_CHOICES,
         },
-        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
+        "max_grad_norm": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]},
+        "loss_type": {"type": "choice", "values": ["mse", "huber"]},
+        "huber_delta": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0]},
+        "double_q": {"type": "choice", "values": [False, True]},
         "normalize_observations": {"type": "choice", "values": [False, True]},
-        "obs_normalization_clip": {"type": "int", "min": 3, "max": 10},
+        "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
     },
     "DQNRNDAgent": {
-        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
-        "rnd_learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 0.5},
-        "eps_start": {"type": "uniform", "min": 0.3, "max": 1.0},
-        "eps_end": {"type": "log_uniform", "min": 1e-2, "max": 0.3},
-        "eps_decay_steps": {"type": "int", "min": 1_000, "max": 500_000},
+        "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
+        "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        "normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
+        "optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
+        "optimizer_weight_decay": {
+            "type": "choice",
+            "values": [0.0, 1e-6, 1e-5, 1e-4, 1e-3],
+        },
+        "optimizer_momentum": {"type": "choice", "values": [0.0, 0.9, 0.95]},
+        "optimizer_decay": {"type": "choice", "values": [0.9, 0.95, 0.99]},
+        "optimizer_centered": {"type": "choice", "values": [False, True]},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-2},
+        "rnd_learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-2},
+        "discount": {"type": "choice", "values": [0.99, 0.995, 0.999]},
+        "eps_start": {"type": "uniform", "min": 0.5, "max": 1.0},
+        "eps_end": {"type": "log_uniform", "min": 1e-3, "max": 0.3},
+        "eps_decay_steps": {"type": "int", "min": 10_000, "max": 1_000_000},
         "target_update_freq": {
             "type": "choice",
             "values": TARGET_UPDATE_CHOICES,
         },
-        "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
+        "max_grad_norm": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]},
+        "loss_type": {"type": "choice", "values": ["mse", "huber"]},
+        "huber_delta": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0]},
+        "double_q": {"type": "choice", "values": [False, True]},
         "normalize_observations": {"type": "choice", "values": [False, True]},
-        "obs_normalization_clip": {"type": "int", "min": 3, "max": 10},
+        "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
+        "rnd_hidden_dims": {"type": "choice", "values": RND_HIDDEN_DIMS_CHOICES},
+        "rnd_activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        "rnd_normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
+        "rnd_optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
+        "rnd_output_dim": {"type": "choice", "values": [16, 32, 64, 128, 256]},
+        "rnd_include_action": {"type": "choice", "values": [False, True]},
         "intrinsic_reward_scale": {
             "type": "log_uniform",
             "min": 1e-3,
-            "max": 50.0,
+            "max": 10.0,
+        },
+        "intrinsic_stats_decay": {
+            "type": "choice",
+            "values": [0.95, 0.99, 0.995, 0.999],
         },
         "intrinsic_reward_clip": {
             "type": "choice",
-            "values": [1.0, 5.0, 10.0, 50.0],
+            "values": [1.0, 5.0, 10.0, 20.0, 50.0],
         },
     },
     "NFQAgent": {
@@ -129,11 +191,57 @@ DEFAULT_SPACE: Dict[str, Dict[str, Dict[str, Any]]] = {
         },
         "TrainingConfig.num_minibatches": {
             "type": "choice",
-            "values": [1],#[2**i for i in range(0, 5)],
+            "values": [1],  # [2**i for i in range(0, 5)],
         },
         "TrainingConfig.warmup_steps": {
             "type": "choice",
             "values": [2**i for i in range(0, 14)],
+        },
+    },
+    "params_by_algorithm": {
+        "DQNAgent": {
+            "ReplayBuffer.buffer_size": {
+                "type": "choice",
+                "values": DQN_BUFFER_SIZE_CHOICES,
+            },
+            "TrainingConfig.minibatch_size": {
+                "type": "choice",
+                "values": DQN_MINIBATCH_SIZE_CHOICES,
+            },
+            "TrainingConfig.update_frequency": {
+                "type": "choice",
+                "values": [1, 2, 4, 8, 16],
+            },
+            "TrainingConfig.num_minibatches": {
+                "type": "choice",
+                "values": DQN_NUM_MINIBATCH_CHOICES,
+            },
+            "TrainingConfig.warmup_steps": {
+                "type": "choice",
+                "values": DQN_WARMUP_CHOICES,
+            },
+        },
+        "DQNRNDAgent": {
+            "ReplayBuffer.buffer_size": {
+                "type": "choice",
+                "values": DQN_BUFFER_SIZE_CHOICES,
+            },
+            "TrainingConfig.minibatch_size": {
+                "type": "choice",
+                "values": DQN_MINIBATCH_SIZE_CHOICES,
+            },
+            "TrainingConfig.update_frequency": {
+                "type": "choice",
+                "values": [1, 2, 4, 8, 16],
+            },
+            "TrainingConfig.num_minibatches": {
+                "type": "choice",
+                "values": DQN_NUM_MINIBATCH_CHOICES,
+            },
+            "TrainingConfig.warmup_steps": {
+                "type": "choice",
+                "values": DQN_WARMUP_CHOICES,
+            },
         },
     },
 }
@@ -234,9 +342,7 @@ class Args:
     ] = None
     time_limit_minutes: Annotated[
         int,
-        tyro.conf.arg(
-            help="Requested wall-clock limit per packed job, in minutes."
-        ),
+        tyro.conf.arg(help="Requested wall-clock limit per packed job, in minutes."),
     ] = 180
     time_buffer_minutes: Annotated[
         int,
@@ -265,14 +371,24 @@ class Args:
 
 
 def _format_value(val: Any) -> str:
+    if val is None:
+        return "None"
     if isinstance(val, str):
-        return f'"{val}"'
+        return json.dumps(val)
     if isinstance(val, bool):
         return "True" if val else "False"
     if isinstance(val, int):
         return str(val)
     if isinstance(val, float):
         return f"{val:.6g}"
+    if isinstance(val, tuple):
+        inner = ", ".join(_format_value(item) for item in val)
+        if len(val) == 1:
+            inner += ","
+        return f"({inner})"
+    if isinstance(val, list):
+        inner = ", ".join(_format_value(item) for item in val)
+        return f"[{inner}]"
     raise TypeError(f"Unsupported value type: {type(val)}")
 
 
@@ -291,7 +407,7 @@ def _sample_value(spec: Dict[str, Any], rng: random.Random) -> Any:
 
 
 def sample_bindings(
-    space: Dict[str, Dict[str, Any]],
+    space: Dict[str, Any],
     algorithm: str,
     num_samples: int,
     rng: random.Random,
@@ -299,7 +415,10 @@ def sample_bindings(
     if algorithm not in space:
         raise KeyError(f"{algorithm} not in search space keys {list(space.keys())}")
     algo_space = space[algorithm]
-    param_space = space.get("params", {})
+    param_space = {
+        **space.get("params", {}),
+        **space.get("params_by_algorithm", {}).get(algorithm, {}),
+    }
     bindings: List[List[str]] = []
     for _ in range(num_samples):
         combo: List[str] = []
@@ -463,7 +582,7 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def load_space(space_file: Path | None) -> Dict[str, Dict[str, Dict[str, Any]]]:
+def load_space(space_file: Path | None) -> Dict[str, Any]:
     if space_file is None:
         return DEFAULT_SPACE
 
@@ -579,7 +698,7 @@ def build_packed_sbatch_script(
         "",
         "set -euo pipefail",
         "",
-        f"export MLFLOW_TRACKING_URI=\"${{MLFLOW_TRACKING_URI:-{mlruns_dir}}}\"",
+        f'export MLFLOW_TRACKING_URI="${{MLFLOW_TRACKING_URI:-{mlruns_dir}}}"',
         "",
         f"cd {shlex.quote(str(repo_root))}",
         "",
@@ -609,7 +728,7 @@ def write_submit_all_script(
     ]
     for job_script in job_scripts:
         lines.append(
-            f"sbatch \"${{sbatch_opts[@]}}\" {shlex.quote(str(job_script.resolve()))}"
+            f'sbatch "${{sbatch_opts[@]}}" {shlex.quote(str(job_script.resolve()))}'
         )
     path.write_text("\n".join(lines) + "\n")
     path.chmod(0o755)
