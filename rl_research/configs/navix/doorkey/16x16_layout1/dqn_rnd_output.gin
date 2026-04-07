@@ -1,11 +1,5 @@
 setup_mlflow.experiment_name = "navix_doorkey_16x16_layout1"
-setup_mlflow.experiment_group = "dqn_rnd_action_input"
-
-run_loop.agent_cls = @DQNRNDAgent
-run_loop.env_cls = @NavixWrapper
-run_loop.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 8192
-ReplayBuffer.obs_shape = (16, 16, 3)
+setup_mlflow.experiment_group = "dqn_rnd_action_output"
 
 DQNRNDAgent.discount = 0.99
 DQNRNDAgent.learning_rate = 9.30936e-06
@@ -24,7 +18,7 @@ DQNRNDAgent.rnd_hidden_dims = None
 DQNRNDAgent.rnd_hidden_units = 64
 DQNRNDAgent.rnd_activation = "relu"
 DQNRNDAgent.rnd_normalization = "none"
-DQNRNDAgent.rnd_action_conditioning = "input"
+DQNRNDAgent.rnd_action_conditioning = "output"
 
 DQNRNDAgent.double_q = False
 

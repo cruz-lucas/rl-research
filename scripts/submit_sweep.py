@@ -92,7 +92,7 @@ DEFAULT_SPACE: Dict[str, Any] = {
         "max_grad_norm": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]},
         "loss_type": {"type": "choice", "values": ["mse", "huber"]},
         "huber_delta": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0]},
-        "double_q": {"type": "choice", "values": [False, True]},
+        "double_q": {"type": "choice", "values": [False]},
         "normalize_observations": {"type": "choice", "values": [False, True]},
         "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
     },
@@ -121,7 +121,7 @@ DEFAULT_SPACE: Dict[str, Any] = {
         "max_grad_norm": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]},
         "loss_type": {"type": "choice", "values": ["mse", "huber"]},
         "huber_delta": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0]},
-        "double_q": {"type": "choice", "values": [False, True]},
+        "double_q": {"type": "choice", "values": [False]},
         "normalize_observations": {"type": "choice", "values": [False, True]},
         "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
         "rnd_hidden_dims": {"type": "choice", "values": RND_HIDDEN_DIMS_CHOICES},
@@ -180,26 +180,26 @@ DEFAULT_SPACE: Dict[str, Any] = {
     # },
     "params": {
         # Example overrides:
-        "ReplayBuffer.buffer_size": {
-            "type": "choice",
-            "values": [2**i for i in range(12, 18)],
-        },
-        "TrainingConfig.minibatch_size": {
-            "type": "choice",
-            "values": [2**i for i in range(0, 12)],
-        },
-        "TrainingConfig.update_frequency": {
-            "type": "choice",
-            "values": [2**i for i in range(0, 5)],
-        },
-        "TrainingConfig.num_minibatches": {
-            "type": "choice",
-            "values": [1],  # [2**i for i in range(0, 5)],
-        },
-        "TrainingConfig.warmup_steps": {
-            "type": "choice",
-            "values": [2**i for i in range(0, 14)],
-        },
+        # "ReplayBuffer.buffer_size": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(12, 18)],
+        # },
+        # "TrainingConfig.minibatch_size": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 12)],
+        # },
+        # "TrainingConfig.update_frequency": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 5)],
+        # },
+        # "TrainingConfig.num_minibatches": {
+        #     "type": "choice",
+        #     "values": [1],  # [2**i for i in range(0, 5)],
+        # },
+        # "TrainingConfig.warmup_steps": {
+        #     "type": "choice",
+        #     "values": [2**i for i in range(0, 14)],
+        # },
     },
     "params_by_algorithm": {
         "DQNAgent": {
@@ -217,7 +217,7 @@ DEFAULT_SPACE: Dict[str, Any] = {
             },
             "TrainingConfig.num_minibatches": {
                 "type": "choice",
-                "values": DQN_NUM_MINIBATCH_CHOICES,
+                "values": [1],
             },
             "TrainingConfig.warmup_steps": {
                 "type": "choice",
@@ -239,7 +239,7 @@ DEFAULT_SPACE: Dict[str, Any] = {
             },
             "TrainingConfig.num_minibatches": {
                 "type": "choice",
-                "values": DQN_NUM_MINIBATCH_CHOICES,
+                "values": [1],
             },
             "TrainingConfig.warmup_steps": {
                 "type": "choice",
