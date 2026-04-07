@@ -714,6 +714,45 @@ def build_packed_sbatch_script(
     return "\n".join(lines)
 
 
+def build_archive_sbatch_script(
+    *,
+    batch_dir: Path,
+    log_out: Path,
+    log_err: Path,
+    batch_name: str,
+    time_limit_minutes: int = 60,
+) -> str:
+    archive_job_name = f"archive-{slugify(batch_name)[:32]}"
+    source_parent = batch_dir.parent.resolve()
+    source_name = batch_dir.name
+    lines = [
+        "#!/bin/bash",
+        f"#SBATCH --job-name={archive_job_name}",
+        "#SBATCH --account=def-machado",
+        f"#SBATCH --time={format_sbatch_time(time_limit_minutes)}",
+        "#SBATCH --cpus-per-task=1",
+        "#SBATCH --mem=4G",
+        f"#SBATCH --output={log_out}",
+        f"#SBATCH --error={log_err}",
+        "",
+        "set -euo pipefail",
+        "",
+        f"JOB_NAME={shlex.quote(source_name)}",
+        'ARCHIVE_PATH="$HOME/${JOB_NAME}.tar.gz"',
+        f"SOURCE_PARENT={shlex.quote(str(source_parent))}",
+        "",
+        'echo "Job ID: ${SLURM_JOB_ID:-local}"',
+        'echo "Job Name: ${SLURM_JOB_NAME:-$JOB_NAME}"',
+        'echo "Start Time: $(date)"',
+        'echo "Archive Path: ${ARCHIVE_PATH}"',
+        'echo "Source Directory: ${SOURCE_PARENT}/${JOB_NAME}"',
+        "",
+        'tar -czvf "$ARCHIVE_PATH" -C "$SOURCE_PARENT" "$JOB_NAME"',
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def write_submit_all_script(
     path: Path,
     job_scripts: Sequence[Path],
@@ -733,6 +772,27 @@ def write_submit_all_script(
         lines.append(
             f'sbatch "${{sbatch_opts[@]}}" {shlex.quote(str(job_script.resolve()))}'
         )
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o755)
+
+
+def write_submit_job_script(
+    path: Path,
+    job_script: Path,
+    sbatch_opts: Sequence[str],
+) -> None:
+    sbatch_array = " ".join(shlex.quote(opt) for opt in sbatch_opts)
+    lines = [
+        "#!/bin/bash",
+        "set -euo pipefail",
+        "",
+        f"cd {shlex.quote(str(Path.cwd().resolve()))}",
+        "",
+        f"sbatch_opts=({sbatch_array})" if sbatch_array else "sbatch_opts=()",
+        "",
+        f'sbatch "${{sbatch_opts[@]}}" {shlex.quote(str(job_script.resolve()))}',
+        "",
+    ]
     path.write_text("\n".join(lines) + "\n")
     path.chmod(0o755)
 
@@ -791,6 +851,10 @@ def create_packed_batch(
     progress_dir = batch_dir / "progress"
     logs_dir = batch_dir / "logs"
     mlruns_dir = batch_dir / "mlruns"
+    archive_job_script = batch_dir / "archive_batch.sbatch"
+    archive_submit_script = batch_dir / "submit_archive.sh"
+    archive_log_out = logs_dir / "archive-%j.out"
+    archive_log_err = logs_dir / "archive-%j.err"
     batch_dir.mkdir(parents=True, exist_ok=False)
     manifests_dir.mkdir()
     jobs_dir.mkdir()
@@ -861,6 +925,16 @@ def create_packed_batch(
             }
         )
 
+    archive_job_script.write_text(
+        build_archive_sbatch_script(
+            batch_dir=batch_dir,
+            log_out=archive_log_out,
+            log_err=archive_log_err,
+            batch_name=batch_name,
+        )
+    )
+    archive_job_script.chmod(0o755)
+
     plan_path = batch_dir / "plan.json"
     plan = {
         "batch_name": batch_name,
@@ -886,6 +960,10 @@ def create_packed_batch(
         "packed_runner_script": str(runner_script),
         "submit_all_script": str((batch_dir / "submit_all.sh").resolve()),
         "submit_remaining_script": str((batch_dir / "submit_remaining.sh").resolve()),
+        "archive_job_script": str(archive_job_script.resolve()),
+        "submit_archive_script": str(archive_submit_script.resolve()),
+        "archive_log_out": str(archive_log_out),
+        "archive_log_err": str(archive_log_err),
         "jobs": packed_jobs,
     }
     write_json(plan_path, plan)
@@ -899,6 +977,11 @@ def create_packed_batch(
     write_submit_remaining_script(
         batch_dir / "submit_remaining.sh",
         batch_dir=batch_dir,
+        sbatch_opts=args.sbatch_opt,
+    )
+    write_submit_job_script(
+        archive_submit_script,
+        job_script=archive_job_script,
         sbatch_opts=args.sbatch_opt,
     )
     return plan_path
@@ -1089,6 +1172,7 @@ def main(args: Args) -> None:
             f"({plan['run_count']} runs, {plan['job_count']} jobs, "
             f"{plan['runs_per_job']} runs/job)"
         )
+        print(f"# Archive helper: {plan['submit_archive_script']}")
         submit_packed_batch(
             plan_path=plan_path,
             sbatch_opts=args.sbatch_opt,
