@@ -66,6 +66,20 @@ Notes:
 - `scripts/single_seed_job.sh` – Slurm job wrapper that executes `uv run python -m rl_research.main ...`.
 - `scripts/packed_runs_job.sh` – Base environment wrapper for generated packed Slurm jobs.
 
+### Resubmitting Packed Jobs After OOM
+If a packed Slurm job runs out of memory, resubmit only the incomplete jobs from an existing packed batch and override the scheduler memory request at submission time:
+
+```bash
+uv run --active --offline python scripts/submit_sweep.py \
+  --mode packed_resubmit \
+  --resume-batch-dir outputs/packed_runs/<batch_name> \
+  --sbatch-opt=--mem=16G
+```
+
+Notes:
+- Add `--dry-run` to print the `sbatch` commands without submitting.
+- Repeat `--sbatch-opt` to override additional scheduler parameters, for example `--sbatch-opt=--time=06:00:00`.
+
 ## Development
 - Lint/format: `uv run ruff check .`
 - Tests: `uv run pytest` (add tests alongside changes; none are checked in yet).

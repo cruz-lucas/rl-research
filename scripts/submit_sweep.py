@@ -770,7 +770,7 @@ def write_submit_all_script(
     ]
     for job_script in job_scripts:
         lines.append(
-            f'sbatch "${{sbatch_opts[@]}}" {shlex.quote(str(job_script.resolve()))}'
+            f'sbatch "${{sbatch_opts[@]}}" "$@" {shlex.quote(str(job_script.resolve()))}'
         )
     path.write_text("\n".join(lines) + "\n")
     path.chmod(0o755)
@@ -790,7 +790,7 @@ def write_submit_job_script(
         "",
         f"sbatch_opts=({sbatch_array})" if sbatch_array else "sbatch_opts=()",
         "",
-        f'sbatch "${{sbatch_opts[@]}}" {shlex.quote(str(job_script.resolve()))}',
+        f'sbatch "${{sbatch_opts[@]}}" "$@" {shlex.quote(str(job_script.resolve()))}',
         "",
     ]
     path.write_text("\n".join(lines) + "\n")
@@ -823,7 +823,7 @@ def write_submit_remaining_script(
         "",
         f"cd {shlex.quote(str(Path.cwd().resolve()))}",
         "",
-        shlex.join(cmd),
+        f'{shlex.join(cmd)} "$@"',
         "",
     ]
     path.write_text("\n".join(lines))
