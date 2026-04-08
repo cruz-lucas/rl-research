@@ -689,6 +689,9 @@ def build_packed_sbatch_script(
     time_limit_minutes: int,
 ) -> str:
     job_name = f"{slugify(batch_name)[:40]}-j{job_index:03d}"
+
+    db_path_str = shlex.quote(str(mlruns_dir / "mlruns.db"))
+
     lines = [
         "#!/bin/bash",
         f"#SBATCH --job-name={job_name}",
@@ -701,7 +704,7 @@ def build_packed_sbatch_script(
         "",
         "set -euo pipefail",
         "",
-        f'export MLFLOW_TRACKING_URI="${{MLFLOW_TRACKING_URI:-{mlruns_dir}}}"',
+        f'export MLFLOW_TRACKING_URI="sqlite:////{db_path_str}"',
         "",
         f"cd {shlex.quote(str(repo_root))}",
         "",
