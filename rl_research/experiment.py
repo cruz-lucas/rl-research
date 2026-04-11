@@ -230,6 +230,11 @@ def run_loop(
     done_indices = jnp.where(history.dones)[0]
     for idx in done_indices:
         record_writer({"step": history.global_steps[idx]-1, "metrics": jax.tree.map(lambda x: x[idx], history)})
+
+    jax.effects_barrier()
+    close_debug_logger = getattr(agent, "close_debug_logger", None)
+    if callable(close_debug_logger):
+        close_debug_logger()
     
     # TODO: solve checkpointing
     # for step in range(num_iters):
@@ -244,5 +249,4 @@ def run_loop(
     #             checkpointer.save(path / agent_cls_name / f"checkpoint_{step}", state)
 
     record_writer.flush_summary()
-
 

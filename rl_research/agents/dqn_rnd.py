@@ -5,6 +5,7 @@ import distrax
 import gin
 import jax
 import jax.numpy as jnp
+import optax
 from flax import nnx, struct
 
 from rl_research.agents._dqn_common import (
@@ -20,6 +21,7 @@ from rl_research.agents._dqn_common import (
     update_observation_normalizer,
 )
 from rl_research.buffers import Transition
+from rl_research.debug_logging import DQNRNDDebugLogger
 
 
 class DQNRNDState(struct.PyTreeNode):
@@ -82,6 +84,9 @@ class DQNRNDAgent:
         normalize_observations: bool = False,
         obs_normalization_epsilon: float = 1e-8,
         obs_normalization_clip: float | None = 5.0,
+        debug: bool = False,
+        debug_log_dir: str = "tmp/debug_logs",
+        debug_log_to_mlflow: bool = True,
         seed: int = 0,
     ):
         self.num_states = int(num_states)
@@ -143,7 +148,23 @@ class DQNRNDAgent:
         self.normalize_observations = bool(normalize_observations)
         self.obs_normalization_epsilon = float(obs_normalization_epsilon)
         self.obs_normalization_clip = obs_normalization_clip
+        self.debug = bool(debug)
+        self.debug_log_dir = debug_log_dir
+        self.debug_log_to_mlflow = bool(debug_log_to_mlflow)
         self.seed = int(seed)
+        self._debug_logger = (
+            DQNRNDDebugLogger(
+                log_dir=self.debug_log_dir,
+                num_states=self.num_states,
+                num_actions=self.num_actions,
+                discount=self.discount,
+                rnd_action_conditioning=self.rnd_action_conditioning,
+                normalize_observations=self.normalize_observations,
+                log_to_mlflow=self.debug_log_to_mlflow,
+            )
+            if self.debug
+            else None
+        )
 
     def _canonicalize_rnd_action_conditioning(self, mode: str | bool) -> str:
         if isinstance(mode, bool):
@@ -352,6 +373,123 @@ class DQNRNDAgent:
             axis=-2,
         ).squeeze(axis=-2)
 
+    def _compute_prediction_error(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+        action: jnp.ndarray | None = None,
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+        rnd_input = self._build_rnd_input(state, observation, action)
+        rnd_target_features = jax.lax.stop_gradient(state.rnd_target_network(rnd_input))
+        rnd_predictor_features = state.rnd_predictor_network(rnd_input)
+        rnd_target_features = self._select_rnd_features(rnd_target_features, action)
+        rnd_predictor_features = self._select_rnd_features(
+            rnd_predictor_features, action
+        )
+        prediction_error = jnp.mean(
+            jnp.square(rnd_predictor_features - rnd_target_features),
+            axis=-1,
+        )
+        return (
+            prediction_error,
+            rnd_input,
+            rnd_target_features,
+            rnd_predictor_features,
+        )
+
+    def _compute_intrinsic_reward(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+        action: jnp.ndarray | None = None,
+    ) -> tuple[jax.Array, jax.Array]:
+        prediction_error, _, _, _ = self._compute_prediction_error(
+            state,
+            observation,
+            action,
+        )
+        intrinsic_reward = self._normalize_intrinsic_reward(
+            prediction_error=prediction_error,
+            reward_var=state.intrinsic_reward_var,
+        )
+        return intrinsic_reward, prediction_error
+
+    def _log_decision_debug(
+        self,
+        *,
+        global_step: jax.Array,
+        observation: jax.Array,
+        q_values: jax.Array,
+        epsilon: jax.Array,
+        action: jax.Array,
+    ) -> None:
+        if self._debug_logger is None:
+            return
+        jax.debug.callback(
+            self._debug_logger.log_decision,
+            global_step,
+            observation,
+            q_values,
+            epsilon,
+            action,
+            ordered=True,
+        )
+
+    def _log_update_debug(
+        self,
+        *,
+        global_step: jax.Array,
+        gradient_step: jax.Array,
+        observation: jax.Array,
+        action: jax.Array,
+        reward: jax.Array,
+        next_observation: jax.Array,
+        terminal: jax.Array,
+        q_values_observation: jax.Array,
+        q_values_next_observation_online: jax.Array,
+        q_values_next_observation_target: jax.Array,
+        intrinsic_reward_observation: jax.Array,
+        intrinsic_reward_next_observation: jax.Array,
+        intrinsic_reward_used: jax.Array,
+        target_without_intrinsic: jax.Array,
+        target_with_intrinsic: jax.Array,
+        q_loss: jax.Array,
+        rnd_loss: jax.Array,
+        q_grad_norm_with_intrinsic: jax.Array,
+        q_grad_norm_without_intrinsic: jax.Array,
+        rnd_grad_norm: jax.Array,
+    ) -> None:
+        if self._debug_logger is None:
+            return
+        jax.debug.callback(
+            self._debug_logger.log_update,
+            global_step,
+            gradient_step,
+            observation,
+            action,
+            reward,
+            next_observation,
+            terminal,
+            q_values_observation,
+            q_values_next_observation_online,
+            q_values_next_observation_target,
+            intrinsic_reward_observation,
+            intrinsic_reward_next_observation,
+            intrinsic_reward_used,
+            target_without_intrinsic,
+            target_with_intrinsic,
+            q_loss,
+            rnd_loss,
+            q_grad_norm_with_intrinsic,
+            q_grad_norm_without_intrinsic,
+            rnd_grad_norm,
+            ordered=True,
+        )
+
+    def close_debug_logger(self) -> None:
+        if self._debug_logger is not None:
+            self._debug_logger.close()
+
     def select_action(
         self,
         state: DQNRNDState,
@@ -359,10 +497,11 @@ class DQNRNDAgent:
         key: jax.Array,
         is_training: bool,
     ) -> Tuple[DQNRNDState, jnp.ndarray]:
+        raw_obs = jnp.asarray(obs).reshape(-1)
         if is_training:
-            state = self._maybe_update_obs_normalizer(state, obs.reshape(-1))
+            state = self._maybe_update_obs_normalizer(state, raw_obs)
 
-        obs = self._normalize_observation(state, obs.reshape(-1))
+        obs = self._normalize_observation(state, raw_obs)
         q_vals = state.online_network(obs.reshape(-1))
 
         if is_training:
@@ -373,6 +512,13 @@ class DQNRNDAgent:
                 eps_decay_steps=self.eps_decay_steps,
             )
             action = distrax.EpsilonGreedy(q_vals, epsilon=eps).sample(seed=key)
+            self._log_decision_debug(
+                global_step=jnp.asarray(state.step, dtype=jnp.int32),
+                observation=raw_obs,
+                q_values=q_vals,
+                epsilon=eps,
+                action=action,
+            )
             state = state.replace(step=state.step + 1)
         else:
             action = distrax.Greedy(q_vals).sample(seed=key)
@@ -431,21 +577,16 @@ class DQNRNDAgent:
             if self.rnd_action_conditioning == "none"
             else batch.observation
         )
-        rnd_input = self._build_rnd_input(
+        rnd_action = action if self.rnd_action_conditioning != "none" else None
+        (
+            prediction_error,
+            rnd_input,
+            rnd_target_features,
+            _,
+        ) = self._compute_prediction_error(
             state,
             rnd_observation,
-            action if self.rnd_action_conditioning == "input" else None,
-        )
-
-        rnd_target_features = jax.lax.stop_gradient(state.rnd_target_network(rnd_input))
-        rnd_predictor_features = state.rnd_predictor_network(rnd_input)
-        rnd_target_features = self._select_rnd_features(rnd_target_features, action)
-        rnd_predictor_features = self._select_rnd_features(
-            rnd_predictor_features, action
-        )
-        prediction_error = jnp.mean(
-            jnp.square(rnd_predictor_features - rnd_target_features),
-            axis=-1,
+            rnd_action,
         )
         intrinsic_reward = self._normalize_intrinsic_reward(
             prediction_error=prediction_error,
@@ -456,33 +597,69 @@ class DQNRNDAgent:
             + self.intrinsic_reward_scale * jax.lax.stop_gradient(intrinsic_reward)
         )
 
-        def q_loss_fn(network: MLPNetwork):
+        def q_loss_fn(network: MLPNetwork, reward_vector: jax.Array):
             q_values = network(observation)
             q_sel = jnp.take_along_axis(q_values, action[:, None], axis=1).squeeze(-1)
+            next_online_q = network(next_observation)
 
             if self.double_q:
-                next_online_q = jax.lax.stop_gradient(network(next_observation))
-                next_action = jnp.argmax(next_online_q, axis=1, keepdims=True)
+                next_action = jnp.argmax(
+                    jax.lax.stop_gradient(next_online_q), axis=1, keepdims=True
+                )
                 next_target_q = state.target_network(next_observation)
                 max_next_q = jnp.take_along_axis(
                     next_target_q, next_action, axis=1
                 ).squeeze(-1)
             else:
-                next_q = state.target_network(next_observation)
-                max_next_q = jnp.max(next_q, axis=1)
+                next_target_q = state.target_network(next_observation)
+                max_next_q = jnp.max(next_target_q, axis=1)
 
-            target = total_reward + batch.discount * max_next_q * (1.0 - terminal)
+            target = reward_vector + batch.discount * max_next_q * (1.0 - terminal)
             td_error = q_sel - jax.lax.stop_gradient(target)
-            return jnp.mean(
+            loss = jnp.mean(
                 temporal_difference_loss(
                     td_error,
                     loss_type=self.loss_type,
                     huber_delta=self.huber_delta,
                 )
             )
+            aux = {
+                "q_values": q_values,
+                "next_online_q_values": next_online_q,
+                "next_target_q_values": next_target_q,
+                "target": target,
+            }
+            return loss, aux
 
-        q_loss, q_grads = nnx.value_and_grad(q_loss_fn)(state.online_network)
-        state.optimizer.update(state.online_network, q_grads)
+        if self.debug:
+            (q_loss, q_aux), q_grads = nnx.value_and_grad(
+                lambda network: q_loss_fn(network, total_reward),
+                has_aux=True,
+            )(state.online_network)
+            (_, q_aux_without_intrinsic), q_grads_without_intrinsic = nnx.value_and_grad(
+                lambda network: q_loss_fn(network, batch.reward),
+                has_aux=True,
+            )(state.online_network)
+            q_grad_norm_with_intrinsic = optax.global_norm(q_grads)
+            q_grad_norm_without_intrinsic = optax.global_norm(
+                q_grads_without_intrinsic
+            )
+
+            intrinsic_reward_observation, _ = self._compute_intrinsic_reward(
+                state,
+                batch.observation,
+                rnd_action,
+            )
+            intrinsic_reward_next_observation, _ = self._compute_intrinsic_reward(
+                state,
+                batch.next_observation,
+                rnd_action,
+            )
+        else:
+            (q_loss, _), q_grads = nnx.value_and_grad(
+                lambda network: q_loss_fn(network, total_reward),
+                has_aux=True,
+            )(state.online_network)
 
         def rnd_loss_fn(network: MLPNetwork):
             predictor_features = self._select_rnd_features(network(rnd_input), action)
@@ -491,6 +668,32 @@ class DQNRNDAgent:
         rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
             state.rnd_predictor_network
         )
+        if self.debug:
+            rnd_grad_norm = optax.global_norm(rnd_grads)
+            self._log_update_debug(
+                global_step=jnp.asarray(state.step, dtype=jnp.int32),
+                gradient_step=jnp.asarray(state.gradient_steps + 1, dtype=jnp.int32),
+                observation=batch.observation,
+                action=action,
+                reward=batch.reward,
+                next_observation=batch.next_observation,
+                terminal=batch.terminal,
+                q_values_observation=q_aux["q_values"],
+                q_values_next_observation_online=q_aux["next_online_q_values"],
+                q_values_next_observation_target=q_aux["next_target_q_values"],
+                intrinsic_reward_observation=intrinsic_reward_observation,
+                intrinsic_reward_next_observation=intrinsic_reward_next_observation,
+                intrinsic_reward_used=intrinsic_reward,
+                target_without_intrinsic=q_aux_without_intrinsic["target"],
+                target_with_intrinsic=q_aux["target"],
+                q_loss=q_loss,
+                rnd_loss=rnd_loss,
+                q_grad_norm_with_intrinsic=q_grad_norm_with_intrinsic,
+                q_grad_norm_without_intrinsic=q_grad_norm_without_intrinsic,
+                rnd_grad_norm=rnd_grad_norm,
+            )
+
+        state.optimizer.update(state.online_network, q_grads)
         state.rnd_optimizer.update(state.rnd_predictor_network, rnd_grads)
 
         state = state.replace(gradient_steps=state.gradient_steps + 1)
