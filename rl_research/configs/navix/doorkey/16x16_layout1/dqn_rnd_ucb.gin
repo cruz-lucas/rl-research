@@ -1,0 +1,67 @@
+setup_mlflow.experiment_name = "navix_doorkey_16x16_layout1"
+setup_mlflow.experiment_group = "dqn_rnd_ucb"
+
+run_loop.agent_cls = @DQNRNDUCBAgent
+run_loop.env_cls = @NavixWrapper
+run_loop.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 8192
+ReplayBuffer.obs_shape = (16, 16, 3)
+
+DQNRNDUCBAgent.discount = 0.99
+DQNRNDUCBAgent.learning_rate = 9.30936e-06
+DQNRNDUCBAgent.target_update_freq = 2048
+
+DQNRNDUCBAgent.intrinsic_reward_scale = 0.451372
+DQNRNDUCBAgent.decision_bonus_scale = 0.451372
+DQNRNDUCBAgent.bootstrap_with_rnd_bonus = False
+DQNRNDUCBAgent.bootstrap_bonus_scale = 0.451372
+DQNRNDUCBAgent.intrinsic_stats_decay = 0.99
+DQNRNDUCBAgent.intrinsic_reward_clip = 1.0
+
+DQNRNDUCBAgent.rnd_learning_rate = 2.2773e-05
+DQNRNDUCBAgent.rnd_optimizer = "adamw"
+DQNRNDUCBAgent.rnd_output_dim = 256
+DQNRNDUCBAgent.rnd_hidden_dims = (256, 128)
+DQNRNDUCBAgent.rnd_hidden_units = 64
+DQNRNDUCBAgent.rnd_activation = "gelu"
+DQNRNDUCBAgent.rnd_normalization = "last"
+DQNRNDUCBAgent.rnd_action_conditioning = "output"
+
+DQNRNDUCBAgent.double_q = False
+
+DQNRNDUCBAgent.hidden_dims = (512, 512, 256)
+DQNRNDUCBAgent.hidden_units = 64
+DQNRNDUCBAgent.activation = "relu"
+DQNRNDUCBAgent.normalization = "all"
+
+DQNRNDUCBAgent.optimizer = "adam"
+DQNRNDUCBAgent.optimizer_beta1 = 0.9
+DQNRNDUCBAgent.optimizer_beta2 = 0.999
+DQNRNDUCBAgent.optimizer_epsilon = 1e-8
+DQNRNDUCBAgent.optimizer_weight_decay = 0.0
+DQNRNDUCBAgent.optimizer_momentum = 0.95
+DQNRNDUCBAgent.optimizer_decay = 0.95
+DQNRNDUCBAgent.optimizer_centered = True
+
+DQNRNDUCBAgent.loss_type = "mse"
+DQNRNDUCBAgent.huber_delta = 2.0
+
+DQNRNDUCBAgent.max_grad_norm = 8.86873
+
+DQNRNDUCBAgent.normalize_observations = False
+DQNRNDUCBAgent.obs_normalization_clip = 7.0
+DQNRNDUCBAgent.obs_normalization_epsilon = 1e-8
+
+NavixWrapper.env_id = "GridDoorKey-16x16-layout1-v0"
+
+TrainingConfig.train_episodes = 0
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 1_000_000
+TrainingConfig.max_episode_steps = 1024
+TrainingConfig.minibatch_size = 512
+TrainingConfig.update_frequency = 1
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 2048
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = None

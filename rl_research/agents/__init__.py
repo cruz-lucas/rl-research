@@ -2,6 +2,7 @@ from rl_research.agents.base import BaseAgent
 from rl_research.agents.dqn import DQNAgent
 from rl_research.agents.dqn_rmax import DQNRmaxAgent
 from rl_research.agents.dqn_rnd import DQNRNDAgent
+from rl_research.agents.dqn_rnd_ucb import DQNRNDUCBAgent
 from rl_research.agents.nfq import NFQAgent
 from rl_research.agents.rmax_nfq import RMaxNFQAgent
 from rl_research.agents.tabular.mbieeb import MBIEEBAgent
@@ -20,6 +21,7 @@ __all__ = [
     "ReplaybasedMBIEEB",
     "DQNAgent",
     "DQNRNDAgent",
+    "DQNRNDUCBAgent",
     "DQNRmaxAgent",
     "NFQAgent",
     "RMaxNFQAgent",

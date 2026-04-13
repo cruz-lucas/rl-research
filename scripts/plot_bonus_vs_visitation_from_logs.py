@@ -336,7 +336,7 @@ def plot_curves(
     source: SourceMode,
 ) -> np.ndarray:
     visits = aggregate["visit_count"]
-    reference = reference_scale / (np.sqrt(visits.astype(np.float32)) + 1.0)
+    reference = reference_scale / (np.sqrt(visits.astype(np.float32)))
 
     fig, ax = plt.subplots(figsize=(10, 6))
     for row in curve_matrix:
