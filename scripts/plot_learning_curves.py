@@ -42,9 +42,6 @@ plt.rcParams.update({
 
 # Default configurations (can be overridden)
 DEFAULT_GROUP_COLORS = {
-    "dqn": "#1f77b4",
-    "drm": "#9467bd",
-
     "qlearning_epsgreedy": "#ff7f0e",
     "mbieeb": "#9467bd",
     "rmax": "#2ca02c",
@@ -53,23 +50,26 @@ DEFAULT_GROUP_COLORS = {
     "replaybased_rmax_refact": "#1f77b4",
     "replaybased_mbieeb": "#d62728",
     "epsgreedy_intrinsicreward": "#999999",
+    "intrinsicreward": "#999999",
     "epsgreedy_intrinsicreward_optinit": "#27d6a7",
+    "intrinsicreward_optinit": "#27d6a7",
+    "intrinsicreward_optinit_2": "#27d6a7",
 
     "rmax_nfq_onehot_linear": "#d62728",
     "rmax_dqn_onehot_linear": "#ff7f0e",
     "nfq_onehot": "#1f77b4",
     "dqn_onehot_linear": "#9467bd",
 
-    "dqn_originalobs": "#d62728",
+    "dqn": "#d62728",
+    "dqn_rnd": "#ff7f0e",
+    "dqn_rnd_action_input": "#9467bd",
+    "dqn_rnd_action_output": "#9467bd",
+    "rmax_dqn": "#9467bd",
     "nfq_originalobs": "#ff7f0e",
     "rmax_nfq_originalobs": "#1f77b4",
-    "rmax_dqn_originalobs": "#9467bd",
 }
 
 DEFAULT_GROUP_LABELS = {
-    "dqn": "DQN",
-    "drm": "DR-max",
-
     "qlearning_epsgreedy": "Q-learning (Epsilon-Greedy)",
     "mbieeb": "MBIE-EB",
     "replaybased_mbieeb": "Replay-based MBIE-EB",
@@ -78,22 +78,26 @@ DEFAULT_GROUP_LABELS = {
     "replaybased_rmax_uniquevisitationincrement": "Replay-based R-Max",
     "replaybased_rmax_refact": "Replay-based R-Max",
     "epsgreedy_intrinsicreward": "Count-based Intrinsic Reward",
+    "intrinsicreward": "Count-based Intrinsic Reward",
     "epsgreedy_intrinsicreward_optinit": "Count-based Intrinsic Reward + Opt. Init.",
+    "intrinsicreward_optinit": "Count-based Intrinsic Reward + Opt. Init.",
+    "intrinsicreward_optinit_2": "Count-based Intrinsic Reward + Opt. Init.",
 
     "rmax_nfq_onehot_linear": "NFQ + R-max",
     "rmax_dqn_onehot_linear": "DQN + R-max",
     "nfq_onehot": "NFQ",
     "dqn_onehot_linear": "DQN",
 
-    "dqn_originalobs": "DQN",
+    "dqn": "DQN",
+    "dqn_rnd": "DQN + RND",
+    "dqn_rnd_action_input": "DQN + RND (w/ Action)",
+    "dqn_rnd_action_output": "DQN + RND (w/ Action)",
+    "rmax_dqn": "DQN + R-max",
     "nfq_originalobs": "NFQ",
     "rmax_nfq_originalobs": "NFQ + R-max",
-    "rmax_dqn_originalobs": "DQN + R-max",
 }
 
 DEFAULT_GROUP_ORDER = [
-    # "dqn",
-    # "drm",
     # "qlearning_epsgreedy",
     "rmax",
     # "replaybased_rmax",
@@ -101,18 +105,24 @@ DEFAULT_GROUP_ORDER = [
     # "replaybased_rmax_uniquevisitationincrement",
     "mbieeb",
     "replaybased_mbieeb",
-    "epsgreedy_intrinsicreward",
+    # "epsgreedy_intrinsicreward",
+    "intrinsicreward",
     # "epsgreedy_intrinsicreward_optinit",
+    "intrinsicreward_optinit",
+    # "intrinsicreward_optinit_2",
 
     # "dqn_onehot_linear",
     # "nfq_onehot",
     # "rmax_nfq_onehot_linear",
     # "rmax_dqn_onehot_linear",
 
-    # "dqn_originalobs",
+    "dqn",
+    "dqn_rnd",
+    "dqn_rnd_action_input",
+    "dqn_rnd_action_output",
+    "rmax_dqn",
     # "nfq_originalobs",
     # "rmax_nfq_originalobs",
-    # "rmax_dqn_originalobs",
 ]
 
 
@@ -186,7 +196,17 @@ def _parse_mlflow_run_file(run_dir: Path) -> Optional[dict]:
                 if lines:
                     parts = lines[-1].strip().split()
                     if len(parts) >= 2:
-                        run_data[f"metric_{mf.name}"] = float(parts[1])
+                        run_data[f"metric_summary_{mf.name}"] = float(parts[1])
+    
+    metrics_dir = run_dir / "metrics" / "train"
+    if metrics_dir.exists():
+        for mf in metrics_dir.iterdir():
+            if mf.is_file():
+                lines = mf.read_text().splitlines()
+                if lines:
+                    parts = lines[-1].strip().split()
+                    if len(parts) >= 2:
+                        run_data[f"metric_train_{mf.name}"] = float(parts[1])
 
     return run_data
 
@@ -306,19 +326,21 @@ def parse_mlflow_experiment_sqlite(db_path: str) -> pd.DataFrame:
                 run_index[row["run_uuid"]][f"tag_{row['key']}"] = row["value"]
 
         # ---- summary metrics: value at highest step per (run, metric) ----
-        summary_rows = con.execute(
-            "SELECT m.run_uuid, m.key, m.value "
-            "FROM metrics m "
-            "INNER JOIN ("
-            "    SELECT run_uuid, key, MAX(step) AS max_step "
-            "    FROM metrics GROUP BY run_uuid, key"
-            ") last ON m.run_uuid = last.run_uuid "
-            "       AND m.key = last.key "
-            "       AND m.step = last.max_step"
-        ).fetchall()
-        for row in summary_rows:
-            if row["run_uuid"] in run_index:
-                run_index[row["run_uuid"]][f"metric_{row['key']}"] = float(row["value"])
+        # summary_rows = con.execute(
+        #     "SELECT m.run_uuid, m.key, m.value "
+        #     "FROM metrics m "
+        #     "INNER JOIN ("
+        #     "    SELECT run_uuid, key, MAX(step) AS max_step "
+        #     "    FROM metrics GROUP BY run_uuid, key"
+        #     ") last ON m.run_uuid = last.run_uuid "
+        #     "       AND m.key = last.key "
+        #     "       AND m.step = last.max_step"
+        # ).fetchall()
+
+        # print(summary_rows)
+        # for row in summary_rows:
+        #     if row["run_uuid"] in run_index:
+        #         run_index[row["run_uuid"]][f"metric_{row['key']}"] = float(row["value"])
 
     finally:
         con.close()
@@ -733,7 +755,7 @@ class LearningCurvePlotter:
             #     zorder=4, label="_nolegend_",
             # )
             ax.text(
-                x - 0.1, 3.9e6, #3.7e7,
+                x - 0.1, 3.65e7, #3.82e6, #3.7e7,
                 f"{mean_val:.2e}",
                 va="center", ha="left",
                 fontsize=9, color=color,
@@ -758,7 +780,7 @@ class LearningCurvePlotter:
         if grid:
             ax.yaxis.grid(True, alpha=0.3, linestyle="--", linewidth=0.8)
             ax.set_axisbelow(True)
-        # ax.set_yscale('log')
+        ax.set_yscale('log')
         plt.tight_layout()
 
         if save_path:

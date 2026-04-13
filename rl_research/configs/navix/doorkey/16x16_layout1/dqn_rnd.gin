@@ -7,7 +7,7 @@ run_loop.buffer_cls = @ReplayBuffer
 ReplayBuffer.buffer_size = 32768
 ReplayBuffer.obs_shape = (16, 16, 3)
 
-DQNRNDAgent.discount = 0.995
+DQNRNDAgent.discount = 0.99
 DQNRNDAgent.learning_rate = 4.13498e-05
 DQNRNDAgent.eps_start = 0.75
 DQNRNDAgent.eps_end = 0.002
@@ -21,20 +21,20 @@ DQNRNDAgent.intrinsic_reward_clip = 1
 DQNRNDAgent.rnd_learning_rate = 0.000941421
 DQNRNDAgent.rnd_optimizer = "adamw"
 DQNRNDAgent.rnd_output_dim = 128
-DQNRNDAgent.rnd_hidden_dims = (512, 256)
+DQNRNDAgent.rnd_hidden_dims = (256, 128)
 DQNRNDAgent.rnd_hidden_units = 64
-DQNRNDAgent.rnd_activation = "silu"
+DQNRNDAgent.rnd_activation = "gelu"
 DQNRNDAgent.rnd_normalization = "none"
 DQNRNDAgent.rnd_action_conditioning = "none"
 
 DQNRNDAgent.double_q = False
 
-DQNRNDAgent.hidden_dims = (128, 128)
+DQNRNDAgent.hidden_dims = (512, 512, 256)
 DQNRNDAgent.hidden_units = 64
-DQNRNDAgent.activation = "gelu"
+DQNRNDAgent.activation = "relu"
 DQNRNDAgent.normalization = "all"
 
-DQNRNDAgent.optimizer = "rmsprop"
+DQNRNDAgent.optimizer = "adam"
 DQNRNDAgent.optimizer_beta1 = 0.9
 DQNRNDAgent.optimizer_beta2 = 0.999
 DQNRNDAgent.optimizer_epsilon = 1e-8

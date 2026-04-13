@@ -69,8 +69,8 @@ DEFAULT_SPACE: Dict[str, Any] = {
         "reward_bonus": {"type": "int", "min": 0, "max": 10_000},
     },
     "DQNAgent": {
-        "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
-        "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        # "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
+        # "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
         "normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
         "optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
         "optimizer_weight_decay": {
@@ -97,8 +97,8 @@ DEFAULT_SPACE: Dict[str, Any] = {
         "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
     },
     "DQNRNDAgent": {
-        "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
-        "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        # "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
+        # "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
         "normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
         "optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
         "optimizer_weight_decay": {
@@ -124,15 +124,15 @@ DEFAULT_SPACE: Dict[str, Any] = {
         "double_q": {"type": "choice", "values": [False]},
         "normalize_observations": {"type": "choice", "values": [False, True]},
         "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
-        "rnd_hidden_dims": {"type": "choice", "values": RND_HIDDEN_DIMS_CHOICES},
-        "rnd_activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        # "rnd_hidden_dims": {"type": "choice", "values": RND_HIDDEN_DIMS_CHOICES},
+        # "rnd_activation": {"type": "choice", "values": ACTIVATION_CHOICES},
         "rnd_normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
         "rnd_optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
-        "rnd_output_dim": {"type": "choice", "values": [16, 32, 64, 128, 256]},
-        "rnd_action_conditioning": {
-            "type": "choice",
-            "values": ["none", "input", "output"],
-        },
+        "rnd_output_dim": {"type": "choice", "values": [1, 16, 32, 64, 128, 256]},
+        # "rnd_action_conditioning": {
+        #     "type": "choice",
+        #     "values": ["none", "input", "output"],
+        # },
         "intrinsic_reward_scale": {
             "type": "log_uniform",
             "min": 1e-3,
@@ -265,7 +265,7 @@ class Args:
     ] = None
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 1000
+    ] = 100
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination."),
@@ -697,7 +697,7 @@ def build_packed_sbatch_script(
         f"#SBATCH --job-name={job_name}",
         "#SBATCH --account=def-machado",
         f"#SBATCH --time={format_sbatch_time(time_limit_minutes)}",
-        "#SBATCH --cpus-per-task=2",
+        "#SBATCH --cpus-per-task=4",
         "#SBATCH --mem=16G",
         f"#SBATCH --output={log_out}",
         f"#SBATCH --error={log_err}",
