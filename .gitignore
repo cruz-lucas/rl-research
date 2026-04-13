@@ -171,12 +171,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-**/mlruns/
-**/mlruns_final/
-**/mlruns_test/
-**/mlruns_sweep/
-**/mlruns_sqlite_artifacts/
-**/outputs/
+**/mlruns*/
 .deprecated/**
 
 /mlruns_db_store/*
@@ -189,3 +184,6 @@ cython_debug/
 .DS_Store
 
 /tmp/*
+
+/packed_jobs/*
+*/outputs/*
