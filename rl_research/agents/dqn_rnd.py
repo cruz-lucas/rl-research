@@ -155,6 +155,7 @@ class DQNRNDAgent:
         self._debug_logger = (
             DQNRNDDebugLogger(
                 log_dir=self.debug_log_dir,
+                agent_class=self.__class__.__name__,
                 num_states=self.num_states,
                 num_actions=self.num_actions,
                 discount=self.discount,
@@ -414,25 +415,55 @@ class DQNRNDAgent:
         )
         return intrinsic_reward, prediction_error
 
+    def _compute_decision_bonus(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+    ) -> jax.Array:
+        observation = jnp.asarray(observation, dtype=jnp.float32).reshape(-1)
+        if self.rnd_action_conditioning == "input":
+            observation_batch = jnp.broadcast_to(
+                observation,
+                (self.num_actions, observation.shape[-1]),
+            )
+            action_batch = jnp.arange(self.num_actions, dtype=jnp.int32)
+            decision_bonus, _ = self._compute_intrinsic_reward(
+                state,
+                observation_batch,
+                action_batch,
+            )
+            return decision_bonus
+
+        decision_bonus, _ = self._compute_intrinsic_reward(state, observation)
+        return decision_bonus
+
     def _log_decision_debug(
         self,
         *,
         global_step: jax.Array,
         observation: jax.Array,
         q_values: jax.Array,
-        epsilon: jax.Array,
         action: jax.Array,
+        epsilon: jax.Array | None = None,
+        decision_bonus: jax.Array | None = None,
+        decision_values: jax.Array | None = None,
     ) -> None:
         if self._debug_logger is None:
             return
+        callback_kwargs = {}
+        if decision_bonus is not None:
+            callback_kwargs["decision_bonus"] = decision_bonus
+        if decision_values is not None:
+            callback_kwargs["decision_values"] = decision_values
         jax.debug.callback(
             self._debug_logger.log_decision,
             global_step,
             observation,
             q_values,
-            epsilon,
+            jnp.asarray(jnp.nan, dtype=jnp.float32) if epsilon is None else epsilon,
             action,
             ordered=True,
+            **callback_kwargs,
         )
 
     def _log_update_debug(
@@ -505,6 +536,9 @@ class DQNRNDAgent:
         q_vals = state.online_network(obs.reshape(-1))
 
         if is_training:
+            decision_bonus = (
+                self._compute_decision_bonus(state, raw_obs) if self.debug else None
+            )
             eps = linear_epsilon(
                 state.step,
                 eps_start=self.eps_start,
@@ -516,8 +550,9 @@ class DQNRNDAgent:
                 global_step=jnp.asarray(state.step, dtype=jnp.int32),
                 observation=raw_obs,
                 q_values=q_vals,
-                epsilon=eps,
                 action=action,
+                epsilon=eps,
+                decision_bonus=decision_bonus,
             )
             state = state.replace(step=state.step + 1)
         else:
@@ -537,6 +572,21 @@ class DQNRNDAgent:
                 normalized_reward, 0.0, self.intrinsic_reward_clip
             )
         return normalized_reward
+
+    def _compute_next_bootstrap_values(
+        self,
+        state: DQNRNDState,
+        next_observation: jax.Array,
+        next_online_q: jax.Array,
+        next_target_q: jax.Array,
+    ) -> jax.Array:
+        del state, next_observation
+        if self.double_q:
+            next_action = jnp.argmax(
+                jax.lax.stop_gradient(next_online_q), axis=-1, keepdims=True
+            )
+            return jnp.take_along_axis(next_target_q, next_action, axis=-1).squeeze(-1)
+        return jnp.max(next_target_q, axis=-1)
 
     def _update_intrinsic_stats(
         self,
@@ -601,18 +651,13 @@ class DQNRNDAgent:
             q_values = network(observation)
             q_sel = jnp.take_along_axis(q_values, action[:, None], axis=1).squeeze(-1)
             next_online_q = network(next_observation)
-
-            if self.double_q:
-                next_action = jnp.argmax(
-                    jax.lax.stop_gradient(next_online_q), axis=1, keepdims=True
-                )
-                next_target_q = state.target_network(next_observation)
-                max_next_q = jnp.take_along_axis(
-                    next_target_q, next_action, axis=1
-                ).squeeze(-1)
-            else:
-                next_target_q = state.target_network(next_observation)
-                max_next_q = jnp.max(next_target_q, axis=1)
+            next_target_q = state.target_network(next_observation)
+            max_next_q = self._compute_next_bootstrap_values(
+                state=state,
+                next_observation=batch.next_observation,
+                next_online_q=next_online_q,
+                next_target_q=next_target_q,
+            )
 
             target = reward_vector + batch.discount * max_next_q * (1.0 - terminal)
             td_error = q_sel - jax.lax.stop_gradient(target)
@@ -636,7 +681,10 @@ class DQNRNDAgent:
                 lambda network: q_loss_fn(network, total_reward),
                 has_aux=True,
             )(state.online_network)
-            (_, q_aux_without_intrinsic), q_grads_without_intrinsic = nnx.value_and_grad(
+            (
+                (_, q_aux_without_intrinsic),
+                q_grads_without_intrinsic,
+            ) = nnx.value_and_grad(
                 lambda network: q_loss_fn(network, batch.reward),
                 has_aux=True,
             )(state.online_network)
@@ -714,8 +762,14 @@ class DQNRNDAgent:
         state: DQNRNDState,
         next_observation: jnp.ndarray,
     ) -> jax.Array:
-        next_observation = self._normalize_observation(
-            state, next_observation.reshape(1, -1)
+        raw_next_observation = jnp.asarray(next_observation).reshape(1, -1)
+        next_observation = self._normalize_observation(state, raw_next_observation)
+        next_online_q = state.online_network(next_observation.reshape(1, -1))
+        next_target_q = state.target_network(next_observation.reshape(1, -1))
+        bootstrap_value = self._compute_next_bootstrap_values(
+            state=state,
+            next_observation=raw_next_observation,
+            next_online_q=next_online_q,
+            next_target_q=next_target_q,
         )
-        q_vals = state.target_network(next_observation.reshape(1, -1))
-        return jnp.max(q_vals, axis=-1).squeeze()
+        return bootstrap_value.squeeze()

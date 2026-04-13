@@ -48,6 +48,7 @@ class DQNRNDDebugLogger:
         self,
         *,
         log_dir: str | Path,
+        agent_class: str = "DQNRNDAgent",
         num_states: int,
         num_actions: int,
         discount: float,
@@ -70,7 +71,9 @@ class DQNRNDDebugLogger:
         self._decision_file = self.decision_log_path.open(
             "a", encoding="utf-8", buffering=1
         )
-        self._update_file = self.update_log_path.open("a", encoding="utf-8", buffering=1)
+        self._update_file = self.update_log_path.open(
+            "a", encoding="utf-8", buffering=1
+        )
         self._lock = Lock()
         self._closed = False
         self._log_to_mlflow = bool(log_to_mlflow)
@@ -81,7 +84,7 @@ class DQNRNDDebugLogger:
             "evaluated with the sampled action from the same transition."
         )
         metadata = {
-            "agent_class": "DQNRNDAgent",
+            "agent_class": agent_class,
             "run_id": self.run_id,
             "num_states": int(num_states),
             "num_actions": int(num_actions),
@@ -110,6 +113,8 @@ class DQNRNDDebugLogger:
         q_values: np.ndarray,
         epsilon: np.ndarray,
         action: np.ndarray,
+        decision_bonus: np.ndarray | None = None,
+        decision_values: np.ndarray | None = None,
     ) -> None:
         observation = np.asarray(observation)
         record = {
@@ -117,9 +122,15 @@ class DQNRNDDebugLogger:
             "observation": pack_array(observation),
             "observation_key": observation_key(observation),
             "q_values": np.asarray(q_values).tolist(),
-            "epsilon": float(np.asarray(epsilon)),
             "action": int(np.asarray(action)),
         }
+        epsilon_value = float(np.asarray(epsilon))
+        if np.isfinite(epsilon_value):
+            record["epsilon"] = epsilon_value
+        if decision_bonus is not None:
+            record["decision_bonus"] = np.asarray(decision_bonus).tolist()
+        if decision_values is not None:
+            record["decision_values"] = np.asarray(decision_values).tolist()
         with self._lock:
             self._write_jsonl(self._decision_file, record)
 
