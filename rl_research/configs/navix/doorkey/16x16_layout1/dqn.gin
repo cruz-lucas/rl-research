@@ -16,7 +16,7 @@ DQNAgent.target_update_freq = 8192
 
 DQNAgent.double_q = False
 
-DQNAgent.hidden_dims = (128, 128)
+DQNAgent.hidden_dims = (512, 512, 256)
 DQNAgent.hidden_units = 64
 DQNAgent.activation = "relu"
 DQNAgent.normalization = "all"
