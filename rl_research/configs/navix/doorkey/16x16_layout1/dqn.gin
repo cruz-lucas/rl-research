@@ -4,39 +4,39 @@ setup_mlflow.experiment_group = "dqn"
 run_loop.agent_cls = @DQNAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 65536
+ReplayBuffer.buffer_size = 524288
 ReplayBuffer.obs_shape = (16, 16, 3)
 
-DQNAgent.discount = 0.99
-DQNAgent.learning_rate = 2.36742e-05
+DQNAgent.discount = 0.995
+DQNAgent.learning_rate = 1.6e-05
 DQNAgent.eps_start = 0.8
-DQNAgent.eps_end = 0.01
-DQNAgent.eps_decay_steps = 464603
-DQNAgent.target_update_freq = 2048
+DQNAgent.eps_end = 0.005
+DQNAgent.eps_decay_steps = 800_000
+DQNAgent.target_update_freq = 8192
 
 DQNAgent.double_q = False
 
-DQNAgent.hidden_dims = None
+DQNAgent.hidden_dims = (128, 128)
 DQNAgent.hidden_units = 64
 DQNAgent.activation = "relu"
-DQNAgent.normalization = "last"
+DQNAgent.normalization = "all"
 
 DQNAgent.optimizer = "adam"
 DQNAgent.optimizer_beta1 = 0.9
 DQNAgent.optimizer_beta2 = 0.999
 DQNAgent.optimizer_epsilon = 1e-8
-DQNAgent.optimizer_weight_decay = 0.0
-DQNAgent.optimizer_momentum = 0.0
-DQNAgent.optimizer_decay = 0.9
-DQNAgent.optimizer_centered = False
+DQNAgent.optimizer_weight_decay = 0.0001
+DQNAgent.optimizer_momentum = 0.95
+DQNAgent.optimizer_decay = 0.95
+DQNAgent.optimizer_centered = True
 
 DQNAgent.loss_type = "mse"
-DQNAgent.huber_delta = 1.0
+DQNAgent.huber_delta = 2.0
 
-DQNAgent.max_grad_norm = 8.86873
+DQNAgent.max_grad_norm = 0.5
 
-DQNAgent.normalize_observations = False
-DQNAgent.obs_normalization_clip = 5.0
+DQNAgent.normalize_observations = True
+DQNAgent.obs_normalization_clip = 7.0
 DQNAgent.obs_normalization_epsilon = 1e-8
 
 NavixWrapper.env_id = "GridDoorKey-16x16-layout1-v0"
@@ -45,10 +45,10 @@ TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 1024
-TrainingConfig.minibatch_size = 64
-TrainingConfig.update_frequency = 1
+TrainingConfig.minibatch_size = 128
+TrainingConfig.update_frequency = 8
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 0
+TrainingConfig.warmup_steps = 8192
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
