@@ -265,7 +265,7 @@ class Args:
     ] = None
     samples: Annotated[
         int, tyro.conf.arg(help="Number of hyperparameter combinations to sample.")
-    ] = 200
+    ] = 1000
     seeds: Annotated[
         int,
         tyro.conf.arg(help="Number of seeds per combination."),
@@ -690,7 +690,7 @@ def build_packed_sbatch_script(
 ) -> str:
     job_name = f"{slugify(batch_name)[:40]}-j{job_index:03d}"
 
-    db_path_str = shlex.quote(str(mlruns_dir / "mlruns.db"))
+    db_path_str = shlex.quote(str(mlruns_dir / f"{job_name}.db"))
 
     lines = [
         "#!/bin/bash",
@@ -698,7 +698,7 @@ def build_packed_sbatch_script(
         "#SBATCH --account=def-machado",
         f"#SBATCH --time={format_sbatch_time(time_limit_minutes)}",
         "#SBATCH --cpus-per-task=2",
-        "#SBATCH --mem=2G",
+        "#SBATCH --mem=16G",
         f"#SBATCH --output={log_out}",
         f"#SBATCH --error={log_err}",
         "",
