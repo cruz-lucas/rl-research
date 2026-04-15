@@ -27,8 +27,8 @@ class DQNState(struct.PyTreeNode):
     target_network: MLPNetwork
     optimizer: nnx.Optimizer
     obs_normalizer: ObservationNormalizerState
-    step: int
-    gradient_steps: int
+    step: jax.Array
+    gradient_steps: jax.Array
 
 
 @gin.configurable
@@ -129,8 +129,8 @@ class DQNAgent:
             target_network=target_network,
             optimizer=optimizer,
             obs_normalizer=init_observation_normalizer(self.num_states),
-            step=0,
-            gradient_steps=0,
+            step=jnp.asarray(0, dtype=jnp.int32),
+            gradient_steps=jnp.asarray(0, dtype=jnp.int32),
         )
 
     def _maybe_update_obs_normalizer(

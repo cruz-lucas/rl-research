@@ -22,8 +22,8 @@ class DQNRmaxState(struct.PyTreeNode):
     online_network: MLPNetwork
     target_network: MLPNetwork
     optimizer: nnx.Optimizer
-    step: int
-    gradient_steps: int
+    step: jax.Array
+    gradient_steps: jax.Array
     visit_counts: jnp.ndarray
 
 
@@ -85,8 +85,8 @@ class DQNRmaxAgent:
             target_network=target_network,
             optimizer=optimizer,
             visit_counts=visit_counts,
-            step=0,
-            gradient_steps=0,
+            step=jnp.asarray(0, dtype=jnp.int32),
+            gradient_steps=jnp.asarray(0, dtype=jnp.int32),
         )
 
     def select_action(

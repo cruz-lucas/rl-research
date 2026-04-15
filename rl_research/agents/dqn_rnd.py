@@ -34,8 +34,8 @@ class DQNRNDState(struct.PyTreeNode):
     obs_normalizer: ObservationNormalizerState
     intrinsic_reward_mean: jax.Array
     intrinsic_reward_var: jax.Array
-    step: int
-    gradient_steps: int
+    step: jax.Array
+    gradient_steps: jax.Array
 
 
 @gin.configurable
@@ -298,8 +298,8 @@ class DQNRNDAgent:
             obs_normalizer=init_observation_normalizer(self.num_states),
             intrinsic_reward_mean=jnp.asarray(0.0, dtype=jnp.float32),
             intrinsic_reward_var=jnp.asarray(1.0, dtype=jnp.float32),
-            step=0,
-            gradient_steps=0,
+            step=jnp.asarray(0, dtype=jnp.int32),
+            gradient_steps=jnp.asarray(0, dtype=jnp.int32),
         )
 
     def _maybe_update_obs_normalizer(
@@ -689,9 +689,7 @@ class DQNRNDAgent:
                 has_aux=True,
             )(state.online_network)
             q_grad_norm_with_intrinsic = optax.global_norm(q_grads)
-            q_grad_norm_without_intrinsic = optax.global_norm(
-                q_grads_without_intrinsic
-            )
+            q_grad_norm_without_intrinsic = optax.global_norm(q_grads_without_intrinsic)
 
             intrinsic_reward_observation, _ = self._compute_intrinsic_reward(
                 state,
