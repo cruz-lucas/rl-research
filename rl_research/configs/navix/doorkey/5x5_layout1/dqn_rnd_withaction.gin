@@ -1,31 +1,56 @@
 setup_mlflow.experiment_name = "navix_doorkey_5x5_layout1"
-setup_mlflow.experiment_group = "dqn_rnd_withaction"
+setup_mlflow.experiment_group = "dqn_rnd_action_output"
 
 run_loop.agent_cls = @DQNRNDAgent
 run_loop.env_cls = @NavixWrapper
 run_loop.buffer_cls = @ReplayBuffer
-ReplayBuffer.buffer_size = 4096
+ReplayBuffer.buffer_size = 32768
 ReplayBuffer.obs_shape = (5, 5, 3)
 
 DQNRNDAgent.discount = 0.99
-DQNRNDAgent.learning_rate = 4.76025e-06
-DQNRNDAgent.rnd_learning_rate = 0.00501354
-DQNRNDAgent.eps_start = 0.9
-DQNRNDAgent.eps_end = 0.01
-DQNRNDAgent.eps_decay_steps = 120000
-DQNRNDAgent.target_update_freq = 128
-DQNRNDAgent.max_grad_norm = 9.56455
-DQNRNDAgent.intrinsic_reward_scale = 0.00126663
-DQNRNDAgent.intrinsic_stats_decay = 0.99
-DQNRNDAgent.intrinsic_reward_clip = 50.0
+DQNRNDAgent.learning_rate = 5.02423e-06
+DQNRNDAgent.eps_start = 0.780379
+DQNRNDAgent.eps_end = 0.0824594
+DQNRNDAgent.eps_decay_steps = 155129
+DQNRNDAgent.target_update_freq = 2048
 
-DQNRNDAgent.rnd_output_dim = 64
+DQNRNDAgent.intrinsic_reward_scale = 0.103339
+DQNRNDAgent.intrinsic_stats_decay = 0.999
+DQNRNDAgent.intrinsic_reward_clip = 10.0
+
+DQNRNDAgent.rnd_learning_rate = 0.000171855
+DQNRNDAgent.rnd_optimizer = "adamw"
+DQNRNDAgent.rnd_output_dim = 32
+DQNRNDAgent.rnd_hidden_dims = None
 DQNRNDAgent.rnd_hidden_units = 64
-DQNRNDAgent.rnd_include_action = True
+DQNRNDAgent.rnd_activation = "gelu"
+DQNRNDAgent.rnd_normalization = "last"
+DQNRNDAgent.rnd_action_conditioning = "output"
 
-DQNRNDAgent.normalize_observations = True
+DQNRNDAgent.double_q = False
+
+DQNRNDAgent.hidden_dims = None
+DQNRNDAgent.hidden_units = 64
+DQNRNDAgent.activation = "relu"
+DQNRNDAgent.normalization = "last"
+
+DQNRNDAgent.optimizer = "adamw"
+DQNRNDAgent.optimizer_beta1 = 0.9
+DQNRNDAgent.optimizer_beta2 = 0.999
+DQNRNDAgent.optimizer_epsilon = 1e-8
+DQNRNDAgent.optimizer_weight_decay = 0.001
+DQNRNDAgent.optimizer_momentum = 0.0
+DQNRNDAgent.optimizer_decay = 0.95
+DQNRNDAgent.optimizer_centered = True
+
+DQNRNDAgent.loss_type = "mse"
+DQNRNDAgent.huber_delta = 5.0
+
+DQNRNDAgent.max_grad_norm = 1.0
+
+DQNRNDAgent.normalize_observations = False
+DQNRNDAgent.obs_normalization_clip = 7.0
 DQNRNDAgent.obs_normalization_epsilon = 1e-8
-DQNRNDAgent.obs_normalization_clip = 4.0
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
@@ -33,10 +58,10 @@ TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
 TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 16
-TrainingConfig.update_frequency = 2
+TrainingConfig.minibatch_size = 64
+TrainingConfig.update_frequency = 4
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 0
+TrainingConfig.warmup_steps = 16384
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
