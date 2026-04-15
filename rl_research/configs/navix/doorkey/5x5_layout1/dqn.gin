@@ -16,8 +16,8 @@ DQNAgent.target_update_freq = 256
 DQNAgent.max_grad_norm = 5.9388
 
 DQNAgent.normalize_observations = True
-DQNAgent.obs_normalization_epsilon = 1e-8,
-DQNAgent.obs_normalization_clip = 6.0,
+DQNAgent.obs_normalization_epsilon = 1e-8
+DQNAgent.obs_normalization_clip = 6.0
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
