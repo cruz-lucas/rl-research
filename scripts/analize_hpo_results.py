@@ -313,13 +313,17 @@ class HyperparameterAnalyzer:
 
 
 if __name__ == "__main__":
-    results_name = "hpo_navix2"
-    experiment = "navix_doorkey_16x16_layout3"
+    results_name = "hpo_dqn_rnd_ucb_5x5l1"
+    experiment = "navix_doorkey_5x5_layout1"
     analyzer = HyperparameterAnalyzer(f"./{results_name}.csv")
     analyzer.filter_experiment(experiment)
-    stats = analyzer.analyze('metric_summary_train_disc_return_mean', higher_is_better=True)
 
-    analyzer.summary_report(top_n=10)
+    metric = 'metric_summary_train_disc_return_mean'
+    # metric = "metric_summary_last100_train_disc_return_mean"
+    metric_name = "total_disc_ret" if metric == 'metric_summary_train_disc_return_mean' else "last100_disc_ret"
+    stats = analyzer.analyze(metric, higher_is_better=True)
+
+    # analyzer.summary_report(top_n=10)
 
     best = analyzer.get_best_per_agent(top_n=10)
     print(best)
@@ -339,4 +343,4 @@ if __name__ == "__main__":
     # analyzer.plot_param_importance('agent_learning_rate', 'NFQAgent')
 
     # stats.to_csv(f'{experiment}__{results_name}__hyperparameter_stats.csv', index=False)
-    best.to_csv(f'{experiment}__{results_name}__best_configs.csv', index=False)
+    best.to_csv(f'{experiment}__{results_name}__{metric_name}__best_configs.csv', index=False)
