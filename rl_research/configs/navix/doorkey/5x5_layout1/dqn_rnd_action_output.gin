@@ -65,3 +65,8 @@ TrainingConfig.warmup_steps = 16384
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
+
+TrainingConfig.checkpoint_freq = None
+TrainingConfig.checkpoint_dir = "./output/ckpt"
+TrainingConfig.restore_checkpoint_path = None
+TrainingConfig.save_final_checkpoint = True

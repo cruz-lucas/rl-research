@@ -1,5 +1,5 @@
 setup_mlflow.experiment_name = "navix_doorkey_5x5_layout1"
-setup_mlflow.experiment_group = "dqn_rnd"
+setup_mlflow.experiment_group = "dqn_rnd_action_input"
 
 run_loop.agent_cls = @DQNRNDAgent
 run_loop.env_cls = @NavixWrapper
@@ -8,24 +8,49 @@ ReplayBuffer.buffer_size = 16384
 ReplayBuffer.obs_shape = (5, 5, 3)
 
 DQNRNDAgent.discount = 0.99
-DQNRNDAgent.learning_rate = 4.76025e-06
-DQNRNDAgent.rnd_learning_rate = 0.00157092
+DQNRNDAgent.learning_rate = 4.16103e-06
 DQNRNDAgent.eps_start = 0.636821
-DQNRNDAgent.eps_end = 0.01
-DQNRNDAgent.eps_decay_steps = 120000
+DQNRNDAgent.eps_end = 0.03
+DQNRNDAgent.eps_decay_steps = 419315
 DQNRNDAgent.target_update_freq = 2048
-DQNRNDAgent.max_grad_norm = 2.57406
-DQNRNDAgent.intrinsic_reward_scale = 0.1
+
+DQNRNDAgent.intrinsic_reward_scale = 0.10099
 DQNRNDAgent.intrinsic_stats_decay = 0.99
 DQNRNDAgent.intrinsic_reward_clip = 10.0
 
+DQNRNDAgent.rnd_learning_rate = 0.00157092
+DQNRNDAgent.rnd_optimizer = "adam"
 DQNRNDAgent.rnd_output_dim = 1
+DQNRNDAgent.rnd_hidden_dims = None
 DQNRNDAgent.rnd_hidden_units = 64
-DQNRNDAgent.rnd_include_action = False
+DQNRNDAgent.rnd_activation = "relu"
+DQNRNDAgent.rnd_normalization = "last"
+DQNRNDAgent.rnd_action_conditioning = "input"
+
+DQNRNDAgent.double_q = False
+
+DQNRNDAgent.hidden_dims = None
+DQNRNDAgent.hidden_units = 64
+DQNRNDAgent.activation = "relu"
+DQNRNDAgent.normalization = "last"
+
+DQNRNDAgent.optimizer = "adam"
+DQNRNDAgent.optimizer_beta1 = 0.9
+DQNRNDAgent.optimizer_beta2 = 0.999
+DQNRNDAgent.optimizer_epsilon = 1e-8
+DQNRNDAgent.optimizer_weight_decay = 0.0
+DQNRNDAgent.optimizer_momentum = 0.0
+DQNRNDAgent.optimizer_decay = 0.95
+DQNRNDAgent.optimizer_centered = True
+
+DQNRNDAgent.loss_type = "mse"
+DQNRNDAgent.huber_delta = 5.0
+
+DQNRNDAgent.max_grad_norm = 2.57406
 
 DQNRNDAgent.normalize_observations = False
+DQNRNDAgent.obs_normalization_clip = 10
 DQNRNDAgent.obs_normalization_epsilon = 1e-8
-DQNRNDAgent.obs_normalization_clip = 10.0
 
 NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
@@ -36,14 +61,12 @@ TrainingConfig.max_episode_steps = 100
 TrainingConfig.minibatch_size = 2048
 TrainingConfig.update_frequency = 2
 TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 1024
+TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = None
 
 TrainingConfig.checkpoint_freq = None
 TrainingConfig.checkpoint_dir = "./output/ckpt"
 TrainingConfig.restore_checkpoint_path = None
 TrainingConfig.save_final_checkpoint = True
-
-DQNRNDAgent.debug = False
-DQNRNDAgent.debug_log_dir = None
