@@ -110,9 +110,9 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             debug_log_to_mlflow=debug_log_to_mlflow,
             seed=seed,
         )
-        if self.rnd_action_conditioning != "output":
+        if self.rnd_action_conditioning == "none":
             raise ValueError(
-                "DQNRNDUCBAgent requires rnd_action_conditioning='output' so the "
+                "DQNRNDUCBAgent requires rnd_action_conditioning='output' or 'input' so the "
                 "RND network emits one feature vector per action."
             )
         self.decision_bonus_scale = (
@@ -133,7 +133,22 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         state: DQNRNDState,
         observation: jnp.ndarray,
     ) -> jax.Array:
-        decision_bonus, _ = self._compute_intrinsic_reward(state, observation)
+        if self.rnd_action_conditioning == "input":
+            observation_batch = jnp.broadcast_to(
+                observation,
+                (self.num_actions, observation.shape[-1]),
+            )
+            action_batch = jnp.arange(self.num_actions, dtype=jnp.int32)
+            decision_bonus, _ = self._compute_intrinsic_reward(
+                state,
+                observation_batch,
+                action_batch,
+            )
+            return decision_bonus
+        
+        else:
+            decision_bonus, _ = self._compute_intrinsic_reward(state, observation)
+        
         if decision_bonus.ndim == 0 or decision_bonus.shape[-1] != self.num_actions:
             raise ValueError(
                 "DQNRNDUCBAgent expected one RND bonus per action, but got "
@@ -141,6 +156,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             )
         return decision_bonus
 
+    # TODO: Fix this for action conditioning in the input
     def _compute_next_bootstrap_values(
         self,
         state: DQNRNDState,
