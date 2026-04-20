@@ -1,5 +1,5 @@
 setup_mlflow.experiment_name = "navix_doorkey_5x5_layout1"
-setup_mlflow.experiment_group = "dqn_rnd_ucb_actioninput"
+setup_mlflow.experiment_group = "dqn_rnd_ucb_test_rmax"
 
 run_loop.agent_cls = @DQNRNDUCBAgent
 run_loop.env_cls = @NavixWrapper
@@ -20,7 +20,7 @@ DQNRNDUCBAgent.normalization = "last"
 
 DQNRNDUCBAgent.intrinsic_reward_scale = 0.0746775
 DQNRNDUCBAgent.decision_bonus_scale = 1.91827
-DQNRNDUCBAgent.bootstrap_with_rnd_bonus = False
+DQNRNDUCBAgent.bootstrap_with_rnd_bonus = True
 DQNRNDUCBAgent.bootstrap_bonus_scale = 0.198482
 DQNRNDUCBAgent.intrinsic_stats_decay = 0.999
 DQNRNDUCBAgent.intrinsic_reward_clip = 50.0
@@ -35,10 +35,10 @@ DQNRNDUCBAgent.rnd_normalization = "none"
 DQNRNDUCBAgent.rnd_action_conditioning = "input"
 DQNRNDUCBAgent.rnd_update_period = 4
 
-DQNRNDUCBAgent.decision_bonus_threshold = 1.0
-DQNRNDUCBAgent.decision_optimistic_value = None
-DQNRNDUCBAgent.bootstrap_bonus_threshold = 1.0
-DQNRNDUCBAgent.bootstrap_optimistic_value = None
+DQNRNDUCBAgent.decision_bonus_threshold = 0.5
+DQNRNDUCBAgent.decision_optimistic_value = 20
+DQNRNDUCBAgent.bootstrap_bonus_threshold = 0.5
+DQNRNDUCBAgent.bootstrap_optimistic_value = 1.0
 
 DQNRNDUCBAgent.double_q = False
 
@@ -79,4 +79,4 @@ TrainingConfig.restore_checkpoint_path = None
 TrainingConfig.save_final_checkpoint = False
 
 DQNRNDUCBAgent.debug = False
-DQNRNDUCBAgent.debug_log_dir = "./tmp/debug_logs"
+DQNRNDUCBAgent.debug_log_dir = "./output/debug_logs"
