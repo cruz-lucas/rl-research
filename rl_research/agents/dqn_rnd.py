@@ -81,6 +81,7 @@ class DQNRNDAgent:
         rnd_learning_rate: float | None = None,
         rnd_include_action: bool | None = None,
         rnd_action_conditioning: str = "none",
+        rnd_update_period: int = 1,
         normalize_observations: bool = False,
         obs_normalization_epsilon: float = 1e-8,
         obs_normalization_clip: float | None = 5.0,
@@ -145,6 +146,9 @@ class DQNRNDAgent:
             rnd_action_conditioning=rnd_action_conditioning,
         )
         self.rnd_include_action = self.rnd_action_conditioning == "input"
+        self.rnd_update_period = int(rnd_update_period)
+        if self.rnd_update_period < 1:
+            raise ValueError("rnd_update_period must be at least 1.")
         self.normalize_observations = bool(normalize_observations)
         self.obs_normalization_epsilon = float(obs_normalization_epsilon)
         self.obs_normalization_clip = obs_normalization_clip
@@ -420,21 +424,31 @@ class DQNRNDAgent:
         state: DQNRNDState,
         observation: jnp.ndarray,
     ) -> jax.Array:
-        observation = jnp.asarray(observation, dtype=jnp.float32).reshape(-1)
+        observation = jnp.asarray(observation, dtype=jnp.float32)
+        single_observation = observation.ndim == 1
+        if single_observation:
+            observation = observation.reshape(1, -1)
         if self.rnd_action_conditioning == "input":
+            batch_size = observation.shape[0]
             observation_batch = jnp.broadcast_to(
-                observation,
-                (self.num_actions, observation.shape[-1]),
+                observation[:, None, :],
+                (batch_size, self.num_actions, observation.shape[-1]),
             )
-            action_batch = jnp.arange(self.num_actions, dtype=jnp.int32)
+            action_batch = jnp.broadcast_to(
+                jnp.arange(self.num_actions, dtype=jnp.int32),
+                (batch_size, self.num_actions),
+            )
             decision_bonus, _ = self._compute_intrinsic_reward(
                 state,
-                observation_batch,
-                action_batch,
+                observation_batch.reshape(-1, observation.shape[-1]),
+                action_batch.reshape(-1),
             )
-            return decision_bonus
+            decision_bonus = decision_bonus.reshape(batch_size, self.num_actions)
+        else:
+            decision_bonus, _ = self._compute_intrinsic_reward(state, observation)
 
-        decision_bonus, _ = self._compute_intrinsic_reward(state, observation)
+        if single_observation:
+            return decision_bonus.squeeze(axis=0)
         return decision_bonus
 
     def _log_decision_debug(
@@ -615,6 +629,11 @@ class DQNRNDAgent:
             intrinsic_reward_var=new_var,
         )
 
+    def _should_update_rnd(self, state: DQNRNDState) -> jax.Array:
+        if self.rnd_update_period == 1:
+            return jnp.asarray(True)
+        return (state.gradient_steps + 1) % self.rnd_update_period == 0
+
     def update(
         self, state: DQNRNDState, batch: Transition
     ) -> tuple[DQNRNDState, jax.Array]:
@@ -711,11 +730,29 @@ class DQNRNDAgent:
             predictor_features = self._select_rnd_features(network(rnd_input), action)
             return jnp.mean(jnp.square(predictor_features - rnd_target_features))
 
-        rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
-            state.rnd_predictor_network
-        )
+        should_update_rnd = self._should_update_rnd(state)
+
         if self.debug:
-            rnd_grad_norm = optax.global_norm(rnd_grads)
+            def do_rnd_update(agent_state: DQNRNDState):
+                rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
+                    agent_state.rnd_predictor_network
+                )
+                agent_state.rnd_optimizer.update(
+                    agent_state.rnd_predictor_network, rnd_grads
+                )
+                rnd_grad_norm = optax.global_norm(rnd_grads)
+                return agent_state, rnd_loss, rnd_grad_norm
+
+            def skip_rnd_update(agent_state: DQNRNDState):
+                rnd_loss = rnd_loss_fn(agent_state.rnd_predictor_network)
+                return agent_state, rnd_loss, jnp.asarray(0.0, dtype=jnp.float32)
+
+            state, rnd_loss, rnd_grad_norm = nnx.cond(
+                should_update_rnd,
+                do_rnd_update,
+                skip_rnd_update,
+                state,
+            )
             self._log_update_debug(
                 global_step=jnp.asarray(state.step, dtype=jnp.int32),
                 gradient_step=jnp.asarray(state.gradient_steps + 1, dtype=jnp.int32),
@@ -738,9 +775,28 @@ class DQNRNDAgent:
                 q_grad_norm_without_intrinsic=q_grad_norm_without_intrinsic,
                 rnd_grad_norm=rnd_grad_norm,
             )
+        else:
+            def do_rnd_update(agent_state: DQNRNDState):
+                rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
+                    agent_state.rnd_predictor_network
+                )
+                agent_state.rnd_optimizer.update(
+                    agent_state.rnd_predictor_network, rnd_grads
+                )
+                return agent_state, rnd_loss
+
+            def skip_rnd_update(agent_state: DQNRNDState):
+                rnd_loss = rnd_loss_fn(agent_state.rnd_predictor_network)
+                return agent_state, rnd_loss
+
+            state, rnd_loss = nnx.cond(
+                should_update_rnd,
+                do_rnd_update,
+                skip_rnd_update,
+                state,
+            )
 
         state.optimizer.update(state.online_network, q_grads)
-        state.rnd_optimizer.update(state.rnd_predictor_network, rnd_grads)
 
         state = state.replace(gradient_steps=state.gradient_steps + 1)
         hard_update_network(

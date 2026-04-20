@@ -52,9 +52,14 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         rnd_learning_rate: float | None = None,
         rnd_include_action: bool | None = None,
         rnd_action_conditioning: str = "output",
+        rnd_update_period: int = 1,
         decision_bonus_scale: float | None = None,
+        decision_bonus_threshold: float | None = None,
+        decision_optimistic_value: float | None = None,
         bootstrap_with_rnd_bonus: bool = False,
         bootstrap_bonus_scale: float | None = None,
+        bootstrap_bonus_threshold: float | None = None,
+        bootstrap_optimistic_value: float | None = None,
         use_decision_bonus_in_eval: bool = False,
         normalize_observations: bool = False,
         obs_normalization_epsilon: float = 1e-8,
@@ -102,6 +107,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             rnd_learning_rate=rnd_learning_rate,
             rnd_include_action=rnd_include_action,
             rnd_action_conditioning=rnd_action_conditioning,
+            rnd_update_period=rnd_update_period,
             normalize_observations=normalize_observations,
             obs_normalization_epsilon=obs_normalization_epsilon,
             obs_normalization_clip=obs_normalization_clip,
@@ -112,7 +118,8 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         )
         if self.rnd_action_conditioning == "none":
             raise ValueError(
-                "DQNRNDUCBAgent requires rnd_action_conditioning='output' or 'input' so the "
+                "DQNRNDUCBAgent requires rnd_action_conditioning='output' "
+                "or 'input' so the "
                 "RND network emits one feature vector per action."
             )
         self.decision_bonus_scale = (
@@ -120,11 +127,31 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             if decision_bonus_scale is None
             else float(decision_bonus_scale)
         )
+        self.decision_bonus_threshold = (
+            None
+            if decision_bonus_threshold is None
+            else float(decision_bonus_threshold)
+        )
+        self.decision_optimistic_value = (
+            None
+            if decision_optimistic_value is None
+            else float(decision_optimistic_value)
+        )
         self.bootstrap_with_rnd_bonus = bool(bootstrap_with_rnd_bonus)
         self.bootstrap_bonus_scale = (
             self.decision_bonus_scale
             if bootstrap_bonus_scale is None
             else float(bootstrap_bonus_scale)
+        )
+        self.bootstrap_bonus_threshold = (
+            None
+            if bootstrap_bonus_threshold is None
+            else float(bootstrap_bonus_threshold)
+        )
+        self.bootstrap_optimistic_value = (
+            None
+            if bootstrap_optimistic_value is None
+            else float(bootstrap_optimistic_value)
         )
         self.use_decision_bonus_in_eval = bool(use_decision_bonus_in_eval)
 
@@ -133,22 +160,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         state: DQNRNDState,
         observation: jnp.ndarray,
     ) -> jax.Array:
-        if self.rnd_action_conditioning == "input":
-            observation_batch = jnp.broadcast_to(
-                observation,
-                (self.num_actions, observation.shape[-1]),
-            )
-            action_batch = jnp.arange(self.num_actions, dtype=jnp.int32)
-            decision_bonus, _ = self._compute_intrinsic_reward(
-                state,
-                observation_batch,
-                action_batch,
-            )
-            return decision_bonus
-        
-        else:
-            decision_bonus, _ = self._compute_intrinsic_reward(state, observation)
-        
+        decision_bonus = super()._compute_decision_bonus(state, observation)
         if decision_bonus.ndim == 0 or decision_bonus.shape[-1] != self.num_actions:
             raise ValueError(
                 "DQNRNDUCBAgent expected one RND bonus per action, but got "
@@ -156,7 +168,31 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             )
         return decision_bonus
 
-    # TODO: Fix this for action conditioning in the input
+    def _resolve_optimistic_values(
+        self,
+        values: jax.Array,
+        optimistic_value: float | None,
+    ) -> jax.Array:
+        if optimistic_value is None:
+            return jnp.max(values, axis=-1, keepdims=True) + jnp.asarray(
+                1.0, dtype=values.dtype
+            )
+        return jnp.asarray(optimistic_value, dtype=values.dtype)
+
+    def _apply_bonus_threshold(
+        self,
+        values: jax.Array,
+        bonus: jax.Array,
+        threshold: float | None,
+        optimistic_value: float | None,
+    ) -> jax.Array:
+        if threshold is None:
+            return values
+
+        optimistic_mask = bonus >= jnp.asarray(threshold, dtype=bonus.dtype)
+        optimistic_values = self._resolve_optimistic_values(values, optimistic_value)
+        return jnp.where(optimistic_mask, optimistic_values, values)
+
     def _compute_next_bootstrap_values(
         self,
         state: DQNRNDState,
@@ -164,7 +200,10 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         next_online_q: jax.Array,
         next_target_q: jax.Array,
     ) -> jax.Array:
-        if not self.bootstrap_with_rnd_bonus:
+        if (
+            not self.bootstrap_with_rnd_bonus
+            and self.bootstrap_bonus_threshold is None
+        ):
             return super()._compute_next_bootstrap_values(
                 state=state,
                 next_observation=next_observation,
@@ -175,8 +214,27 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         next_bonus = jax.lax.stop_gradient(
             self._compute_decision_bonus(state, next_observation)
         )
-        next_online_values = next_online_q + self.bootstrap_bonus_scale * next_bonus
-        next_target_values = next_target_q + self.bootstrap_bonus_scale * next_bonus
+        next_online_values = next_online_q
+        next_target_values = next_target_q
+        if self.bootstrap_with_rnd_bonus:
+            next_online_values = (
+                next_online_values + self.bootstrap_bonus_scale * next_bonus
+            )
+            next_target_values = (
+                next_target_values + self.bootstrap_bonus_scale * next_bonus
+            )
+        next_online_values = self._apply_bonus_threshold(
+            next_online_values,
+            next_bonus,
+            self.bootstrap_bonus_threshold,
+            self.bootstrap_optimistic_value,
+        )
+        next_target_values = self._apply_bonus_threshold(
+            next_target_values,
+            next_bonus,
+            self.bootstrap_bonus_threshold,
+            self.bootstrap_optimistic_value,
+        )
 
         if self.double_q:
             next_action = jnp.argmax(
@@ -208,6 +266,12 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         if use_decision_bonus:
             decision_bonus = self._compute_decision_bonus(state, raw_obs)
             decision_values = q_vals + self.decision_bonus_scale * decision_bonus
+            decision_values = self._apply_bonus_threshold(
+                decision_values,
+                decision_bonus,
+                self.decision_bonus_threshold,
+                self.decision_optimistic_value,
+            )
             action = _select_greedy(decision_values, key)
         else:
             decision_bonus = None

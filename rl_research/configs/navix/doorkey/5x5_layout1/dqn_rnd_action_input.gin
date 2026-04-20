@@ -70,3 +70,6 @@ TrainingConfig.checkpoint_freq = None
 TrainingConfig.checkpoint_dir = "./output/ckpt"
 TrainingConfig.restore_checkpoint_path = None
 TrainingConfig.save_final_checkpoint = True
+
+DQNRNDAgent.debug = False
+DQNRNDAgent.debug_log_dir = None

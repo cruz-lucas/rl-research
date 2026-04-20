@@ -33,6 +33,12 @@ DQNRNDUCBAgent.rnd_hidden_units = 64
 DQNRNDUCBAgent.rnd_activation = "gelu"
 DQNRNDUCBAgent.rnd_normalization = "none"
 DQNRNDUCBAgent.rnd_action_conditioning = "input"
+DQNRNDUCBAgent.rnd_update_period = 4
+
+DQNRNDUCBAgent.decision_bonus_threshold = 1.0
+DQNRNDUCBAgent.decision_optimistic_value = None
+DQNRNDUCBAgent.bootstrap_bonus_threshold = 1.0
+DQNRNDUCBAgent.bootstrap_optimistic_value = None
 
 DQNRNDUCBAgent.double_q = False
 
@@ -62,8 +68,15 @@ TrainingConfig.train_steps = 1_000_000
 TrainingConfig.max_episode_steps = 100
 TrainingConfig.minibatch_size = 1024
 TrainingConfig.update_frequency = 1
-TrainingConfig.num_minibatches = 1
-TrainingConfig.warmup_steps = 4096
+TrainingConfig.num_minibatches = 4
+TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
+
 TrainingConfig.checkpoint_freq = None
+TrainingConfig.checkpoint_dir = "./output/ckpt"
+TrainingConfig.restore_checkpoint_path = None
+TrainingConfig.save_final_checkpoint = False
+
+DQNRNDUCBAgent.debug = False
+DQNRNDUCBAgent.debug_log_dir = "./tmp/debug_logs"
