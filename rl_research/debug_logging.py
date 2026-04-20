@@ -54,6 +54,7 @@ class DQNRNDDebugLogger:
         discount: float,
         rnd_action_conditioning: str,
         normalize_observations: bool,
+        compact_observations: bool = True,
         log_to_mlflow: bool = True,
     ) -> None:
         active_run = mlflow.active_run()
@@ -67,6 +68,7 @@ class DQNRNDDebugLogger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.decision_log_path = self.log_dir / "decision_trace.jsonl"
         self.update_log_path = self.log_dir / "update_trace.jsonl"
+        self.observation_table_path = self.log_dir / "observation_table.jsonl"
         self.metadata_path = self.log_dir / "metadata.json"
         self._decision_file = self.decision_log_path.open(
             "a", encoding="utf-8", buffering=1
@@ -74,6 +76,13 @@ class DQNRNDDebugLogger:
         self._update_file = self.update_log_path.open(
             "a", encoding="utf-8", buffering=1
         )
+        self._compact_observations = bool(compact_observations)
+        self._observation_table_file = (
+            self.observation_table_path.open("a", encoding="utf-8", buffering=1)
+            if self._compact_observations
+            else None
+        )
+        self._observation_ids: dict[str, int] = {}
         self._lock = Lock()
         self._closed = False
         self._log_to_mlflow = bool(log_to_mlflow)
@@ -93,7 +102,13 @@ class DQNRNDDebugLogger:
             "rnd_action_conditioning": rnd_action_conditioning,
             "decision_log_path": str(self.decision_log_path),
             "update_log_path": str(self.update_log_path),
-            "observation_encoding": {
+            "observation_storage": {
+                "mode": "table_ids" if self._compact_observations else "inline",
+                "observation_table_path": (
+                    str(self.observation_table_path)
+                    if self._compact_observations
+                    else None
+                ),
                 "payload_format": "base64-encoded raw bytes",
                 "observation_key": "blake2b-128 digest of flattened raw bytes",
             },
@@ -106,6 +121,36 @@ class DQNRNDDebugLogger:
     def _write_jsonl(self, file_obj, payload: dict[str, Any]) -> None:
         file_obj.write(json.dumps(payload, separators=(",", ":")) + "\n")
 
+    def _register_observation_locked(self, observation: np.ndarray) -> tuple[int, str]:
+        observation = np.ascontiguousarray(np.asarray(observation))
+        key = observation_key(observation)
+        observation_id = self._observation_ids.get(key)
+        if observation_id is None:
+            observation_id = len(self._observation_ids)
+            self._observation_ids[key] = observation_id
+            if self._observation_table_file is not None:
+                self._write_jsonl(
+                    self._observation_table_file,
+                    {
+                        "observation_id": observation_id,
+                        "observation_key": key,
+                        "observation": pack_array(observation),
+                    },
+                )
+        return observation_id, key
+
+    def _register_observation_batch_locked(
+        self,
+        observations: np.ndarray,
+    ) -> tuple[list[int], list[str]]:
+        observation_ids: list[int] = []
+        observation_keys_list: list[str] = []
+        for observation in np.asarray(observations):
+            observation_id, key = self._register_observation_locked(observation)
+            observation_ids.append(observation_id)
+            observation_keys_list.append(key)
+        return observation_ids, observation_keys_list
+
     def log_decision(
         self,
         global_step: np.ndarray,
@@ -117,21 +162,26 @@ class DQNRNDDebugLogger:
         decision_values: np.ndarray | None = None,
     ) -> None:
         observation = np.asarray(observation)
-        record = {
-            "global_step": int(np.asarray(global_step)),
-            "observation": pack_array(observation),
-            "observation_key": observation_key(observation),
-            "q_values": np.asarray(q_values).tolist(),
-            "action": int(np.asarray(action)),
-        }
-        epsilon_value = float(np.asarray(epsilon))
-        if np.isfinite(epsilon_value):
-            record["epsilon"] = epsilon_value
-        if decision_bonus is not None:
-            record["decision_bonus"] = np.asarray(decision_bonus).tolist()
-        if decision_values is not None:
-            record["decision_values"] = np.asarray(decision_values).tolist()
         with self._lock:
+            record = {
+                "global_step": int(np.asarray(global_step)),
+                "q_values": np.asarray(q_values).tolist(),
+                "action": int(np.asarray(action)),
+            }
+            if self._compact_observations:
+                observation_id, _ = self._register_observation_locked(observation)
+                record["observation_id"] = observation_id
+            else:
+                record["observation"] = pack_array(observation)
+                record["observation_key"] = observation_key(observation)
+
+            epsilon_value = float(np.asarray(epsilon))
+            if np.isfinite(epsilon_value):
+                record["epsilon"] = epsilon_value
+            if decision_bonus is not None:
+                record["decision_bonus"] = np.asarray(decision_bonus).tolist()
+            if decision_values is not None:
+                record["decision_values"] = np.asarray(decision_values).tolist()
             self._write_jsonl(self._decision_file, record)
 
     def log_update(
@@ -159,16 +209,10 @@ class DQNRNDDebugLogger:
     ) -> None:
         observation = np.asarray(observation)
         next_observation = np.asarray(next_observation)
-        record = {
-            "global_step": int(np.asarray(global_step)),
-            "gradient_step": int(np.asarray(gradient_step)),
-            "batch": {
-                "observation": pack_array(observation),
-                "observation_keys": observation_keys(observation),
+        with self._lock:
+            batch_payload = {
                 "action": np.asarray(action).tolist(),
                 "reward": np.asarray(reward).tolist(),
-                "next_observation": pack_array(next_observation),
-                "next_observation_keys": observation_keys(next_observation),
                 "terminal": np.asarray(terminal).astype(bool).tolist(),
                 "q_values_observation": np.asarray(q_values_observation).tolist(),
                 "q_values_next_observation_online": np.asarray(
@@ -188,19 +232,37 @@ class DQNRNDDebugLogger:
                     target_without_intrinsic
                 ).tolist(),
                 "target_with_intrinsic": np.asarray(target_with_intrinsic).tolist(),
-            },
-            "q_loss": float(np.asarray(q_loss)),
-            "rnd_loss": float(np.asarray(rnd_loss)),
-            "loss": float(np.asarray(q_loss) + np.asarray(rnd_loss)),
-            "q_grad_norm_with_intrinsic": float(
-                np.asarray(q_grad_norm_with_intrinsic)
-            ),
-            "q_grad_norm_without_intrinsic": float(
-                np.asarray(q_grad_norm_without_intrinsic)
-            ),
-            "rnd_grad_norm": float(np.asarray(rnd_grad_norm)),
-        }
-        with self._lock:
+            }
+            if self._compact_observations:
+                observation_ids, _ = self._register_observation_batch_locked(observation)
+                next_observation_ids, _ = self._register_observation_batch_locked(
+                    next_observation
+                )
+                batch_payload["observation_ids"] = observation_ids
+                batch_payload["next_observation_ids"] = next_observation_ids
+            else:
+                batch_payload["observation"] = pack_array(observation)
+                batch_payload["observation_keys"] = observation_keys(observation)
+                batch_payload["next_observation"] = pack_array(next_observation)
+                batch_payload["next_observation_keys"] = observation_keys(
+                    next_observation
+                )
+
+            record = {
+                "global_step": int(np.asarray(global_step)),
+                "gradient_step": int(np.asarray(gradient_step)),
+                "batch": batch_payload,
+                "q_loss": float(np.asarray(q_loss)),
+                "rnd_loss": float(np.asarray(rnd_loss)),
+                "loss": float(np.asarray(q_loss) + np.asarray(rnd_loss)),
+                "q_grad_norm_with_intrinsic": float(
+                    np.asarray(q_grad_norm_with_intrinsic)
+                ),
+                "q_grad_norm_without_intrinsic": float(
+                    np.asarray(q_grad_norm_without_intrinsic)
+                ),
+                "rnd_grad_norm": float(np.asarray(rnd_grad_norm)),
+            }
             self._write_jsonl(self._update_file, record)
 
     def close(self) -> None:
@@ -210,6 +272,8 @@ class DQNRNDDebugLogger:
         with self._lock:
             self._decision_file.close()
             self._update_file.close()
+            if self._observation_table_file is not None:
+                self._observation_table_file.close()
             self._closed = True
 
         if self._log_to_mlflow and mlflow.active_run() is not None:

@@ -88,6 +88,7 @@ class DQNRNDAgent:
         debug: bool = False,
         debug_log_dir: str = "tmp/debug_logs",
         debug_log_to_mlflow: bool = True,
+        debug_compact_observations: bool = True,
         seed: int = 0,
     ):
         self.num_states = int(num_states)
@@ -155,6 +156,7 @@ class DQNRNDAgent:
         self.debug = bool(debug)
         self.debug_log_dir = debug_log_dir
         self.debug_log_to_mlflow = bool(debug_log_to_mlflow)
+        self.debug_compact_observations = bool(debug_compact_observations)
         self.seed = int(seed)
         self._debug_logger = (
             DQNRNDDebugLogger(
@@ -165,6 +167,7 @@ class DQNRNDAgent:
                 discount=self.discount,
                 rnd_action_conditioning=self.rnd_action_conditioning,
                 normalize_observations=self.normalize_observations,
+                compact_observations=self.debug_compact_observations,
                 log_to_mlflow=self.debug_log_to_mlflow,
             )
             if self.debug

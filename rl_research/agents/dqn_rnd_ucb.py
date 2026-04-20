@@ -67,6 +67,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         debug: bool = False,
         debug_log_dir: str = "tmp/debug_logs",
         debug_log_to_mlflow: bool = True,
+        debug_compact_observations: bool = True,
         seed: int = 0,
     ):
         super().__init__(
@@ -114,6 +115,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             debug=debug,
             debug_log_dir=debug_log_dir,
             debug_log_to_mlflow=debug_log_to_mlflow,
+            debug_compact_observations=debug_compact_observations,
             seed=seed,
         )
         if self.rnd_action_conditioning == "none":

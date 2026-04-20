@@ -14,7 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-SourceMode = Literal["decision", "update"]
+SourceMode = Literal["decision", "update", "update_decision"]
 EntityMode = Literal["state", "state_action"]
 
 
@@ -42,10 +42,16 @@ def resolve_run_dirs(input_paths: tuple[Path, ...]) -> list[Path]:
             raise FileNotFoundError(f"Input path does not exist: {path}")
 
         if path.is_file():
-            if path.name not in {"metadata.json", "decision_trace.jsonl", "update_trace.jsonl"}:
+            if path.name not in {
+                "metadata.json",
+                "decision_trace.jsonl",
+                "update_trace.jsonl",
+                "observation_table.jsonl",
+            }:
                 raise ValueError(
                     "Expected a debug log directory or one of metadata.json, "
-                    f"decision_trace.jsonl, update_trace.jsonl; got {path}"
+                    "decision_trace.jsonl, update_trace.jsonl, "
+                    f"observation_table.jsonl; got {path}"
                 )
             if not (path.parent / "metadata.json").exists():
                 raise ValueError(f"Missing metadata.json next to {path}")
@@ -87,6 +93,17 @@ def iter_jsonl(path: Path):
 
 def load_metadata(run_dir: Path) -> dict:
     return json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+
+
+def load_observation_lookup(run_dir: Path) -> dict[int, str]:
+    table_path = run_dir / "observation_table.jsonl"
+    if not table_path.exists():
+        return {}
+
+    observation_lookup: dict[int, str] = {}
+    for record in iter_jsonl(table_path):
+        observation_lookup[int(record["observation_id"])] = str(record["observation_key"])
+    return observation_lookup
 
 
 def append_value(histories: dict[str, list[float]], entity_key: str, value: float) -> None:
@@ -131,6 +148,41 @@ def _selected_decision_bonus(record: dict) -> float:
     return float(bonus[action])
 
 
+def resolve_decision_state_key(record: dict, observation_lookup: dict[int, str]) -> str:
+    if "observation_key" in record:
+        return str(record["observation_key"])
+    if "observation_id" in record:
+        observation_id = int(record["observation_id"])
+        if observation_id not in observation_lookup:
+            raise KeyError(
+                f"Missing observation_id={observation_id} in observation_table.jsonl."
+            )
+        return observation_lookup[observation_id]
+    raise KeyError("Decision trace record is missing observation_key/observation_id.")
+
+
+def resolve_batch_state_keys(
+    batch: dict,
+    observation_lookup: dict[int, str],
+    *,
+    field_keys: str,
+    field_ids: str,
+) -> list[str]:
+    if field_keys in batch:
+        return [str(state_key) for state_key in batch[field_keys]]
+    if field_ids in batch:
+        state_keys: list[str] = []
+        for observation_id in batch[field_ids]:
+            observation_id = int(observation_id)
+            if observation_id not in observation_lookup:
+                raise KeyError(
+                    f"Missing observation_id={observation_id} in observation_table.jsonl."
+                )
+            state_keys.append(observation_lookup[observation_id])
+        return state_keys
+    raise KeyError(f"Batch is missing {field_keys}/{field_ids}.")
+
+
 def load_histories_from_decision_trace(
     run_dir: Path,
     entity_mode: EntityMode,
@@ -141,10 +193,11 @@ def load_histories_from_decision_trace(
 
     histories: dict[str, list[float]] = {}
     entity_state_keys: dict[str, str] = {}
+    observation_lookup = load_observation_lookup(run_dir)
     run_prefix = run_dir.name
 
     for record in iter_jsonl(trace_path):
-        state_key = str(record["observation_key"])
+        state_key = resolve_decision_state_key(record, observation_lookup)
         action = int(record["action"])
         bonus = _selected_decision_bonus(record)
         add_entity(
@@ -170,11 +223,17 @@ def load_histories_from_update_trace(
 
     histories: dict[str, list[float]] = {}
     entity_state_keys: dict[str, str] = {}
+    observation_lookup = load_observation_lookup(run_dir)
     run_prefix = run_dir.name
 
     for record in iter_jsonl(trace_path):
         batch = record["batch"]
-        state_keys = list(batch["observation_keys"])
+        state_keys = resolve_batch_state_keys(
+            batch,
+            observation_lookup,
+            field_keys="observation_keys",
+            field_ids="observation_ids",
+        )
         actions = np.asarray(batch["action"], dtype=np.int32)
         bonuses = np.asarray(batch["intrinsic_reward_observation"], dtype=np.float32)
         if bonuses.ndim != 1:
@@ -202,6 +261,81 @@ def load_histories_from_update_trace(
     return histories, entity_state_keys
 
 
+def load_histories_from_update_against_decision_trace(
+    run_dir: Path,
+    entity_mode: EntityMode,
+) -> tuple[dict[str, list[float]], dict[str, str]]:
+    # This mode uses decision-trace visitation order for the x-axis, and update-time
+    # intrinsic rewards for the y-axis. The two streams are paired per entity in
+    # trace order, then truncated to the shorter sequence.
+    decision_trace_path = run_dir / "decision_trace.jsonl"
+    update_trace_path = run_dir / "update_trace.jsonl"
+    if not decision_trace_path.exists():
+        raise FileNotFoundError(f"Missing decision trace: {decision_trace_path}")
+    if not update_trace_path.exists():
+        raise FileNotFoundError(f"Missing update trace: {update_trace_path}")
+
+    decision_counts_by_entity: dict[str, list[int]] = {}
+    update_bonuses_by_entity: dict[str, list[float]] = {}
+    entity_state_keys: dict[str, str] = {}
+    observation_lookup = load_observation_lookup(run_dir)
+    run_prefix = run_dir.name
+
+    decision_cursors: dict[str, int] = {}
+    for record in iter_jsonl(decision_trace_path):
+        state_key = resolve_decision_state_key(record, observation_lookup)
+        action = int(record["action"])
+        scoped_state_key = f"{run_prefix}:{state_key}"
+        if entity_mode == "state":
+            entity_key = scoped_state_key
+        else:
+            entity_key = f"{scoped_state_key}:a={action}"
+        entity_state_keys[entity_key] = scoped_state_key
+        decision_cursors[entity_key] = decision_cursors.get(entity_key, 0) + 1
+        decision_counts_by_entity.setdefault(entity_key, []).append(decision_cursors[entity_key])
+
+    for record in iter_jsonl(update_trace_path):
+        batch = record["batch"]
+        state_keys = resolve_batch_state_keys(
+            batch,
+            observation_lookup,
+            field_keys="observation_keys",
+            field_ids="observation_ids",
+        )
+        actions = np.asarray(batch["action"], dtype=np.int32)
+        bonuses = np.asarray(batch["intrinsic_reward_observation"], dtype=np.float32)
+        if bonuses.ndim != 1:
+            raise ValueError(
+                "Expected intrinsic_reward_observation to be a 1D array of per-sample "
+                f"bonuses, got shape {bonuses.shape!r}."
+            )
+        if not (len(state_keys) == len(actions) == len(bonuses)):
+            raise ValueError(
+                "Mismatched batch lengths in update trace: "
+                f"{len(state_keys)=}, {len(actions)=}, {len(bonuses)=}."
+            )
+
+        for state_key, action, bonus in zip(state_keys, actions.tolist(), bonuses.tolist()):
+            scoped_state_key = f"{run_prefix}:{state_key}"
+            if entity_mode == "state":
+                entity_key = scoped_state_key
+            else:
+                entity_key = f"{scoped_state_key}:a={int(action)}"
+            entity_state_keys[entity_key] = scoped_state_key
+            update_bonuses_by_entity.setdefault(entity_key, []).append(float(bonus))
+
+    aligned_histories: dict[str, list[float]] = {}
+    for entity_key in sorted(set(decision_counts_by_entity) & set(update_bonuses_by_entity)):
+        decision_counts = decision_counts_by_entity[entity_key]
+        update_bonuses = update_bonuses_by_entity[entity_key]
+        row = [float("nan")] * len(decision_counts)
+        paired_length = min(len(decision_counts), len(update_bonuses))
+        row[:paired_length] = update_bonuses[:paired_length]
+        aligned_histories[entity_key] = row
+
+    return aligned_histories, entity_state_keys
+
+
 def load_histories(
     run_dirs: list[Path],
     source: SourceMode,
@@ -218,8 +352,12 @@ def load_histories(
             run_histories, run_state_keys = load_histories_from_decision_trace(
                 run_dir, entity_mode
             )
-        else:
+        elif source == "update":
             run_histories, run_state_keys = load_histories_from_update_trace(
+                run_dir, entity_mode
+            )
+        else:
+            run_histories, run_state_keys = load_histories_from_update_against_decision_trace(
                 run_dir, entity_mode
             )
 
@@ -320,8 +458,16 @@ def default_output_dir(run_dirs: list[Path]) -> Path:
 
 def make_default_title(source: SourceMode, entity_mode: EntityMode) -> str:
     entity_label = "State" if entity_mode == "state" else "State-Action"
-    source_label = "Decision-Time" if source == "decision" else "Update-Time"
-    return f"{source_label} RND Bonus vs Visitation ({entity_label})"
+    if source == "decision":
+        source_label = "Decision-Time"
+        x_label = "Visit"
+    elif source == "update":
+        source_label = "Update-Time"
+        x_label = "Update"
+    else:
+        source_label = "Update-Time"
+        x_label = "Visit"
+    return f"{source_label} RND Bonus vs {x_label} Count ({entity_label})"
 
 
 def plot_curves(
@@ -370,8 +516,15 @@ def plot_curves(
     if log_x:
         ax.set_xscale("log")
 
-    x_label = "Visit count N" if source == "decision" else "Update count N"
-    y_label = "Decision-time RND bonus" if source == "decision" else "Update-time RND bonus"
+    if source == "decision":
+        x_label = "Visit count N"
+        y_label = "Intrinsic Reward"
+    elif source == "update":
+        x_label = "Update count N"
+        y_label = "Update-time RND bonus"
+    else:
+        x_label = "Decision visit count N"
+        y_label = "Update-time RND bonus"
     ax.set_title(title)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
