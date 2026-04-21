@@ -11,7 +11,7 @@ DQNRNDUCBAgent.debug = False
 
 DQNRNDUCBAgent.discount = 0.99
 DQNRNDUCBAgent.learning_rate = 1.50139e-06
-DQNRNDUCBAgent.target_update_freq = 16384
+DQNRNDUCBAgent.target_update_freq = 32
 
 DQNRNDUCBAgent.hidden_dims = None
 DQNRNDUCBAgent.hidden_units = 64
@@ -20,7 +20,7 @@ DQNRNDUCBAgent.normalization = "last"
 
 DQNRNDUCBAgent.intrinsic_reward_scale = 0.0746775
 DQNRNDUCBAgent.decision_bonus_scale = 1.91827
-DQNRNDUCBAgent.bootstrap_with_rnd_bonus = True
+DQNRNDUCBAgent.bootstrap_with_rnd_bonus = False
 DQNRNDUCBAgent.bootstrap_bonus_scale = 0.198482
 DQNRNDUCBAgent.intrinsic_stats_decay = 0.999
 DQNRNDUCBAgent.intrinsic_reward_clip = 50.0
@@ -33,12 +33,15 @@ DQNRNDUCBAgent.rnd_hidden_units = 64
 DQNRNDUCBAgent.rnd_activation = "gelu"
 DQNRNDUCBAgent.rnd_normalization = "none"
 DQNRNDUCBAgent.rnd_action_conditioning = "input"
-DQNRNDUCBAgent.rnd_update_period = 4
+DQNRNDUCBAgent.rnd_update_period = 32
+DQNRNDUCBAgent.visit_count_table_size = 65536
 
-DQNRNDUCBAgent.decision_bonus_threshold = 0.5
-DQNRNDUCBAgent.decision_optimistic_value = 20
-DQNRNDUCBAgent.bootstrap_bonus_threshold = 0.5
+DQNRNDUCBAgent.decision_bonus_threshold = None
+DQNRNDUCBAgent.decision_optimistic_value = 10
+DQNRNDUCBAgent.bootstrap_bonus_threshold = None
 DQNRNDUCBAgent.bootstrap_optimistic_value = 1.0
+DQNRNDUCBAgent.decision_visit_count_threshold = 5
+DQNRNDUCBAgent.bootstrap_visit_count_threshold = 5
 
 DQNRNDUCBAgent.double_q = False
 
@@ -64,11 +67,11 @@ NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
 
 TrainingConfig.train_episodes = 0
 TrainingConfig.use_steps = True
-TrainingConfig.train_steps = 1_000_000
+TrainingConfig.train_steps = 1_000_00
 TrainingConfig.max_episode_steps = 100
-TrainingConfig.minibatch_size = 1024
+TrainingConfig.minibatch_size = 512
 TrainingConfig.update_frequency = 1
-TrainingConfig.num_minibatches = 4
+TrainingConfig.num_minibatches = 32
 TrainingConfig.warmup_steps = 0
 TrainingConfig.evaluate_every = 0
 TrainingConfig.eval_episodes = 0
@@ -76,7 +79,7 @@ TrainingConfig.eval_episodes = 0
 TrainingConfig.checkpoint_freq = None
 TrainingConfig.checkpoint_dir = "./output/ckpt"
 TrainingConfig.restore_checkpoint_path = None
-TrainingConfig.save_final_checkpoint = False
+TrainingConfig.save_final_checkpoint = True
 
 DQNRNDUCBAgent.debug = False
 DQNRNDUCBAgent.debug_log_dir = "./output/debug_logs"

@@ -53,12 +53,15 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         rnd_include_action: bool | None = None,
         rnd_action_conditioning: str = "output",
         rnd_update_period: int = 1,
+        visit_count_table_size: int = 65536,
         decision_bonus_scale: float | None = None,
         decision_bonus_threshold: float | None = None,
+        decision_visit_count_threshold: int | None = None,
         decision_optimistic_value: float | None = None,
         bootstrap_with_rnd_bonus: bool = False,
         bootstrap_bonus_scale: float | None = None,
         bootstrap_bonus_threshold: float | None = None,
+        bootstrap_visit_count_threshold: int | None = None,
         bootstrap_optimistic_value: float | None = None,
         use_decision_bonus_in_eval: bool = False,
         normalize_observations: bool = False,
@@ -109,6 +112,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             rnd_include_action=rnd_include_action,
             rnd_action_conditioning=rnd_action_conditioning,
             rnd_update_period=rnd_update_period,
+            visit_count_table_size=visit_count_table_size,
             normalize_observations=normalize_observations,
             obs_normalization_epsilon=obs_normalization_epsilon,
             obs_normalization_clip=obs_normalization_clip,
@@ -134,6 +138,11 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             if decision_bonus_threshold is None
             else float(decision_bonus_threshold)
         )
+        self.decision_visit_count_threshold = (
+            None
+            if decision_visit_count_threshold is None
+            else int(decision_visit_count_threshold)
+        )
         self.decision_optimistic_value = (
             None
             if decision_optimistic_value is None
@@ -149,6 +158,11 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             None
             if bootstrap_bonus_threshold is None
             else float(bootstrap_bonus_threshold)
+        )
+        self.bootstrap_visit_count_threshold = (
+            None
+            if bootstrap_visit_count_threshold is None
+            else int(bootstrap_visit_count_threshold)
         )
         self.bootstrap_optimistic_value = (
             None
@@ -181,6 +195,15 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             )
         return jnp.asarray(optimistic_value, dtype=values.dtype)
 
+    def _apply_optimistic_mask(
+        self,
+        values: jax.Array,
+        optimistic_mask: jax.Array,
+        optimistic_value: float | None,
+    ) -> jax.Array:
+        optimistic_values = self._resolve_optimistic_values(values, optimistic_value)
+        return jnp.where(optimistic_mask, optimistic_values, values)
+
     def _apply_bonus_threshold(
         self,
         values: jax.Array,
@@ -192,8 +215,29 @@ class DQNRNDUCBAgent(DQNRNDAgent):
             return values
 
         optimistic_mask = bonus >= jnp.asarray(threshold, dtype=bonus.dtype)
-        optimistic_values = self._resolve_optimistic_values(values, optimistic_value)
-        return jnp.where(optimistic_mask, optimistic_values, values)
+        return self._apply_optimistic_mask(
+            values,
+            optimistic_mask,
+            optimistic_value,
+        )
+
+    def _apply_visit_count_threshold(
+        self,
+        values: jax.Array,
+        visit_counts: jax.Array,
+        threshold: int | None,
+        optimistic_value: float | None,
+    ) -> jax.Array:
+        if threshold is None:
+            return values
+
+        threshold_array = jnp.asarray(threshold, dtype=visit_counts.dtype)
+        optimistic_mask = visit_counts < threshold_array
+        return self._apply_optimistic_mask(
+            values,
+            optimistic_mask,
+            optimistic_value,
+        )
 
     def _compute_next_bootstrap_values(
         self,
@@ -205,6 +249,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         if (
             not self.bootstrap_with_rnd_bonus
             and self.bootstrap_bonus_threshold is None
+            and self.bootstrap_visit_count_threshold is None
         ):
             return super()._compute_next_bootstrap_values(
                 state=state,
@@ -213,28 +258,44 @@ class DQNRNDUCBAgent(DQNRNDAgent):
                 next_target_q=next_target_q,
             )
 
-        next_bonus = jax.lax.stop_gradient(
-            self._compute_decision_bonus(state, next_observation)
-        )
         next_online_values = next_online_q
         next_target_values = next_target_q
-        if self.bootstrap_with_rnd_bonus:
-            next_online_values = (
-                next_online_values + self.bootstrap_bonus_scale * next_bonus
+        if self.bootstrap_with_rnd_bonus or self.bootstrap_bonus_threshold is not None:
+            next_bonus = jax.lax.stop_gradient(
+                self._compute_decision_bonus(state, next_observation)
             )
-            next_target_values = (
-                next_target_values + self.bootstrap_bonus_scale * next_bonus
+            if self.bootstrap_with_rnd_bonus:
+                next_online_values = (
+                    next_online_values + self.bootstrap_bonus_scale * next_bonus
+                )
+                next_target_values = (
+                    next_target_values + self.bootstrap_bonus_scale * next_bonus
+                )
+            next_online_values = self._apply_bonus_threshold(
+                next_online_values,
+                next_bonus,
+                self.bootstrap_bonus_threshold,
+                self.bootstrap_optimistic_value,
             )
-        next_online_values = self._apply_bonus_threshold(
+            next_target_values = self._apply_bonus_threshold(
+                next_target_values,
+                next_bonus,
+                self.bootstrap_bonus_threshold,
+                self.bootstrap_optimistic_value,
+            )
+        next_visit_counts = jax.lax.stop_gradient(
+            self._get_state_action_visit_counts(state, next_observation)
+        )
+        next_online_values = self._apply_visit_count_threshold(
             next_online_values,
-            next_bonus,
-            self.bootstrap_bonus_threshold,
+            next_visit_counts,
+            self.bootstrap_visit_count_threshold,
             self.bootstrap_optimistic_value,
         )
-        next_target_values = self._apply_bonus_threshold(
+        next_target_values = self._apply_visit_count_threshold(
             next_target_values,
-            next_bonus,
-            self.bootstrap_bonus_threshold,
+            next_visit_counts,
+            self.bootstrap_visit_count_threshold,
             self.bootstrap_optimistic_value,
         )
 
@@ -264,20 +325,28 @@ class DQNRNDUCBAgent(DQNRNDAgent):
         obs = self._normalize_observation(state, raw_obs)
         q_vals = state.online_network(obs.reshape(-1))
 
-        use_decision_bonus = is_training or self.use_decision_bonus_in_eval
-        if use_decision_bonus:
-            decision_bonus = self._compute_decision_bonus(state, raw_obs)
-            decision_values = q_vals + self.decision_bonus_scale * decision_bonus
-            decision_values = self._apply_bonus_threshold(
+        decision_bonus = None
+        decision_values = None
+
+        use_decision_optimism = is_training or self.use_decision_bonus_in_eval
+        if use_decision_optimism:
+            # decision_bonus = self._compute_decision_bonus(state, raw_obs)
+            decision_visit_counts = self._get_state_action_visit_counts(state, raw_obs)
+            decision_values = q_vals# + self.decision_bonus_scale * decision_bonus
+            # decision_values = self._apply_bonus_threshold(
+            #     decision_values,
+            #     decision_bonus,
+            #     self.decision_bonus_threshold,
+            #     self.decision_optimistic_value,
+            # )
+            decision_values = self._apply_visit_count_threshold(
                 decision_values,
-                decision_bonus,
-                self.decision_bonus_threshold,
+                decision_visit_counts,
+                self.decision_visit_count_threshold,
                 self.decision_optimistic_value,
             )
             action = _select_greedy(decision_values, key)
         else:
-            decision_bonus = None
-            decision_values = None
             action = _select_greedy(q_vals, key)
 
         if is_training:
@@ -290,6 +359,7 @@ class DQNRNDUCBAgent(DQNRNDAgent):
                 decision_bonus=decision_bonus,
                 decision_values=decision_values,
             )
+            state = self._increment_state_action_visit_count(state, raw_obs, action)
             state = state.replace(step=state.step + 1)
 
         return state, action

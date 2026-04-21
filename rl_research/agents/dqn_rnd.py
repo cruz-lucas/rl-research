@@ -36,6 +36,7 @@ class DQNRNDState(struct.PyTreeNode):
     intrinsic_reward_var: jax.Array
     step: jax.Array
     gradient_steps: jax.Array
+    visit_counts: jax.Array
 
 
 @gin.configurable
@@ -82,6 +83,7 @@ class DQNRNDAgent:
         rnd_include_action: bool | None = None,
         rnd_action_conditioning: str = "none",
         rnd_update_period: int = 1,
+        visit_count_table_size: int = 65536,
         normalize_observations: bool = False,
         obs_normalization_epsilon: float = 1e-8,
         obs_normalization_clip: float | None = 5.0,
@@ -150,6 +152,9 @@ class DQNRNDAgent:
         self.rnd_update_period = int(rnd_update_period)
         if self.rnd_update_period < 1:
             raise ValueError("rnd_update_period must be at least 1.")
+        self.visit_count_table_size = int(visit_count_table_size)
+        if self.visit_count_table_size < 1:
+            raise ValueError("visit_count_table_size must be at least 1.")
         self.normalize_observations = bool(normalize_observations)
         self.obs_normalization_epsilon = float(obs_normalization_epsilon)
         self.obs_normalization_clip = obs_normalization_clip
@@ -307,6 +312,10 @@ class DQNRNDAgent:
             intrinsic_reward_var=jnp.asarray(1.0, dtype=jnp.float32),
             step=jnp.asarray(0, dtype=jnp.int32),
             gradient_steps=jnp.asarray(0, dtype=jnp.int32),
+            visit_counts=jnp.zeros(
+                (self.visit_count_table_size, self.num_actions),
+                dtype=jnp.int32,
+            ),
         )
 
     def _maybe_update_obs_normalizer(
@@ -355,6 +364,61 @@ class DQNRNDAgent:
             dtype=jnp.float32,
         )
         return jnp.concatenate((observation, action_features), axis=-1)
+
+    def _observation_bucket_ids(self, observation: jnp.ndarray) -> jax.Array:
+        observation = jnp.asarray(observation)
+        single_observation = observation.ndim == 1
+        if single_observation:
+            observation = observation.reshape(1, -1)
+
+        flat_observation = observation.reshape(observation.shape[0], -1)
+        if jnp.issubdtype(flat_observation.dtype, jnp.floating):
+            hash_tokens = jax.lax.bitcast_convert_type(
+                flat_observation.astype(jnp.float32),
+                jnp.uint32,
+            )
+        else:
+            hash_tokens = flat_observation.astype(jnp.uint32)
+
+        feature_indices = jnp.arange(flat_observation.shape[-1], dtype=jnp.uint32)
+        hash_weights = (
+            feature_indices * jnp.asarray(16777619, dtype=jnp.uint32)
+            + jnp.asarray(2166136261, dtype=jnp.uint32)
+        )
+        bucket_ids = jnp.sum(
+            hash_tokens * hash_weights[None, :],
+            axis=-1,
+            dtype=jnp.uint32,
+        )
+        bucket_ids = (
+            bucket_ids
+            % jnp.asarray(self.visit_count_table_size, dtype=jnp.uint32)
+        ).astype(jnp.int32)
+
+        if single_observation:
+            return bucket_ids.squeeze(0)
+        return bucket_ids
+
+    def _get_state_action_visit_counts(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+    ) -> jax.Array:
+        bucket_ids = self._observation_bucket_ids(observation)
+        return state.visit_counts[bucket_ids]
+
+    def _increment_state_action_visit_count(
+        self,
+        state: DQNRNDState,
+        observation: jnp.ndarray,
+        action: jnp.ndarray,
+    ) -> DQNRNDState:
+        bucket_ids = self._observation_bucket_ids(observation)
+        updated_visit_counts = state.visit_counts.at[
+            bucket_ids,
+            action.astype(jnp.int32),
+        ].add(1)
+        return state.replace(visit_counts=updated_visit_counts)
 
     def _select_rnd_features(
         self,
@@ -571,6 +635,7 @@ class DQNRNDAgent:
                 epsilon=eps,
                 decision_bonus=decision_bonus,
             )
+            state = self._increment_state_action_visit_count(state, raw_obs, action)
             state = state.replace(step=state.step + 1)
         else:
             action = distrax.Greedy(q_vals).sample(seed=key)
