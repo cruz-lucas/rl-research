@@ -1,0 +1,47 @@
+setup_mlflow.experiment_name = "navix_doorkey_5x5_layout1"
+setup_mlflow.experiment_group = "dqn_rmax_rnd"
+
+run_loop.agent_cls = @DQNRmaxRND
+run_loop.env_cls = @NavixWrapper
+run_loop.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 32768
+ReplayBuffer.obs_shape = (5, 5, 3)
+
+DQNRmaxRND.r_max = 1.0
+DQNRmaxRND.v_max = 1.0
+DQNRmaxRND.use_vmax = True
+DQNRmaxRND.intrinsic_reward_threshold = 1.0
+DQNRmaxRND.discount = 0.99
+DQNRmaxRND.learning_rate = 1e-04
+DQNRmaxRND.target_update_freq = 1024
+DQNRmaxRND.max_grad_norm = 5.0
+
+DQNRmaxRND.hidden_dims = None
+DQNRmaxRND.hidden_units = 64
+DQNRmaxRND.activation = "relu"
+DQNRmaxRND.normalization = "last"
+
+DQNRmaxRND.rnd_learning_rate = 1e-04
+DQNRmaxRND.rnd_output_dim = 64
+DQNRmaxRND.rnd_hidden_dims = None
+DQNRmaxRND.rnd_hidden_units = 64
+DQNRmaxRND.rnd_activation = "relu"
+DQNRmaxRND.rnd_normalization = "last"
+DQNRmaxRND.rnd_action_conditioning = "input"
+DQNRmaxRND.rnd_update_period = 1
+DQNRmaxRND.intrinsic_stats_decay = 0.99
+DQNRmaxRND.intrinsic_reward_clip = 10.0
+
+NavixWrapper.env_id = "GridDoorKey-5x5-layout1-v0"
+
+TrainingConfig.train_episodes = 0
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 1_000_000
+TrainingConfig.max_episode_steps = 100
+TrainingConfig.minibatch_size = 1024
+TrainingConfig.update_frequency = 1
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 1024
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = None

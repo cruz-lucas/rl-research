@@ -1,6 +1,7 @@
 from rl_research.agents.base import BaseAgent
 from rl_research.agents.dqn import DQNAgent
 from rl_research.agents.dqn_rmax import DQNRmaxAgent
+from rl_research.agents.dqn_rmax_rnd import DQNRmaxRND
 from rl_research.agents.dqn_rnd import DQNRNDAgent
 from rl_research.agents.dqn_rnd_ucb import DQNRNDUCBAgent
 from rl_research.agents.nfq import NFQAgent
@@ -23,6 +24,7 @@ __all__ = [
     "DQNRNDAgent",
     "DQNRNDUCBAgent",
     "DQNRmaxAgent",
+    "DQNRmaxRND",
     "NFQAgent",
     "RMaxNFQAgent",
 ]

@@ -170,6 +170,55 @@ DEFAULT_SPACE: Dict[str, Any] = {
         },
         "max_grad_norm": {"type": "uniform", "min": 0.1, "max": 20.0},
     },
+    "DQNRmaxRND": {
+        "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
+        "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        "normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
+        "optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
+        "optimizer_weight_decay": {
+            "type": "choice",
+            "values": [0.0, 1e-6, 1e-5, 1e-4, 1e-3],
+        },
+        "optimizer_momentum": {"type": "choice", "values": [0.0, 0.9, 0.95]},
+        "optimizer_decay": {"type": "choice", "values": [0.9, 0.95, 0.99]},
+        "optimizer_centered": {"type": "choice", "values": [False, True]},
+        "learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-2},
+        "rnd_learning_rate": {"type": "log_uniform", "min": 1e-6, "max": 1e-2},
+        "discount": {"type": "choice", "values": [0.99, 0.995, 0.999]},
+        "target_update_freq": {
+            "type": "choice",
+            "values": TARGET_UPDATE_CHOICES,
+        },
+        "max_grad_norm": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0, 10.0, 20.0]},
+        "loss_type": {"type": "choice", "values": ["mse", "huber"]},
+        "huber_delta": {"type": "choice", "values": [0.5, 1.0, 2.0, 5.0]},
+        "double_q": {"type": "choice", "values": [False]},
+        "normalize_observations": {"type": "choice", "values": [False, True]},
+        "obs_normalization_clip": {"type": "choice", "values": [3.0, 5.0, 7.0, 10.0]},
+        "rnd_hidden_dims": {"type": "choice", "values": RND_HIDDEN_DIMS_CHOICES},
+        "rnd_activation": {"type": "choice", "values": ACTIVATION_CHOICES},
+        "rnd_normalization": {"type": "choice", "values": NORMALIZATION_CHOICES},
+        "rnd_optimizer": {"type": "choice", "values": OPTIMIZER_CHOICES},
+        "rnd_output_dim": {"type": "choice", "values": [16, 32, 64, 128, 256]},
+        "rnd_action_conditioning": {
+            "type": "choice",
+            "values": ["input", "output"],
+        },
+        "rnd_update_period": {"type": "choice", "values": [1, 2, 4, 8, 16, 32]},
+        "intrinsic_reward_threshold": {
+            "type": "log_uniform",
+            "min": 1e-3,
+            "max": 10.0,
+        },
+        "intrinsic_stats_decay": {
+            "type": "choice",
+            "values": [0.95, 0.99, 0.995, 0.999],
+        },
+        "intrinsic_reward_clip": {
+            "type": "choice",
+            "values": [1.0, 5.0, 10.0, 20.0, 50.0],
+        },
+    },
     "DQNRNDUCBAgent": {
         "hidden_dims": {"type": "choice", "values": DQN_HIDDEN_DIMS_CHOICES},
         "activation": {"type": "choice", "values": ACTIVATION_CHOICES},
@@ -305,6 +354,28 @@ DEFAULT_SPACE: Dict[str, Any] = {
             },
         },
         "DQNRNDUCBAgent": {
+            "ReplayBuffer.buffer_size": {
+                "type": "choice",
+                "values": DQN_BUFFER_SIZE_CHOICES,
+            },
+            "TrainingConfig.minibatch_size": {
+                "type": "choice",
+                "values": DQN_MINIBATCH_SIZE_CHOICES,
+            },
+            "TrainingConfig.update_frequency": {
+                "type": "choice",
+                "values": [1, 2, 4, 8, 16],
+            },
+            "TrainingConfig.num_minibatches": {
+                "type": "choice",
+                "values": [1],
+            },
+            "TrainingConfig.warmup_steps": {
+                "type": "choice",
+                "values": DQN_WARMUP_CHOICES,
+            },
+        },
+        "DQNRmaxRND": {
             "ReplayBuffer.buffer_size": {
                 "type": "choice",
                 "values": DQN_BUFFER_SIZE_CHOICES,
