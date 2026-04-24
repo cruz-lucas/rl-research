@@ -10,6 +10,9 @@ Usage:
       --episodes 100 \
       --train-rnd-after-each-episode \
       --rnd-train-epochs-per-episode 1 \
+      --observation-mode tabular \
+      --onehot-obs-action-pair \
+      --linear-function-approximation \
       --bonus-threshold 1.0 \
       --visitation-threshold 5
 
@@ -28,6 +31,12 @@ Notes:
     updated after each episode; the DQN/Q-network is left unchanged.
   - The saved RND heatmap is always a final post-collection query over every
     visited trajectory state and all four actions using the final RND predictor.
+  - `--observation-mode tabular` switches the agent observation to a one-hot
+    encoding of the player's `(row, col)` position over the full 16x16 grid.
+  - `--onehot-obs-action-pair` switches RND to a one-hot state-action input of
+    size `16 * 16 * 4 = 1024` when used with `--observation-mode tabular`.
+  - `--linear-function-approximation` removes hidden layers from both the Q
+    network and the RND networks, yielding linear models.
   - If `--checkpoint` is omitted, the analysis still runs with a randomly
     initialised agent, but the RND/agent-policy plots will not reflect a trained
     policy.
@@ -114,6 +123,31 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional checkpoint for the agent policy and RND bonus estimator.",
     )
     collect_parser.add_argument(
+        "--observation-mode",
+        choices=("symbolic", "tabular"),
+        default="symbolic",
+        help=(
+            "Observation representation for the analysis agent: either the default "
+            "symbolic grid or a one-hot tabular player-coordinate encoding."
+        ),
+    )
+    collect_parser.add_argument(
+        "--onehot-obs-action-pair",
+        action="store_true",
+        help=(
+            "Use a one-hot state-action RND input instead of concatenating the "
+            "state features and action one-hot. Requires `--observation-mode tabular`."
+        ),
+    )
+    collect_parser.add_argument(
+        "--linear-function-approximation",
+        action="store_true",
+        help=(
+            "Use linear Q/RND models by removing all hidden layers. Checkpoints "
+            "must match this architecture if you also restore one."
+        ),
+    )
+    collect_parser.add_argument(
         "--train-rnd-after-each-episode",
         action="store_true",
         help=(
@@ -183,6 +217,9 @@ def _run_collect(args: argparse.Namespace) -> None:
         gin_bindings=tuple(args.binding),
         train_rnd_after_each_episode=bool(args.train_rnd_after_each_episode),
         rnd_train_epochs_per_episode=int(args.rnd_train_epochs_per_episode),
+        observation_mode=str(args.observation_mode),
+        onehot_obs_action_pair=bool(args.onehot_obs_action_pair),
+        linear_function_approximation=bool(args.linear_function_approximation),
     )
 
     rollouts, metadata = collect_knownness_rollouts(settings)

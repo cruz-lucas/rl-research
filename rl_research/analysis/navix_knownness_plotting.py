@@ -196,7 +196,7 @@ def _draw_binary_knownness(
     flat_mask = _flatten_mask(valid_mask)
     masked_values = np.ma.array(flat_values, mask=~flat_mask)
 
-    cmap = colors.ListedColormap(["#d73027", "#1a9850"])
+    cmap = colors.ListedColormap(["#43a2ca", "#e0f3db"])
     cmap.set_bad("#ffffff")
     norm = colors.BoundaryNorm([-0.5, 0.5, 1.5], cmap.N)
 
@@ -242,6 +242,75 @@ def _policy_title(policy_name: str) -> str:
     return "Random Policy" if policy_name == "random_policy" else "Agent Policy"
 
 
+def _render_bonus_vs_visitation_scatter(
+    output_dir: Path,
+    *,
+    rollouts: dict[str, PolicyRollout],
+    metadata: dict[str, Any],
+) -> None:
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6), constrained_layout=True)
+    fig.suptitle(
+        f"RND Bonus vs. Visitation Count on {metadata['env_id']}",
+        fontsize=15,
+        fontweight="bold",
+    )
+
+    policy_colors = {
+        "random_policy": "#1f77b4",
+        "agent_policy": "#d62728",
+    }
+
+    for ax, policy_name in zip(axes, POLICY_NAMES):
+        rollout = rollouts[policy_name]
+        visited_cell_mask = rollout.state_visit_counts > 0
+        state_action_mask = np.repeat(
+            visited_cell_mask[..., None],
+            rollout.visitation_counts.shape[-1],
+            axis=-1,
+        )
+        visitation_values = rollout.visitation_counts[state_action_mask].astype(
+            np.float32
+        )
+        bonus_values = rollout.final_bonus_mean[state_action_mask].astype(np.float32)
+
+        ax.scatter(
+            visitation_values,
+            bonus_values,
+            s=22,
+            alpha=0.5,
+            color=policy_colors[policy_name],
+            edgecolors="none",
+            label="Visited state-actions",
+        )
+
+        max_count = max(float(np.max(visitation_values, initial=0.0)), 1.0)
+        reference_x = np.linspace(0.0, max_count, 300, dtype=np.float32)
+        reference_y = 1.0 / (np.sqrt(reference_x) + 1.0)
+        ax.plot(
+            reference_x,
+            reference_y,
+            linestyle="--",
+            color="black",
+            linewidth=1.5,
+            label=r"$1 / (\sqrt{N} + 1)$",
+        )
+
+        ax.set_title(_policy_title(policy_name), fontsize=12)
+        ax.set_xlabel("Visitation Count")
+        ax.set_ylabel("RND Bonus")
+        ax.grid(True, alpha=0.25, linestyle=":")
+        ax.legend(loc="best", fontsize=9)
+        ax.set_xlim(left=-0.25)
+
+    scatter_base = figures_dir / "bonus_vs_visitation_scatter"
+    fig.savefig(scatter_base.with_suffix(".png"), dpi=240, bbox_inches="tight")
+    fig.savefig(scatter_base.with_suffix(".pdf"), bbox_inches="tight")
+    plt.close(fig)
+
+
 def _render_policy_figure(
     rollout: PolicyRollout,
     *,
@@ -259,8 +328,14 @@ def _render_policy_figure(
         axis=-1,
     )
 
-    visitation_known = (rollout.visitation_counts.astype(np.float32) >= float(thresholds.visitation_threshold)).astype(np.float32)
-    bonus_known = (rollout.final_bonus_mean.astype(np.float32) <= float(thresholds.bonus_threshold)).astype(np.float32)
+    visitation_known = (
+        rollout.visitation_counts.astype(np.float32)
+        >= float(thresholds.visitation_threshold)
+    ).astype(np.float32)
+    bonus_known = (
+        rollout.final_bonus_mean.astype(np.float32)
+        <= float(thresholds.bonus_threshold)
+    ).astype(np.float32)
 
     fig, axes = plt.subplots(2, 2, figsize=(17, 16), constrained_layout=True)
     fig.suptitle(
@@ -302,7 +377,7 @@ def _render_policy_figure(
         cmap=bonus_cmap,
         norm=bonus_norm,
         colorbar_label="RND Bonus",
-        title="Final Queried RND Bonus",
+        title="Final RND Bonus",
     )
 
     _draw_binary_knownness(
@@ -349,13 +424,20 @@ def plot_saved_collection(
         bonus_threshold=bonus_threshold,
     )
 
+    rollouts: dict[str, PolicyRollout] = {}
     summaries: dict[str, dict[str, Any]] = {}
     for policy_name in POLICY_NAMES:
         rollout = load_policy_rollout(output_dir, policy_name)
+        rollouts[policy_name] = rollout
         summaries[policy_name] = _render_policy_figure(
             rollout,
             metadata=metadata,
             thresholds=thresholds,
             output_dir=output_dir,
         )
+    _render_bonus_vs_visitation_scatter(
+        output_dir,
+        rollouts=rollouts,
+        metadata=metadata,
+    )
     return summaries

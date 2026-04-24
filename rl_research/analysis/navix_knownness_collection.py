@@ -28,6 +28,7 @@ _ = (_ReplayBuffer, _NavixWrapper, _setup_mlflow)
 
 DEFAULT_ENV_ID = "Navix-Empty-16x16-v0"
 ACTION_NAMES = ("up", "down", "left", "right")
+OBSERVATION_MODES = ("symbolic", "tabular")
 ACTION_TO_NAVIX_DIRECTION = {
     "up": 3,
     "down": 1,
@@ -52,6 +53,9 @@ class CollectionSettings:
     env_id: str = DEFAULT_ENV_ID
     train_rnd_after_each_episode: bool = False
     rnd_train_epochs_per_episode: int = 1
+    observation_mode: str = "symbolic"
+    onehot_obs_action_pair: bool = False
+    linear_function_approximation: bool = False
 
 
 @dataclass
@@ -194,24 +198,58 @@ CARDINAL_ACTION_SET = (
 
 
 class CardinalNavixWrapper:
-    def __init__(self, env_id: str = DEFAULT_ENV_ID, max_steps: int | None = None):
+    def __init__(
+        self,
+        env_id: str = DEFAULT_ENV_ID,
+        max_steps: int | None = None,
+        observation_mode: str = "symbolic",
+    ):
+        if observation_mode not in OBSERVATION_MODES:
+            raise ValueError(
+                f"Unsupported observation_mode {observation_mode!r}. "
+                f"Choose from {', '.join(OBSERVATION_MODES)}."
+            )
+
         kwargs: dict[str, Any] = {
-            "observation_fn": observations.symbolic,
+            "observation_fn": (
+                observations.symbolic
+                if observation_mode == "symbolic"
+                else observations.none
+            ),
             "action_set": CARDINAL_ACTION_SET,
         }
         if max_steps is not None:
             kwargs["max_steps"] = max_steps
         self.env = nx.make(env_id, **kwargs)
+        self.observation_mode = observation_mode
+        if observation_mode == "symbolic":
+            self.observation_shape = tuple(self.env.observation_space.shape)
+            self.observation_dtype = np.uint8
+        else:
+            self.observation_shape = (int(self.env.height * self.env.width),)
+            self.observation_dtype = np.float32
+
+    def _transform_observation(self, timestep) -> jax.Array:
+        if self.observation_mode == "symbolic":
+            return timestep.observation
+
+        row, col = timestep.state.get_player(idx=0).position
+        state_index = row.astype(jnp.int32) * int(self.env.width) + col.astype(jnp.int32)
+        return jax.nn.one_hot(
+            state_index,
+            int(self.env.height * self.env.width),
+            dtype=jnp.float32,
+        )
 
     def reset(self, key: jax.Array):
         timestep = self.env.reset(key)
-        return timestep, timestep.observation
+        return timestep, self._transform_observation(timestep)
 
     def step(self, timestep, action: jax.Array):
         timestep = self.env.step(timestep, action)
         return (
             timestep,
-            timestep.observation,
+            self._transform_observation(timestep),
             timestep.reward,
             timestep.is_termination(),
             timestep.is_truncation(),
@@ -238,6 +276,11 @@ def _parse_agent_from_config(
     observation_shape: tuple[int, ...],
     num_actions: int,
 ) -> tuple[BaseAgent, Any, dict[str, Any]]:
+    if settings.onehot_obs_action_pair and settings.observation_mode != "tabular":
+        raise ValueError(
+            "--onehot-obs-action-pair requires --observation-mode tabular."
+        )
+
     gin.clear_config()
 
     if settings.config_path is not None:
@@ -252,11 +295,24 @@ def _parse_agent_from_config(
         agent_cls = DQNRmaxRND
 
     num_states = int(np.prod(np.asarray(observation_shape)))
-    agent = agent_cls(
-        num_states=num_states,
-        num_actions=num_actions,
-        seed=settings.seed,
-    )
+    agent_init_kwargs: dict[str, Any] = {
+        "num_states": num_states,
+        "num_actions": num_actions,
+        "seed": settings.seed,
+    }
+    if settings.onehot_obs_action_pair:
+        agent_init_kwargs["rnd_action_conditioning"] = "pair"
+    if settings.linear_function_approximation:
+        agent_init_kwargs.update(
+            {
+                "hidden_dims": (),
+                "rnd_hidden_dims": (),
+                "normalization": "none",
+                "rnd_normalization": "none",
+            }
+        )
+
+    agent = agent_cls(**agent_init_kwargs)
     agent_state = agent.initial_state()
 
     checkpoint_mode = "random_init"
@@ -283,6 +339,7 @@ def _parse_agent_from_config(
         "agent_bindings": _jsonable(gin.get_bindings(agent_cls.__name__)),
         "run_loop_bindings": _jsonable(run_bindings),
         "checkpoint_mode": checkpoint_mode,
+        "agent_init_overrides": _jsonable(agent_init_kwargs),
     }
     return agent, agent_state, metadata
 
@@ -377,10 +434,10 @@ def _train_rnd_after_episode(
             agent_state.rnd_predictor_network
         )
         agent_state.rnd_optimizer.update(agent_state.rnd_predictor_network, rnd_grads)
-        agent_state = agent._update_intrinsic_stats(
-            state=agent_state,
-            prediction_error=jax.lax.stop_gradient(prediction_error),
-        )
+        # agent_state = agent._update_intrinsic_stats(
+        #     state=agent_state,
+        #     prediction_error=jax.lax.stop_gradient(prediction_error),
+        # )
 
     return agent_state
 
@@ -415,7 +472,7 @@ def _compute_final_bonus_statistics(
         cols_batch = trajectory_col[start_idx:end_idx]
         observations_flat = observations_batch.reshape(observations_batch.shape[0], -1)
 
-        bonus_batch = agent._compute_decision_bonus(
+        bonus_batch = 500 * agent._compute_decision_bonus(
             agent_state,
             jnp.asarray(observations_flat),
         )
@@ -592,8 +649,8 @@ def _collect_single_policy(
     )
     trajectory_observation_np = _stack_or_empty(
         trajectory_observation,
-        dtype=np.uint8,
-        trailing_shape=tuple(environment.env.observation_space.shape),
+        dtype=environment.observation_dtype,
+        trailing_shape=tuple(environment.observation_shape),
     )
     final_bonus_sum, final_bonus_mean, final_bonus_eval_counts = (
         _compute_final_bonus_statistics(
@@ -733,6 +790,11 @@ def _collection_metadata(
         "env_id": settings.env_id,
         "grid_shape": [int(environment.env.height), int(environment.env.width)],
         "action_names": list(ACTION_NAMES),
+        "observation_mode": settings.observation_mode,
+        "observation_shape": list(environment.observation_shape),
+        "observation_dtype": np.dtype(environment.observation_dtype).name,
+        "onehot_obs_action_pair": bool(settings.onehot_obs_action_pair),
+        "linear_function_approximation": bool(settings.linear_function_approximation),
         "action_to_navix_direction": ACTION_TO_NAVIX_DIRECTION,
         "episodes": int(settings.episodes),
         "seed": int(settings.seed),
@@ -764,10 +826,11 @@ def collect_knownness_rollouts(
     environment = CardinalNavixWrapper(
         env_id=settings.env_id,
         max_steps=settings.max_steps,
+        observation_mode=settings.observation_mode,
     )
     agent, agent_state, agent_metadata = _parse_agent_from_config(
         settings,
-        observation_shape=tuple(environment.env.observation_space.shape),
+        observation_shape=tuple(environment.observation_shape),
         num_actions=int(environment.env.action_space.n),
     )
 

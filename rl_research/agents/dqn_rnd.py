@@ -41,7 +41,7 @@ class DQNRNDState(struct.PyTreeNode):
 
 @gin.configurable
 class DQNRNDAgent:
-    _RND_ACTION_CONDITIONING_MODES = ("none", "input", "output")
+    _RND_ACTION_CONDITIONING_MODES = ("none", "input", "output", "pair")
 
     def __init__(
         self,
@@ -194,6 +194,11 @@ class DQNRNDAgent:
             "output": "output",
             "action_output": "output",
             "per_action": "output",
+            "pair": "pair",
+            "state_action": "pair",
+            "state_action_pair": "pair",
+            "onehot_pair": "pair",
+            "obs_action_onehot": "pair",
         }
         canonical_mode = aliases.get(normalized_mode)
         if canonical_mode is None:
@@ -223,9 +228,11 @@ class DQNRNDAgent:
         return legacy_mode
 
     def _rnd_input_dim(self) -> int:
-        return self.num_states + (
-            self.num_actions if self.rnd_action_conditioning == "input" else 0
-        )
+        if self.rnd_action_conditioning == "input":
+            return self.num_states + self.num_actions
+        if self.rnd_action_conditioning == "pair":
+            return self.num_states * self.num_actions
+        return self.num_states
 
     def _rnd_network_output_dim(self) -> int:
         if self.rnd_action_conditioning == "output":
@@ -351,6 +358,36 @@ class DQNRNDAgent:
         observation: jnp.ndarray,
         action: jnp.ndarray | None = None,
     ) -> jax.Array:
+        raw_observation = jnp.asarray(observation, dtype=jnp.float32)
+        if self.rnd_action_conditioning == "pair":
+            if action is None:
+                raise ValueError("Pair-conditioned RND requires an action input.")
+
+            single_observation = raw_observation.ndim == 1
+            if single_observation:
+                raw_observation = raw_observation.reshape(1, -1)
+
+            if raw_observation.shape[-1] != self.num_states:
+                raise ValueError(
+                    "Pair-conditioned RND expects one-hot state features with "
+                    f"dimension {self.num_states}, got {raw_observation.shape[-1]}."
+                )
+
+            action = jnp.asarray(action, dtype=jnp.int32)
+            if action.ndim == 0:
+                action = action.reshape(1)
+
+            state_index = jnp.argmax(raw_observation, axis=-1).astype(jnp.int32)
+            pair_index = state_index * self.num_actions + action
+            pair_features = jax.nn.one_hot(
+                pair_index,
+                self.num_states * self.num_actions,
+                dtype=jnp.float32,
+            )
+            if single_observation:
+                return pair_features.squeeze(0)
+            return pair_features
+
         observation = self._normalize_observation(state, observation)
         if self.rnd_action_conditioning != "input":
             return observation
@@ -495,7 +532,7 @@ class DQNRNDAgent:
         single_observation = observation.ndim == 1
         if single_observation:
             observation = observation.reshape(1, -1)
-        if self.rnd_action_conditioning == "input":
+        if self.rnd_action_conditioning in {"input", "pair"}:
             batch_size = observation.shape[0]
             observation_batch = jnp.broadcast_to(
                 observation[:, None, :],

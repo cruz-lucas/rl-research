@@ -15,17 +15,24 @@ def coerce_hidden_dims(
     hidden_features: int | Sequence[int],
     hidden_dims: Sequence[int] | None = None,
 ) -> tuple[int, ...]:
-    dims_source = hidden_features if hidden_dims is None else hidden_dims
-    if isinstance(dims_source, Sequence) and not isinstance(dims_source, (str, bytes)):
-        dims = tuple(int(dim) for dim in dims_source)
+    if hidden_dims is None:
+        dims_source = hidden_features
+        if isinstance(dims_source, Sequence) and not isinstance(
+            dims_source, (str, bytes)
+        ):
+            dims = tuple(int(dim) for dim in dims_source)
+        else:
+            width = int(dims_source)
+            dims = (width, width)
     else:
-        width = int(dims_source)
-        dims = (width, width)
+        dims = tuple(int(dim) for dim in hidden_dims)
 
-    if not dims:
-        raise ValueError("hidden_dims must contain at least one hidden layer.")
     if any(dim <= 0 for dim in dims):
         raise ValueError(f"hidden_dims must be positive, got {dims}.")
+
+    if hidden_dims is None and not dims:
+        width = int(dims_source)
+        dims = (width, width)
     return dims
 
 

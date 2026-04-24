@@ -16,7 +16,7 @@ from rl_research.buffers import Transition
 
 @gin.configurable
 class DQNRmaxRND(DQNRNDAgent):
-    """R-max style DQN agent that uses RND intrinsic reward as the unknownness signal."""
+    """R-max style DQN agent using RND intrinsic reward as the unknownness signal."""
 
     def __init__(
         self,
@@ -26,7 +26,7 @@ class DQNRmaxRND(DQNRNDAgent):
         hidden_dims: Sequence[int] | None = None,
         activation: str = "relu",
         normalization: str = "last",
-        learning_rate: float = 1e-1,
+        learning_rate: float = 1e-3,
         discount: float = 0.99,
         r_max: float = 1.0,
         v_max: float = 10.0,
@@ -111,8 +111,8 @@ class DQNRmaxRND(DQNRNDAgent):
         )
         if self.rnd_action_conditioning == "none":
             raise ValueError(
-                "DQNRmaxRND requires rnd_action_conditioning='output' or 'input' "
-                "so unknownness can be evaluated per action."
+                "DQNRmaxRND requires rnd_action_conditioning='output', 'input', "
+                "or 'pair' so unknownness can be evaluated per action."
             )
         if intrinsic_reward_threshold < 0.0:
             raise ValueError("intrinsic_reward_threshold must be non-negative.")
@@ -153,7 +153,11 @@ class DQNRmaxRND(DQNRNDAgent):
         obs = self._normalize_observation(state, raw_obs)
         q_vals = state.online_network(obs.reshape(-1))
         intrinsic_reward = self._action_intrinsic_reward(state, raw_obs)
-        values = jnp.where(self._is_known(intrinsic_reward), q_vals, self.optimistic_value)
+        values = jnp.where(
+            self._is_known(intrinsic_reward),
+            q_vals,
+            self.optimistic_value,
+        )
         action = distrax.Greedy(values).sample(seed=key)
 
         if is_training:
@@ -186,8 +190,14 @@ class DQNRmaxRND(DQNRNDAgent):
         known_mask_f = self._is_known(intrinsic_reward).astype(jnp.float32)
         denom = jnp.maximum(jnp.sum(known_mask_f), 1.0)
 
-        next_intrinsic_reward = self._action_intrinsic_reward(state, batch.next_observation)
-        next_has_unknown_action = jnp.any(~self._is_known(next_intrinsic_reward), axis=-1)
+        next_intrinsic_reward = self._action_intrinsic_reward(
+            state,
+            batch.next_observation,
+        )
+        next_has_unknown_action = jnp.any(
+            ~self._is_known(next_intrinsic_reward),
+            axis=-1,
+        )
 
         def q_loss_fn(network):
             q_values = network(observation)
@@ -226,7 +236,10 @@ class DQNRmaxRND(DQNRNDAgent):
             rnd_loss, rnd_grads = nnx.value_and_grad(rnd_loss_fn)(
                 agent_state.rnd_predictor_network
             )
-            agent_state.rnd_optimizer.update(agent_state.rnd_predictor_network, rnd_grads)
+            agent_state.rnd_optimizer.update(
+                agent_state.rnd_predictor_network,
+                rnd_grads,
+            )
             return agent_state, rnd_loss
 
         def skip_rnd_update(agent_state: DQNRNDState):
@@ -268,6 +281,9 @@ class DQNRmaxRND(DQNRNDAgent):
             next_online_q=next_online_q,
             next_target_q=next_target_q,
         ).squeeze(0)
-        next_intrinsic_reward = self._action_intrinsic_reward(state, raw_next_observation)
+        next_intrinsic_reward = self._action_intrinsic_reward(
+            state,
+            raw_next_observation,
+        )
         has_unknown_action = jnp.any(~self._is_known(next_intrinsic_reward.squeeze(0)))
         return jnp.where(has_unknown_action, self.optimistic_value, next_bootstrap)
