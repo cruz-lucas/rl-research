@@ -31,6 +31,11 @@ Notes:
     updated after each episode; the DQN/Q-network is left unchanged.
   - The saved RND heatmap is always a final post-collection query over every
     visited trajectory state and all four actions using the final RND predictor.
+  - `--analysis-kind model_based` runs the R-Max/MBIE-EB variant: each rollout
+    updates the tabular model online and the plots show visit counts, knownness,
+    and final Q-values.
+  - `--observation-mode position` switches the agent observation to the integer
+    `(row, col)` position index used by tabular R-Max/MBIE-EB.
   - `--observation-mode tabular` switches the agent observation to a one-hot
     encoding of the player's `(row, col)` position over the full 16x16 grid.
   - `--onehot-obs-action-pair` switches RND to a one-hot state-action input of
@@ -61,8 +66,7 @@ from rl_research.analysis import (
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Collect and plot state-action knownness heatmaps for "
-            "Navix-Empty-16x16-v0."
+            "Collect and plot state-action knownness heatmaps for Navix-Empty-16x16-v0."
         )
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -96,6 +100,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional override for the environment max-step horizon.",
     )
     collect_parser.add_argument(
+        "--env-id",
+        default="Navix-Empty-16x16-v0",
+        help="Navix environment id to analyse with the cardinal action wrapper.",
+    )
+    collect_parser.add_argument(
+        "--analysis-kind",
+        choices=("auto", "rnd", "model_based"),
+        default="auto",
+        help=(
+            "Analysis mode. `auto` uses RND diagnostics when available and "
+            "model-based R-Max/MBIE-EB diagnostics otherwise."
+        ),
+    )
+    collect_parser.add_argument(
         "--bonus-threshold",
         type=float,
         default=1.0,
@@ -106,8 +124,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help=(
-            "Default visitation knownness threshold to store in metadata and "
-            "summaries."
+            "Default visitation knownness threshold to store in metadata and summaries."
         ),
     )
     collect_parser.add_argument(
@@ -124,11 +141,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     collect_parser.add_argument(
         "--observation-mode",
-        choices=("symbolic", "tabular"),
+        choices=("symbolic", "position", "onehot_position", "tabular"),
         default="symbolic",
         help=(
-            "Observation representation for the analysis agent: either the default "
-            "symbolic grid or a one-hot tabular player-coordinate encoding."
+            "Observation representation for the analysis agent: symbolic grid, "
+            "integer position index, or one-hot player-coordinate encoding. "
+            "`tabular` is kept as an alias for onehot_position."
         ),
     )
     collect_parser.add_argument(
@@ -215,11 +233,13 @@ def _run_collect(args: argparse.Namespace) -> None:
             args.checkpoint.resolve() if args.checkpoint is not None else None
         ),
         gin_bindings=tuple(args.binding),
+        env_id=str(args.env_id),
         train_rnd_after_each_episode=bool(args.train_rnd_after_each_episode),
         rnd_train_epochs_per_episode=int(args.rnd_train_epochs_per_episode),
         observation_mode=str(args.observation_mode),
         onehot_obs_action_pair=bool(args.onehot_obs_action_pair),
         linear_function_approximation=bool(args.linear_function_approximation),
+        analysis_kind=str(args.analysis_kind),
     )
 
     rollouts, metadata = collect_knownness_rollouts(settings)

@@ -238,6 +238,50 @@ def _bonus_norm(
     return colors.Normalize(vmin=min_value, vmax=max_value)
 
 
+def _q_value_norm(
+    values: np.ndarray,
+    valid_mask: np.ndarray,
+) -> matplotlib.colors.Normalize:
+    if not np.any(valid_mask):
+        return colors.Normalize(vmin=0.0, vmax=1.0)
+    valid_values = values[valid_mask]
+    min_value = float(np.min(valid_values))
+    max_value = float(np.max(valid_values))
+    if np.isclose(max_value, min_value):
+        max_value = min_value + 1e-6
+    return colors.Normalize(vmin=min_value, vmax=max_value)
+
+
+def _metadata_float(
+    metadata: dict[str, Any],
+    key: str,
+    default: float,
+) -> float:
+    value = metadata.get("agent_bindings", {}).get(key, default)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_mbieeb(metadata: dict[str, Any]) -> bool:
+    return "mbieeb" in str(metadata.get("agent_class", "")).lower()
+
+
+def _mbieeb_bonus_values(
+    rollout: PolicyRollout,
+    metadata: dict[str, Any],
+) -> np.ndarray:
+    counts = rollout.final_agent_visit_counts.astype(np.float32)
+    vmax = _metadata_float(metadata, "v_max", default=1.0)
+    bonus = np.full_like(counts, fill_value=vmax, dtype=np.float32)
+    positive_mask = counts > 0.0
+    bonus[positive_mask] = 1.0 / (np.sqrt(counts[positive_mask]) + 1)
+    return bonus
+
+
 def _policy_title(policy_name: str) -> str:
     return "Random Policy" if policy_name == "random_policy" else "Agent Policy"
 
@@ -311,6 +355,103 @@ def _render_bonus_vs_visitation_scatter(
     plt.close(fig)
 
 
+def _render_model_based_policy_figure(
+    rollout: PolicyRollout,
+    *,
+    metadata: dict[str, Any],
+    thresholds: PlotThresholds,
+    output_dir: Path,
+) -> dict[str, Any]:
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    valid_cell_mask = rollout.valid_state_mask.astype(bool)
+    triangle_valid_mask = np.repeat(
+        valid_cell_mask[..., None],
+        rollout.visitation_counts.shape[-1],
+        axis=-1,
+    )
+
+    fig, axes = plt.subplots(2, 2, figsize=(17, 16), constrained_layout=True)
+    fig.suptitle(
+        f"{_policy_title(rollout.policy_name)} on {metadata['env_id']}",
+        fontsize=16,
+        fontweight="bold",
+    )
+    fig.text(
+        0.5,
+        0.985,
+        (
+            "Triangles encode actions: up=top, down=bottom, left=left, right=right. "
+            "White cells are walls."
+        ),
+        ha="center",
+        va="top",
+        fontsize=10,
+    )
+
+    count_cmap = plt.get_cmap("viridis")
+    count_norm = _count_norm(rollout.visitation_counts, triangle_valid_mask)
+    _draw_triangular_heatmap(
+        axes[0, 0],
+        rollout.visitation_counts.astype(np.float32),
+        valid_mask=triangle_valid_mask,
+        cmap=count_cmap,
+        norm=count_norm,
+        colorbar_label="Count",
+        title="Visitation Count",
+        annotate_counts=True,
+    )
+
+    q_cmap = plt.get_cmap("plasma")
+    q_norm = _q_value_norm(rollout.final_q_values, triangle_valid_mask)
+    _draw_triangular_heatmap(
+        axes[0, 1],
+        rollout.final_q_values.astype(np.float32),
+        valid_mask=triangle_valid_mask,
+        cmap=q_cmap,
+        norm=q_norm,
+        colorbar_label="Q value",
+        title="Final Q Values",
+    )
+
+    if _is_mbieeb(metadata):
+        mbieeb_bonus = _mbieeb_bonus_values(rollout, metadata)
+        bonus_cmap = plt.get_cmap("Blues")
+        bonus_norm = _bonus_norm(mbieeb_bonus, triangle_valid_mask)
+        _draw_triangular_heatmap(
+            axes[1, 0],
+            mbieeb_bonus,
+            valid_mask=triangle_valid_mask,
+            cmap=bonus_cmap,
+            norm=bonus_norm,
+            colorbar_label="Bonus",
+            title=r"MBIE-EB Bonus ($1/\sqrt{N}$, $N=0 \rightarrow V_{max}$)",
+        )
+    else:
+        _draw_binary_knownness(
+            axes[1, 0],
+            rollout.final_knownness.astype(np.float32),
+            valid_mask=triangle_valid_mask,
+            title=(f"Knownness (threshold >= {thresholds.visitation_threshold})"),
+            label="Knownness",
+        )
+    axes[1, 1].axis("off")
+
+    figure_base = figures_dir / rollout.policy_name
+    fig.savefig(figure_base.with_suffix(".png"), dpi=240, bbox_inches="tight")
+    fig.savefig(figure_base.with_suffix(".pdf"), bbox_inches="tight")
+    plt.close(fig)
+
+    summary = compute_policy_summary(
+        rollout,
+        visitation_threshold=thresholds.visitation_threshold,
+        bonus_threshold=thresholds.bonus_threshold,
+    )
+    save_policy_summary(output_dir, summary, policy_name=rollout.policy_name)
+    return summary
+
+
 def _render_policy_figure(
     rollout: PolicyRollout,
     *,
@@ -333,8 +474,7 @@ def _render_policy_figure(
         >= float(thresholds.visitation_threshold)
     ).astype(np.float32)
     bonus_known = (
-        rollout.final_bonus_mean.astype(np.float32)
-        <= float(thresholds.bonus_threshold)
+        rollout.final_bonus_mean.astype(np.float32) <= float(thresholds.bonus_threshold)
     ).astype(np.float32)
 
     fig, axes = plt.subplots(2, 2, figsize=(17, 16), constrained_layout=True)
@@ -426,18 +566,31 @@ def plot_saved_collection(
 
     rollouts: dict[str, PolicyRollout] = {}
     summaries: dict[str, dict[str, Any]] = {}
+    analysis_kind = metadata.get(
+        "resolved_analysis_kind",
+        metadata.get("analysis_kind", "rnd"),
+    )
     for policy_name in POLICY_NAMES:
         rollout = load_policy_rollout(output_dir, policy_name)
         rollouts[policy_name] = rollout
-        summaries[policy_name] = _render_policy_figure(
-            rollout,
+        if analysis_kind == "model_based":
+            summaries[policy_name] = _render_model_based_policy_figure(
+                rollout,
+                metadata=metadata,
+                thresholds=thresholds,
+                output_dir=output_dir,
+            )
+        else:
+            summaries[policy_name] = _render_policy_figure(
+                rollout,
+                metadata=metadata,
+                thresholds=thresholds,
+                output_dir=output_dir,
+            )
+    if analysis_kind != "model_based":
+        _render_bonus_vs_visitation_scatter(
+            output_dir,
+            rollouts=rollouts,
             metadata=metadata,
-            thresholds=thresholds,
-            output_dir=output_dir,
         )
-    _render_bonus_vs_visitation_scatter(
-        output_dir,
-        rollouts=rollouts,
-        metadata=metadata,
-    )
     return summaries

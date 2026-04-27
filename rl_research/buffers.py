@@ -1,4 +1,4 @@
-from typing import NamedTuple, Protocol
+from typing import Protocol
 
 import gin
 import jax
@@ -34,15 +34,15 @@ class BufferState(struct.PyTreeNode):
         return self.size >= batch_size
 
     def push(
-            self,
-            observation: jax.Array,
-            action: jax.Array,
-            reward: jax.Array,
-            next_observation: jax.Array,
-            discount: jax.Array,
-            terminal: jax.Array,
-            bootstrap_value: jax.Array | None = None,
-        ) -> "BufferState":
+        self,
+        observation: jax.Array,
+        action: jax.Array,
+        reward: jax.Array,
+        next_observation: jax.Array,
+        discount: jax.Array,
+        terminal: jax.Array,
+        bootstrap_value: jax.Array | None = None,
+    ) -> "BufferState":
         """Add transition to buffer (circular)."""
         max_size = self.observations.shape[0]
         idx = self.position % max_size
@@ -51,12 +51,10 @@ class BufferState(struct.PyTreeNode):
         flat_next_obs = next_observation.reshape(-1)
 
         observations = self.observations.at[idx].set(flat_obs)
-        actions = self.actions.at[idx].set(action)
+        actions = self.actions.at[idx].set(jnp.asarray(action).reshape(()))
         rewards = self.rewards.at[idx].set(reward)
         discounts = self.discounts.at[idx].set(discount)
-        next_observations = self.next_observations.at[idx].set(
-            flat_next_obs
-        )
+        next_observations = self.next_observations.at[idx].set(flat_next_obs)
         terminals = self.terminals.at[idx].set(terminal)
 
         return self.replace(
@@ -73,7 +71,9 @@ class BufferState(struct.PyTreeNode):
     def sample(self, key: jax.Array, batch_size: int) -> Transition:
         """Sample batch from buffer. Returns transitions."""
         safe_size = jnp.maximum(self.size, 1)
-        indices = jax.random.randint(key, (batch_size,), 0, safe_size) # with replacement
+        indices = jax.random.randint(
+            key, (batch_size,), 0, safe_size
+        )  # with replacement
         transition = Transition(
             observation=self.observations[indices],
             action=self.actions[indices],
@@ -81,9 +81,9 @@ class BufferState(struct.PyTreeNode):
             discount=self.discounts[indices],
             next_observation=self.next_observations[indices],
             terminal=self.terminals[indices],
-            mask=jnp.ones_like(indices)
+            mask=jnp.ones_like(indices),
         )
-        
+
         return transition
 
 
@@ -130,16 +130,20 @@ class ReplayBuffer(BaseBuffer):
 
     def initial_state(self) -> BufferState:
         return BufferState(
-            observations=jnp.zeros((self.buffer_size, self.obs_dim), dtype=self.obs_dtype),
+            observations=jnp.zeros(
+                (self.buffer_size, self.obs_dim), dtype=self.obs_dtype
+            ),
             actions=jnp.zeros((self.buffer_size,), dtype=self.action_dtype),
             rewards=jnp.zeros((self.buffer_size,), dtype=jnp.float32),
             discounts=jnp.zeros((self.buffer_size,), dtype=jnp.float32),
-            next_observations=jnp.zeros((self.buffer_size, self.obs_dim), dtype=self.obs_dtype),
+            next_observations=jnp.zeros(
+                (self.buffer_size, self.obs_dim), dtype=self.obs_dtype
+            ),
             terminals=jnp.zeros((self.buffer_size,), dtype=jnp.bool_),
             position=0,
             size=0,
         )
-    
+
 
 @gin.configurable
 class EntireReplayBuffer(ReplayBuffer):
@@ -147,11 +151,15 @@ class EntireReplayBuffer(ReplayBuffer):
 
     def initial_state(self) -> EntireBufferState:
         return EntireBufferState(
-            observations=jnp.zeros((self.buffer_size, self.obs_dim), dtype=self.obs_dtype),
+            observations=jnp.zeros(
+                (self.buffer_size, self.obs_dim), dtype=self.obs_dtype
+            ),
             actions=jnp.zeros((self.buffer_size,), dtype=self.action_dtype),
             rewards=jnp.zeros((self.buffer_size,), dtype=jnp.float32),
             discounts=jnp.zeros((self.buffer_size,), dtype=jnp.float32),
-            next_observations=jnp.zeros((self.buffer_size, self.obs_dim), dtype=self.obs_dtype),
+            next_observations=jnp.zeros(
+                (self.buffer_size, self.obs_dim), dtype=self.obs_dtype
+            ),
             terminals=jnp.zeros((self.buffer_size,), dtype=jnp.bool_),
             position=0,
             size=0,

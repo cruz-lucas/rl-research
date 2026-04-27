@@ -1,0 +1,32 @@
+setup_mlflow.experiment_name = "navix_empty_16x16"
+setup_mlflow.experiment_group = "rmax"
+
+run_loop.agent_cls = @RMaxAgent
+run_loop.env_cls = @NavixWrapper
+run_loop.buffer_cls = @ReplayBuffer
+ReplayBuffer.buffer_size = 1
+ReplayBuffer.obs_shape = (1,)
+
+RMaxAgent.r_max = 1.0
+RMaxAgent.v_max = 1.0
+RMaxAgent.use_vmax = True
+RMaxAgent.discount = 0.99
+RMaxAgent.known_threshold = 1
+RMaxAgent.convergence_threshold = 1e-8
+
+NavixWrapper.env_id = "Navix-Empty-16x16-v0"
+NavixWrapper.max_steps = 2048
+NavixWrapper.action_set = "cardinal"
+NavixWrapper.observation_mode = "position"
+
+TrainingConfig.train_episodes = 0
+TrainingConfig.use_steps = True
+TrainingConfig.train_steps = 1_000_000
+TrainingConfig.max_episode_steps = 2048
+TrainingConfig.minibatch_size = 1
+TrainingConfig.update_frequency = 1
+TrainingConfig.num_minibatches = 1
+TrainingConfig.warmup_steps = 0
+TrainingConfig.evaluate_every = 0
+TrainingConfig.eval_episodes = 0
+TrainingConfig.checkpoint_freq = None

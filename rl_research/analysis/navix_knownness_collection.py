@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -9,17 +10,15 @@ from typing import Any
 import gin
 import jax
 import jax.numpy as jnp
-import navix as nx
 import numpy as np
 from flax import nnx
-from navix import observations
-from navix.actions import _can_walk_there
-from navix.grid import translate
-from navix.states import State
 
 from rl_research.agents import BaseAgent, DQNRmaxRND
 from rl_research.buffers import ReplayBuffer as _ReplayBuffer
+from rl_research.buffers import Transition
+from rl_research.environments import CardinalNavixWrapper
 from rl_research.environments import NavixWrapper as _NavixWrapper
+from rl_research.environments.navix import ACTION_NAMES, ACTION_TO_NAVIX_DIRECTION
 from rl_research.experiment import restore_agent_checkpoint
 from rl_research.utils import setup_mlflow as _setup_mlflow
 
@@ -27,15 +26,10 @@ from rl_research.utils import setup_mlflow as _setup_mlflow
 _ = (_ReplayBuffer, _NavixWrapper, _setup_mlflow)
 
 DEFAULT_ENV_ID = "Navix-Empty-16x16-v0"
-ACTION_NAMES = ("up", "down", "left", "right")
-OBSERVATION_MODES = ("symbolic", "tabular")
-ACTION_TO_NAVIX_DIRECTION = {
-    "up": 3,
-    "down": 1,
-    "left": 2,
-    "right": 0,
-}
+OBSERVATION_MODES = ("symbolic", "position", "onehot_position", "tabular")
+ANALYSIS_KINDS = ("auto", "rnd", "model_based")
 POLICY_NAMES = ("random_policy", "agent_policy")
+# POLICY_NAMES = ["random_policy"]
 METADATA_FILENAME = "metadata.json"
 
 
@@ -56,6 +50,7 @@ class CollectionSettings:
     observation_mode: str = "symbolic"
     onehot_obs_action_pair: bool = False
     linear_function_approximation: bool = False
+    analysis_kind: str = "auto"
 
 
 @dataclass
@@ -69,6 +64,10 @@ class PolicyRollout:
     final_bonus_sum: np.ndarray
     final_bonus_mean: np.ndarray
     final_bonus_eval_counts: np.ndarray
+    final_agent_visit_counts: np.ndarray
+    final_knownness: np.ndarray
+    final_q_values: np.ndarray
+    valid_state_mask: np.ndarray
     trajectory_episode: np.ndarray
     trajectory_step: np.ndarray
     trajectory_row: np.ndarray
@@ -94,6 +93,10 @@ class PolicyRollout:
             "final_bonus_sum": self.final_bonus_sum,
             "final_bonus_mean": self.final_bonus_mean,
             "final_bonus_eval_counts": self.final_bonus_eval_counts,
+            "final_agent_visit_counts": self.final_agent_visit_counts,
+            "final_knownness": self.final_knownness,
+            "final_q_values": self.final_q_values,
+            "valid_state_mask": self.valid_state_mask,
             "trajectory_episode": self.trajectory_episode,
             "trajectory_step": self.trajectory_step,
             "trajectory_row": self.trajectory_row,
@@ -121,25 +124,43 @@ class PolicyRollout:
         final_bonus_eval_counts = np.asarray(
             arrays.get("final_bonus_eval_counts", arrays.get("bonus_eval_counts"))
         )
-        online_bonus_sum = np.asarray(
-            arrays.get("online_bonus_sum", final_bonus_sum)
-        )
+        online_bonus_sum = np.asarray(arrays.get("online_bonus_sum", final_bonus_sum))
         online_bonus_mean = np.asarray(
             arrays.get("online_bonus_mean", final_bonus_mean)
         )
         online_bonus_eval_counts = np.asarray(
             arrays.get("online_bonus_eval_counts", final_bonus_eval_counts)
         )
+        visitation_counts = np.asarray(arrays["visitation_counts"])
+        state_visit_counts = np.asarray(arrays["state_visit_counts"])
+        final_agent_visit_counts = np.asarray(
+            arrays.get("final_agent_visit_counts", visitation_counts)
+        )
+        final_knownness = np.asarray(
+            arrays.get("final_knownness", np.zeros_like(visitation_counts))
+        )
+        final_q_values = np.asarray(
+            arrays.get(
+                "final_q_values", np.zeros_like(visitation_counts, dtype=np.float32)
+            )
+        )
+        valid_state_mask = np.asarray(
+            arrays.get("valid_state_mask", state_visit_counts > 0)
+        )
         return cls(
             policy_name=policy_name,
-            visitation_counts=np.asarray(arrays["visitation_counts"]),
-            state_visit_counts=np.asarray(arrays["state_visit_counts"]),
+            visitation_counts=visitation_counts,
+            state_visit_counts=state_visit_counts,
             online_bonus_sum=online_bonus_sum,
             online_bonus_mean=online_bonus_mean,
             online_bonus_eval_counts=online_bonus_eval_counts,
             final_bonus_sum=final_bonus_sum,
             final_bonus_mean=final_bonus_mean,
             final_bonus_eval_counts=final_bonus_eval_counts,
+            final_agent_visit_counts=final_agent_visit_counts,
+            final_knownness=final_knownness,
+            final_q_values=final_q_values,
+            valid_state_mask=valid_state_mask,
             trajectory_episode=np.asarray(arrays["trajectory_episode"]),
             trajectory_step=np.asarray(arrays["trajectory_step"]),
             trajectory_row=np.asarray(arrays["trajectory_row"]),
@@ -159,104 +180,6 @@ class PolicyRollout:
         )
 
 
-def _move_absolute(state: State, direction: int) -> State:
-    player = state.get_player(idx=0)
-    absolute_direction = jnp.asarray(direction, dtype=jnp.int32)
-    target_position = translate(player.position, absolute_direction)
-
-    # Reuse Navix's own walkability/event logic so this wrapper only changes the
-    # action semantics, not collisions, rewards, or termination behaviour.
-    can_move, events = _can_walk_there(state, target_position)
-    next_position = jnp.where(can_move, target_position, player.position)
-    player = player.replace(position=next_position, direction=absolute_direction)
-
-    return state.set_player(player).replace(events=events)
-
-
-def _move_up(state: State) -> State:
-    return _move_absolute(state, ACTION_TO_NAVIX_DIRECTION["up"])
-
-
-def _move_down(state: State) -> State:
-    return _move_absolute(state, ACTION_TO_NAVIX_DIRECTION["down"])
-
-
-def _move_left(state: State) -> State:
-    return _move_absolute(state, ACTION_TO_NAVIX_DIRECTION["left"])
-
-
-def _move_right(state: State) -> State:
-    return _move_absolute(state, ACTION_TO_NAVIX_DIRECTION["right"])
-
-
-CARDINAL_ACTION_SET = (
-    _move_up,
-    _move_down,
-    _move_left,
-    _move_right,
-)
-
-
-class CardinalNavixWrapper:
-    def __init__(
-        self,
-        env_id: str = DEFAULT_ENV_ID,
-        max_steps: int | None = None,
-        observation_mode: str = "symbolic",
-    ):
-        if observation_mode not in OBSERVATION_MODES:
-            raise ValueError(
-                f"Unsupported observation_mode {observation_mode!r}. "
-                f"Choose from {', '.join(OBSERVATION_MODES)}."
-            )
-
-        kwargs: dict[str, Any] = {
-            "observation_fn": (
-                observations.symbolic
-                if observation_mode == "symbolic"
-                else observations.none
-            ),
-            "action_set": CARDINAL_ACTION_SET,
-        }
-        if max_steps is not None:
-            kwargs["max_steps"] = max_steps
-        self.env = nx.make(env_id, **kwargs)
-        self.observation_mode = observation_mode
-        if observation_mode == "symbolic":
-            self.observation_shape = tuple(self.env.observation_space.shape)
-            self.observation_dtype = np.uint8
-        else:
-            self.observation_shape = (int(self.env.height * self.env.width),)
-            self.observation_dtype = np.float32
-
-    def _transform_observation(self, timestep) -> jax.Array:
-        if self.observation_mode == "symbolic":
-            return timestep.observation
-
-        row, col = timestep.state.get_player(idx=0).position
-        state_index = row.astype(jnp.int32) * int(self.env.width) + col.astype(jnp.int32)
-        return jax.nn.one_hot(
-            state_index,
-            int(self.env.height * self.env.width),
-            dtype=jnp.float32,
-        )
-
-    def reset(self, key: jax.Array):
-        timestep = self.env.reset(key)
-        return timestep, self._transform_observation(timestep)
-
-    def step(self, timestep, action: jax.Array):
-        timestep = self.env.step(timestep, action)
-        return (
-            timestep,
-            self._transform_observation(timestep),
-            timestep.reward,
-            timestep.is_termination(),
-            timestep.is_truncation(),
-            timestep.info,
-        )
-
-
 def _jsonable(value: Any) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
@@ -271,14 +194,36 @@ def _jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _callable_accepts_kwarg(fn: Any, kwarg: str) -> bool:
+    signature = inspect.signature(fn)
+    return kwarg in signature.parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
+
 def _parse_agent_from_config(
     settings: CollectionSettings,
-    observation_shape: tuple[int, ...],
+    num_states: int,
     num_actions: int,
 ) -> tuple[BaseAgent, Any, dict[str, Any]]:
-    if settings.onehot_obs_action_pair and settings.observation_mode != "tabular":
+    if settings.analysis_kind not in ANALYSIS_KINDS:
         raise ValueError(
-            "--onehot-obs-action-pair requires --observation-mode tabular."
+            f"Unsupported analysis_kind {settings.analysis_kind!r}. "
+            f"Choose from {', '.join(ANALYSIS_KINDS)}."
+        )
+    if settings.observation_mode not in OBSERVATION_MODES:
+        raise ValueError(
+            f"Unsupported observation_mode {settings.observation_mode!r}. "
+            f"Choose from {', '.join(OBSERVATION_MODES)}."
+        )
+    if settings.onehot_obs_action_pair and settings.observation_mode not in {
+        "tabular",
+        "onehot_position",
+    }:
+        raise ValueError(
+            "--onehot-obs-action-pair requires --observation-mode tabular "
+            "or onehot_position."
         )
 
     gin.clear_config()
@@ -294,21 +239,26 @@ def _parse_agent_from_config(
         run_bindings = {}
         agent_cls = DQNRmaxRND
 
-    num_states = int(np.prod(np.asarray(observation_shape)))
     agent_init_kwargs: dict[str, Any] = {
-        "num_states": num_states,
+        "num_states": int(num_states),
         "num_actions": num_actions,
-        "seed": settings.seed,
     }
+    if _callable_accepts_kwarg(agent_cls, "seed"):
+        agent_init_kwargs["seed"] = settings.seed
     if settings.onehot_obs_action_pair:
         agent_init_kwargs["rnd_action_conditioning"] = "pair"
     if settings.linear_function_approximation:
+        linear_overrides = {
+            "hidden_dims": (),
+            "rnd_hidden_dims": (),
+            "normalization": "none",
+            "rnd_normalization": "none",
+        }
         agent_init_kwargs.update(
             {
-                "hidden_dims": (),
-                "rnd_hidden_dims": (),
-                "normalization": "none",
-                "rnd_normalization": "none",
+                key: value
+                for key, value in linear_overrides.items()
+                if _callable_accepts_kwarg(agent_cls, key)
             }
         )
 
@@ -328,10 +278,27 @@ def _parse_agent_from_config(
                 "the 4-action cardinal-move agent architecture used by this script."
             ) from exc
 
-    if not hasattr(agent, "_compute_decision_bonus"):
+    has_rnd_bonus = hasattr(agent, "_compute_decision_bonus")
+    has_model_diagnostics = hasattr(agent_state, "q_table") and hasattr(
+        agent_state,
+        "visit_counts",
+    )
+    if settings.analysis_kind == "rnd" and not has_rnd_bonus:
         raise TypeError(
-            f"{agent.__class__.__name__} does not expose RND decision bonuses. "
-            "Use a DQN+RND-style agent for this analysis."
+            f"{agent.__class__.__name__} does not expose RND decision bonuses."
+        )
+    if settings.analysis_kind == "model_based" and not has_model_diagnostics:
+        raise TypeError(
+            f"{agent.__class__.__name__} does not expose q_table and visit_counts."
+        )
+
+    resolved_analysis_kind = settings.analysis_kind
+    if resolved_analysis_kind == "auto":
+        resolved_analysis_kind = "rnd" if has_rnd_bonus else "model_based"
+    if resolved_analysis_kind == "model_based" and not has_model_diagnostics:
+        raise TypeError(
+            f"{agent.__class__.__name__} does not expose model-based diagnostics. "
+            "Use an R-Max/MBIE-EB-style tabular agent or set --analysis-kind rnd."
         )
 
     metadata = {
@@ -340,6 +307,7 @@ def _parse_agent_from_config(
         "run_loop_bindings": _jsonable(run_bindings),
         "checkpoint_mode": checkpoint_mode,
         "agent_init_overrides": _jsonable(agent_init_kwargs),
+        "analysis_kind": resolved_analysis_kind,
     }
     return agent, agent_state, metadata
 
@@ -497,6 +465,85 @@ def _compute_final_bonus_statistics(
     return final_bonus_sum, final_bonus_mean, final_bonus_eval_counts
 
 
+def _valid_empty_room_mask(height: int, width: int) -> np.ndarray:
+    mask = np.zeros((height, width), dtype=np.bool_)
+    if height > 2 and width > 2:
+        mask[1 : height - 1, 1 : width - 1] = True
+    return mask
+
+
+def _position_state_ids(height: int, width: int) -> np.ndarray:
+    return np.arange(height * width, dtype=np.int32).reshape(height, width)
+
+
+def _knownness_threshold(agent: BaseAgent, fallback: int) -> int:
+    threshold = getattr(agent, "known_threshold", fallback)
+    try:
+        threshold_float = float(jax.device_get(threshold))
+    except (TypeError, ValueError, OverflowError):
+        threshold_float = float(fallback)
+    if not np.isfinite(threshold_float):
+        return int(fallback)
+    return max(int(threshold_float), 1)
+
+
+def _extract_grid_q_values(
+    agent_state: Any,
+    *,
+    height: int,
+    width: int,
+    num_actions: int,
+) -> np.ndarray:
+    q_values = np.zeros((height, width, num_actions), dtype=np.float32)
+    if not hasattr(agent_state, "q_table"):
+        return q_values
+
+    q_table = np.asarray(jax.device_get(agent_state.q_table), dtype=np.float32)
+    state_ids = _position_state_ids(height, width)
+    valid_ids = state_ids < q_table.shape[0]
+    q_values[valid_ids] = q_table[state_ids[valid_ids], :num_actions]
+    return q_values
+
+
+def _extract_grid_visit_counts(
+    agent_state: Any,
+    *,
+    height: int,
+    width: int,
+    num_actions: int,
+) -> np.ndarray:
+    counts = np.zeros((height, width, num_actions), dtype=np.float32)
+    if not hasattr(agent_state, "visit_counts"):
+        return counts
+
+    visit_counts = np.asarray(
+        jax.device_get(agent_state.visit_counts), dtype=np.float32
+    )
+    state_ids = _position_state_ids(height, width)
+    valid_ids = state_ids < visit_counts.shape[0]
+    counts[valid_ids] = visit_counts[state_ids[valid_ids], :num_actions]
+    return counts
+
+
+def _single_transition(
+    observation: np.ndarray | jax.Array,
+    action: int,
+    reward: float,
+    next_observation: np.ndarray | jax.Array,
+    terminal: bool,
+    discount: float,
+) -> Transition:
+    return Transition(
+        observation=jnp.asarray(observation).reshape(1, -1),
+        action=jnp.asarray([action], dtype=jnp.int32),
+        reward=jnp.asarray([reward], dtype=jnp.float32),
+        discount=jnp.asarray([discount], dtype=jnp.float32),
+        next_observation=jnp.asarray(next_observation).reshape(1, -1),
+        terminal=jnp.asarray([terminal], dtype=jnp.bool_),
+        mask=jnp.ones((1,), dtype=jnp.bool_),
+    )
+
+
 def _extract_player_position(timestep) -> tuple[int, int]:
     row, col = jax.device_get(timestep.state.get_player(idx=0).position)
     return int(row), int(col)
@@ -551,6 +598,12 @@ def _collect_single_policy(
 
     key = jax.random.PRNGKey(settings.seed)
     rollout_agent_state = agent_state
+    collect_rnd_bonus = settings.analysis_kind in {"auto", "rnd"} and hasattr(
+        agent, "_compute_decision_bonus"
+    )
+    train_model_during_rollout = ("agent_policy" in POLICY_NAMES) and (settings.analysis_kind == "model_based") or (
+        settings.analysis_kind == "auto" and hasattr(rollout_agent_state, "q_table")
+    )
 
     for episode_idx in range(settings.episodes):
         key, reset_key = jax.random.split(key)
@@ -566,12 +619,15 @@ def _collect_single_policy(
             row, col = _extract_player_position(timestep)
             direction = _extract_player_direction(timestep)
             observation_np = np.asarray(jax.device_get(observation)).copy()
-            decision_bonus = _compute_decision_bonus(
-                agent,
-                rollout_agent_state,
-                observation_np,
-                num_actions=num_actions,
-            )
+            if collect_rnd_bonus:
+                decision_bonus = _compute_decision_bonus(
+                    agent,
+                    rollout_agent_state,
+                    observation_np,
+                    num_actions=num_actions,
+                )
+            else:
+                decision_bonus = np.zeros((num_actions,), dtype=np.float32)
 
             # Track the online bonus seen during the rollout before any later
             # episode-level RND training changes the predictor. The final heatmap is
@@ -593,7 +649,7 @@ def _collect_single_policy(
                     rollout_agent_state,
                     observation,
                     action_key,
-                    is_training=False,
+                    is_training=train_model_during_rollout,
                 )
             else:
                 raise ValueError(f"Unknown policy '{policy_name}'.")
@@ -611,6 +667,19 @@ def _collect_single_policy(
             reward_float = float(jax.device_get(reward))
             terminated_bool = bool(jax.device_get(terminated))
             truncated_bool = bool(jax.device_get(truncated))
+
+            if train_model_during_rollout:
+                rollout_agent_state, _ = agent.update(
+                    rollout_agent_state,
+                    _single_transition(
+                        observation_np,
+                        action_int,
+                        reward_float,
+                        np.asarray(jax.device_get(observation)).copy(),
+                        terminated_bool,
+                        discount=float(getattr(agent, "discount", 1.0)),
+                    ),
+                )
 
             trajectory_episode.append(episode_idx)
             trajectory_step.append(step_in_episode)
@@ -632,7 +701,7 @@ def _collect_single_policy(
         episode_returns.append(episode_return)
         episode_lengths.append(step_in_episode)
 
-        if settings.train_rnd_after_each_episode:
+        if settings.train_rnd_after_each_episode and collect_rnd_bonus:
             rollout_agent_state = _train_rnd_after_episode(
                 agent,
                 rollout_agent_state,
@@ -652,17 +721,40 @@ def _collect_single_policy(
         dtype=environment.observation_dtype,
         trailing_shape=tuple(environment.observation_shape),
     )
-    final_bonus_sum, final_bonus_mean, final_bonus_eval_counts = (
-        _compute_final_bonus_statistics(
-            agent=agent,
-            agent_state=rollout_agent_state,
-            trajectory_observation=trajectory_observation_np,
-            trajectory_row=np.asarray(trajectory_row, dtype=np.int32),
-            trajectory_col=np.asarray(trajectory_col, dtype=np.int32),
-            height=height,
-            width=width,
-            num_actions=num_actions,
+    if collect_rnd_bonus:
+        final_bonus_sum, final_bonus_mean, final_bonus_eval_counts = (
+            _compute_final_bonus_statistics(
+                agent=agent,
+                agent_state=rollout_agent_state,
+                trajectory_observation=trajectory_observation_np,
+                trajectory_row=np.asarray(trajectory_row, dtype=np.int32),
+                trajectory_col=np.asarray(trajectory_col, dtype=np.int32),
+                height=height,
+                width=width,
+                num_actions=num_actions,
+            )
         )
+    else:
+        final_bonus_sum = np.zeros_like(online_bonus_sum)
+        final_bonus_mean = np.zeros_like(online_bonus_sum)
+        final_bonus_eval_counts = np.zeros((height, width), dtype=np.int32)
+
+    valid_state_mask = _valid_empty_room_mask(height, width)
+    final_agent_visit_counts = _extract_grid_visit_counts(
+        rollout_agent_state,
+        height=height,
+        width=width,
+        num_actions=num_actions,
+    )
+    final_q_values = _extract_grid_q_values(
+        rollout_agent_state,
+        height=height,
+        width=width,
+        num_actions=num_actions,
+    )
+    knownness_threshold = _knownness_threshold(agent, settings.visitation_threshold)
+    final_knownness = (final_agent_visit_counts >= float(knownness_threshold)).astype(
+        np.float32
     )
 
     return PolicyRollout(
@@ -675,6 +767,10 @@ def _collect_single_policy(
         final_bonus_sum=final_bonus_sum,
         final_bonus_mean=final_bonus_mean,
         final_bonus_eval_counts=final_bonus_eval_counts,
+        final_agent_visit_counts=final_agent_visit_counts,
+        final_knownness=final_knownness,
+        final_q_values=final_q_values,
+        valid_state_mask=valid_state_mask,
         trajectory_episode=np.asarray(trajectory_episode, dtype=np.int32),
         trajectory_step=np.asarray(trajectory_step, dtype=np.int32),
         trajectory_row=np.asarray(trajectory_row, dtype=np.int32),
@@ -730,6 +826,15 @@ def compute_policy_summary(
     visitation_state_action_values = rollout.visitation_counts[state_action_mask]
     final_bonus_values = rollout.final_bonus_mean[state_action_mask]
     online_bonus_values = rollout.online_bonus_mean[state_action_mask]
+    valid_state_action_mask = np.repeat(
+        rollout.valid_state_mask[..., None].astype(bool),
+        rollout.visitation_counts.shape[-1],
+        axis=-1,
+    )
+    known_by_model = valid_state_action_mask & rollout.final_knownness.astype(bool)
+    final_q_values = rollout.final_q_values[valid_state_action_mask]
+    final_agent_visit_values = rollout.final_agent_visit_counts[valid_state_action_mask]
+    model_known_total = int(np.count_nonzero(valid_state_action_mask))
 
     return {
         "policy_name": rollout.policy_name,
@@ -752,8 +857,7 @@ def compute_policy_summary(
         ),
         "visitation_unknown_fraction": (
             float(
-                np.count_nonzero(state_action_mask & ~known_by_visitation)
-                / known_total
+                np.count_nonzero(state_action_mask & ~known_by_visitation) / known_total
             )
             if known_total
             else 0.0
@@ -774,6 +878,21 @@ def compute_policy_summary(
         ),
         "rnd_bonus_stats": _stat_block(final_bonus_values),
         "online_rnd_bonus_stats": _stat_block(online_bonus_values),
+        "model_known_fraction": (
+            float(np.count_nonzero(known_by_model) / model_known_total)
+            if model_known_total
+            else 0.0
+        ),
+        "model_unknown_fraction": (
+            float(
+                np.count_nonzero(valid_state_action_mask & ~known_by_model)
+                / model_known_total
+            )
+            if model_known_total
+            else 0.0
+        ),
+        "model_visit_count_stats": _stat_block(final_agent_visit_values),
+        "q_value_stats": _stat_block(final_q_values),
         "episode_return_stats": _stat_block(rollout.episode_returns),
         "episode_length_stats": _stat_block(rollout.episode_lengths),
     }
@@ -817,6 +936,7 @@ def _collection_metadata(
             "the final RND predictor over every visited trajectory state."
         ),
         **agent_metadata,
+        "resolved_analysis_kind": agent_metadata.get("analysis_kind"),
     }
 
 
@@ -830,7 +950,7 @@ def collect_knownness_rollouts(
     )
     agent, agent_state, agent_metadata = _parse_agent_from_config(
         settings,
-        observation_shape=tuple(environment.observation_shape),
+        num_states=int(environment.num_observation_states),
         num_actions=int(environment.env.action_space.n),
     )
 
